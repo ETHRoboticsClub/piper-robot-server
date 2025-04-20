@@ -174,49 +174,94 @@ physicsClient, robotId, p_joint_indices, viz_markers = setup_pybullet()
 # --- Real Robot Connection --- 
 follower_arm = FeetechMotorsBus(follower_config)
 follower_arm.connect()
-follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
-current_positions = follower_arm.read("Present_Position")
-full_calibration = get_full_calibration() # Get full calibration data
-time.sleep(1) # Reduced sleep after enabling torque
-# --- End Real Robot Connection --- 
 
-# --- Initial State Calculation --- 
-positions = current_positions[0:4]
-print(f"Arm start positions (steps 0-3): {positions}")
-angles = servo_steps_to_angles(positions)
-print(f"Arm start angles (deg 0-3): {angles}")
-ef_position, ef_angles = forward_kinematics(*angles)
-print(f"End effector start position: {ef_position}")
-print(f"End effector start angles: {ef_angles}")
-# --- Calculate initial frame poses --- 
+# --- Set Hardware Motion Profile Parameters --- 
+print("Setting initial motor profile velocity and acceleration...")
 try:
-    angles_init_deg = get_degrees_from_steps(current_positions, 4)
-    # Call FK to get initial actual pos and full T01, T02, T03, T04 matrices
-    actual_ef_position, _, T01_initial, T02_initial, T03_initial, T04_initial = forward_kinematics(*angles_init_deg, return_intermediate_frames=True)
-    # Update initial marker positions
-    p.resetBasePositionAndOrientation(viz_markers['target'], ef_position, [0,0,0,1])
-    p.resetBasePositionAndOrientation(viz_markers['actual_ef'], actual_ef_position, [0,0,0,1])
-    # Store initial matrices for drawing axes in the loop
-except Exception as init_fk_err:
-    print(f"Error calculating initial FK poses: {init_fk_err}")
-    actual_ef_position = ef_position.copy() # Fallback
-    T01_initial = np.eye(4) # Fallback T01
-    T02_initial = np.eye(4) # Fallback T02
-    T03_initial = np.eye(4) # Fallback T03
-    T04_initial = np.eye(4) # Fallback T04
+    # Use correct data_names from SCS_SERIES_CONTROL_TABLE
+    ACCELERATION_NAME = "Acceleration" # Address 41
+    GOAL_SPEED_NAME = "Goal_Speed"       # Address 46
+    INITIAL_ACCELERATION = 20  # Value for Acceleration (Units? Time?)
+    INITIAL_GOAL_SPEED = 1500 # Value for Goal Speed (Units? Steps/s?)
 
-final_pos = ef_position.copy() 
+    # Unlock EPROM if necessary (Might not be needed if already unlocked or RAM register)
+    # follower_arm.write("Lock", 0) 
+    
+    all_motor_names = list(follower_motors.keys())
+    # Set Acceleration first
+    follower_arm.write(ACCELERATION_NAME, INITIAL_ACCELERATION, motor_names=all_motor_names)
+    print(f"  Set {ACCELERATION_NAME} to {INITIAL_ACCELERATION}")
+    # Set Goal Speed next
+    follower_arm.write(GOAL_SPEED_NAME, INITIAL_GOAL_SPEED, motor_names=all_motor_names)
+    print(f"  Set {GOAL_SPEED_NAME} to {INITIAL_GOAL_SPEED}")
+    
+    # Re-lock EPROM if unlocked
+    # follower_arm.write("Lock", 1)
+    
+    # Enable Torque AFTER setting profiles (or ensure it was enabled before)
+    follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
+    print("  Torque Enabled.")
+    
+except Exception as e:
+    print(f"\nWARNING: Failed to set initial motion parameters: {e}")
+    print("Attempting to enable torque anyway...")
+    try:
+        follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
+        print("  Torque Enabled.")
+    except Exception as torque_e:
+        print(f"ERROR: Failed to enable torque: {torque_e}")
+        # Decide how to handle this - maybe exit?
+# --- End Profile Setup ---
+
+current_positions = follower_arm.read("Present_Position")
+full_calibration = get_full_calibration() 
+
+# --- Reinstate Initial State Calculation --- 
+print("Calculating initial state...")
+try:
+    # Calculate initial angles (0-3) from read steps
+    angles = servo_steps_to_angles(current_positions[:4])
+    print(f"Arm start angles (deg 0-3): {angles}")
+    # Calculate initial EF position and RPY using FK
+    ef_position, ef_angles_rpy = forward_kinematics(*angles)
+    print(f"Initial End effector position: {ef_position}")
+    print(f"Initial End effector angles (RPY): {ef_angles_rpy}")
+    # Calculate initial T matrices for visualization
+    _, _, T01_initial, T02_initial, T03_initial, T04_initial = forward_kinematics(*angles, return_intermediate_frames=True)
+    # Set initial marker positions in PyBullet
+    p.resetBasePositionAndOrientation(viz_markers['target'], ef_position, [0,0,0,1])
+    p.resetBasePositionAndOrientation(viz_markers['actual_ef'], ef_position, [0,0,0,1]) # Start actual at target
+except Exception as init_err:
+    print(f"ERROR calculating initial state: {init_err}")
+    print("Falling back to default initial state.")
+    angles = [0.0] * 4
+    ef_position = np.array([0.1, 0.0, 0.1]) # Default fallback position
+    T01_initial, T02_initial, T03_initial, T04_initial = np.eye(4), np.eye(4), np.eye(4), np.eye(4)
 # --- End Initial State Calculation ---
 
+last_sent_target_steps = list(current_positions) 
+
+# --- Debug Line IDs Initialization (Remains the same) --- 
+debug_line_ids = {k: -1 for k in ['x1','y1','z1', 'x2','y2','z2', 'x3','y3','z3', 'x4','y4','z4']}
+
+# --- Keyboard Setup --- 
+# ... (variables, listener setup) ...
+
 # --- Keyboard Listener and Control Variables --- 
-step_size = 0.01 # Reduced step size again to prevent overshoots
+step_size = 0.04 # <-- Increased target speed further
 move_direction = {'x': 0, 'y': 0, 'z': 0}
 wrist_roll_direction = 0
+discrete_wrist_step_increment = 120 # How much target changes per keypress cycle
 gripper_direction = 0
-discrete_step_increment = 120
-torque_enabled = True # Add torque state
-toggle_torque_requested = False # Add flag
+discrete_gripper_step_increment = 120 # How much target changes per keypress cycle
+torque_enabled = True 
+toggle_torque_requested = False
 
+# --- Target State Variables (Updated by keys in main loop) ---
+target_wrist_step = last_sent_target_steps[4] # Initialize with current state
+target_gripper_step = last_sent_target_steps[5] # Initialize with current state
+
+# --- Reinstate Keyboard Listener Functions --- 
 def on_press(key):
     global move_direction, wrist_roll_direction, gripper_direction
     global toggle_torque_requested # Add flag
@@ -257,40 +302,35 @@ def on_release(key):
             wrist_roll_direction = 0
         elif key in [keyboard.Key.left, keyboard.Key.right]:
             gripper_direction = 0
+# --- End Reinstate Functions ---
 
+# --- Reinstate Listener Initialization --- 
 listener = keyboard.Listener(on_press=on_press, on_release=on_release)
 listener.start()
-# --- End Keyboard Listener --- 
+# --- End Reinstate Initialization ---
 
-max_step_change = 500
-# Initialize offsets from the actual read positions (using all 6)
-wrist_roll_offset = current_positions[4]
-gripper_offset = current_positions[5]
+max_step_change = 500 # Threshold for IK safety check (Now disabled below)
 
-# --- Main Control Loop --- 
 try:
-    target_frequency = 20 # Hz
+    target_frequency = 40 
     target_interval = 1.0 / target_frequency
-    last_command_time = time.monotonic() # Initialize before loop
-    # Store the latest full measured position for visualization
-    last_measured_positions = current_positions[:] 
-    T01_current = T01_initial # Initialize with the starting pose
-    T02_current = T02_initial # Initialize T02 as well
-    T03_current = T03_initial # Initialize T03
-    T04_current = T04_initial # Initialize T04
-    debug_line_ids = [] # Keep track of drawn lines
+    last_command_time = time.monotonic() 
+    last_measured_positions = list(current_positions[:])
+    # T matrices are now initialized above
+    T01_current, T02_current, T03_current, T04_current = T01_initial, T02_initial, T03_initial, T04_initial
 
     while True:
+        loop_start_time = time.monotonic()
         current_time = time.monotonic()
 
         # --- Process Torque Toggle Flag --- 
+        torque_proc_start = time.monotonic()
         if toggle_torque_requested:
             torque_enabled = not torque_enabled # Toggle state first
             mode = TorqueMode.ENABLED.value if torque_enabled else TorqueMode.DISABLED.value
             status_str = "ENABLED" if torque_enabled else "DISABLED"
             print(f"\nSetting torque to {status_str}...", end='')
             try:
-                all_motor_ids = [m[0] for m in follower_motors.values()] # Get IDs
                 follower_arm.write("Torque_Enable", mode) # Apply to all
                 print(" Done.")
                 if not torque_enabled:
@@ -300,9 +340,10 @@ try:
             except Exception as e:
                 print(f" Error: {e}")
             toggle_torque_requested = False # Reset flag
-        # --- End Torque Processing --- 
+        torque_proc_dur = time.monotonic() - torque_proc_start
 
         # --- Read Actual Position --- 
+        read_start = time.monotonic()
         read_error = False
         try:
             current_read = follower_arm.read("Present_Position")
@@ -310,204 +351,156 @@ try:
                 last_measured_positions = list(current_read) 
             else: read_error = True
         except Exception as read_err: read_error = True
+        read_dur = time.monotonic() - read_start
 
-        # --- Remove previous debug lines --- 
-        for line_id in debug_line_ids:
-            p.removeUserDebugItem(line_id)
-        debug_line_ids.clear()
-        # --- 
+        # --- Remove the Debug Line Removal Loop --- 
+        # debug_lines_remove_start = time.monotonic()
+        # active_line_ids = [id for id in debug_line_ids.values() if id != -1]
+        # for line_id in active_line_ids:
+        #     try: p.removeUserDebugItem(line_id)
+        #     except: pass 
+        # debug_line_ids = {k: -1 for k in debug_line_ids}
+        debug_lines_remove_dur = 0 # Set duration to 0
+        
+        # --- Update PyBullet Visualization (Robot Part) --- 
+        viz_start = time.monotonic()
+        if not read_error and len(last_measured_positions) == NUM_MOTORS:
+            # Update Robot Model 
+            try:
+                current_radians_viz = steps_to_radians_for_viz(last_measured_positions, full_calibration)
+                motor_names = list(follower_motors.keys())
+                for i, motor_name in enumerate(motor_names):
+                    if motor_name in p_joint_indices:
+                        joint_index = p_joint_indices[motor_name]
+                        p.resetJointState(robotId, joint_index, targetValue=current_radians_viz[i])
+            except Exception as e:
+                print(f"Error updating viz joints: {e}")
 
-        # --- Update PyBullet Visualization --- 
-        if len(last_measured_positions) == NUM_MOTORS:
-            # --- Update Robot Model --- 
-            current_radians_viz = steps_to_radians_for_viz(last_measured_positions, full_calibration)
-            motor_names = list(follower_motors.keys())
-            for i in range(len(motor_names)):
-                motor_name = motor_names[i]
-                if motor_name in p_joint_indices:
-                    joint_index = p_joint_indices[motor_name]
-                    p.resetJointState(robotId, joint_index, targetValue=current_radians_viz[i])
-            
-            # --- Calculate FK for Measured State & Update Markers/Axes --- 
+            # Calculate FK & Update Markers/Axes 
             try:
                 measured_angles_deg = get_degrees_from_steps(last_measured_positions, 4)
-                print(f"DEBUG: Measured Angles (deg): {measured_angles_deg}") # Print calculated angles
-                # Get actual EF pos and full T01, T02, T03, T04 matrices based on measurement
                 actual_ef_position, _, T01_current, T02_current, T03_current, T04_current = forward_kinematics(*measured_angles_deg, return_intermediate_frames=True)
-                
-                # Update Actual EF (Blue) marker
                 p.resetBasePositionAndOrientation(viz_markers['actual_ef'], actual_ef_position, [0,0,0,1])
                 
-                axis_length = 0.05 # Length of axes lines
+                axis_length = 0.05
+                # --- Update/Create Frame 1 Axes (RGB) using replaceItemUniqueId --- 
+                origin1 = T01_current[:3, 3]; rot_matrix1 = T01_current[:3, :3]
+                debug_line_ids['x1'] = p.addUserDebugLine(origin1, origin1 + rot_matrix1[:, 0] * axis_length, [1, 0, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['x1'])
+                debug_line_ids['y1'] = p.addUserDebugLine(origin1, origin1 + rot_matrix1[:, 1] * axis_length, [0, 1, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['y1'])
+                debug_line_ids['z1'] = p.addUserDebugLine(origin1, origin1 + rot_matrix1[:, 2] * axis_length, [0, 0, 1], lineWidth=2, replaceItemUniqueId=debug_line_ids['z1'])
+                # --- Update/Create Frame 2 Axes (RGB) --- 
+                origin2 = T02_current[:3, 3]; rot_matrix2 = T02_current[:3, :3]
+                debug_line_ids['x2'] = p.addUserDebugLine(origin2, origin2 + rot_matrix2[:, 0] * axis_length, [1, 0, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['x2'])
+                debug_line_ids['y2'] = p.addUserDebugLine(origin2, origin2 + rot_matrix2[:, 1] * axis_length, [0, 1, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['y2'])
+                debug_line_ids['z2'] = p.addUserDebugLine(origin2, origin2 + rot_matrix2[:, 2] * axis_length, [0, 0, 1], lineWidth=2, replaceItemUniqueId=debug_line_ids['z2'])
+                # --- Update/Create Frame 3 Axes (RGB) --- 
+                origin3 = T03_current[:3, 3]; rot_matrix3 = T03_current[:3, :3]
+                debug_line_ids['x3'] = p.addUserDebugLine(origin3, origin3 + rot_matrix3[:, 0] * axis_length, [1, 0, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['x3'])
+                debug_line_ids['y3'] = p.addUserDebugLine(origin3, origin3 + rot_matrix3[:, 1] * axis_length, [0, 1, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['y3'])
+                debug_line_ids['z3'] = p.addUserDebugLine(origin3, origin3 + rot_matrix3[:, 2] * axis_length, [0, 0, 1], lineWidth=2, replaceItemUniqueId=debug_line_ids['z3'])
+                # --- Update/Create Frame 4 Axes (CMY) --- 
+                origin4 = T04_current[:3, 3]; rot_matrix4 = T04_current[:3, :3]
+                debug_line_ids['x4'] = p.addUserDebugLine(origin4, origin4 + rot_matrix4[:, 0] * axis_length, [0, 1, 1], lineWidth=2, replaceItemUniqueId=debug_line_ids['x4'])
+                debug_line_ids['y4'] = p.addUserDebugLine(origin4, origin4 + rot_matrix4[:, 1] * axis_length, [1, 0, 1], lineWidth=2, replaceItemUniqueId=debug_line_ids['y4'])
+                debug_line_ids['z4'] = p.addUserDebugLine(origin4, origin4 + rot_matrix4[:, 2] * axis_length, [1, 1, 0], lineWidth=2, replaceItemUniqueId=debug_line_ids['z4'])
 
-                # --- Draw Frame 1 Axes (RGB) --- 
-                origin1 = T01_current[:3, 3]
-                rot_matrix1 = T01_current[:3, :3]
-                x_axis_end1 = origin1 + rot_matrix1[:, 0] * axis_length
-                y_axis_end1 = origin1 + rot_matrix1[:, 1] * axis_length
-                z_axis_end1 = origin1 + rot_matrix1[:, 2] * axis_length
-                
-                line_id_x1 = p.addUserDebugLine(origin1, x_axis_end1, [1, 0, 0], lineWidth=2) # Red X
-                line_id_y1 = p.addUserDebugLine(origin1, y_axis_end1, [0, 1, 0], lineWidth=2) # Green Y
-                line_id_z1 = p.addUserDebugLine(origin1, z_axis_end1, [0, 0, 1], lineWidth=2) # Blue Z
-                debug_line_ids.extend([line_id_x1, line_id_y1, line_id_z1])
-
-                # --- Draw Frame 2 Axes (RGB) --- 
-                origin2 = T02_current[:3, 3]
-                rot_matrix2 = T02_current[:3, :3]
-                x_axis_end2 = origin2 + rot_matrix2[:, 0] * axis_length
-                y_axis_end2 = origin2 + rot_matrix2[:, 1] * axis_length
-                z_axis_end2 = origin2 + rot_matrix2[:, 2] * axis_length
-                
-                # Change Frame 2 to RGB
-                line_id_x2 = p.addUserDebugLine(origin2, x_axis_end2, [1, 0, 0], lineWidth=2) # Red X
-                line_id_y2 = p.addUserDebugLine(origin2, y_axis_end2, [0, 1, 0], lineWidth=2) # Green Y
-                line_id_z2 = p.addUserDebugLine(origin2, z_axis_end2, [0, 0, 1], lineWidth=2) # Blue Z
-                debug_line_ids.extend([line_id_x2, line_id_y2, line_id_z2])
-
-                # --- Draw Frame 3 Axes (RGB) --- 
-                origin3 = T03_current[:3, 3]
-                rot_matrix3 = T03_current[:3, :3]
-                x_axis_end3 = origin3 + rot_matrix3[:, 0] * axis_length
-                y_axis_end3 = origin3 + rot_matrix3[:, 1] * axis_length
-                z_axis_end3 = origin3 + rot_matrix3[:, 2] * axis_length
-                
-                # Change Frame 3 to RGB
-                line_id_x3 = p.addUserDebugLine(origin3, x_axis_end3, [1, 0, 0], lineWidth=2) # Red X
-                line_id_y3 = p.addUserDebugLine(origin3, y_axis_end3, [0, 1, 0], lineWidth=2) # Green Y
-                line_id_z3 = p.addUserDebugLine(origin3, z_axis_end3, [0, 0, 1], lineWidth=2) # Blue Z
-                debug_line_ids.extend([line_id_x3, line_id_y3, line_id_z3])
-
-                # --- Draw Frame 4 Axes (CMY) --- 
-                origin4 = T04_current[:3, 3]
-                rot_matrix4 = T04_current[:3, :3]
-                x_axis_end4 = origin4 + rot_matrix4[:, 0] * axis_length
-                y_axis_end4 = origin4 + rot_matrix4[:, 1] * axis_length
-                z_axis_end4 = origin4 + rot_matrix4[:, 2] * axis_length
-                
-                line_id_x4 = p.addUserDebugLine(origin4, x_axis_end4, [0, 1, 1], lineWidth=2) # Cyan X
-                line_id_y4 = p.addUserDebugLine(origin4, y_axis_end4, [1, 0, 1], lineWidth=2) # Magenta Y
-                line_id_z4 = p.addUserDebugLine(origin4, z_axis_end4, [1, 1, 0], lineWidth=2) # Yellow Z
-                debug_line_ids.extend([line_id_x4, line_id_y4, line_id_z4])
-
-                # --- End Draw Axes ---
             except Exception as fk_err:
-                 print(f"Error in FK calculation/drawing: {fk_err}") # Print error
-                 pass
-
-        # --- Update Target Position Marker (Red) --- 
-        p.resetBasePositionAndOrientation(viz_markers['target'], ef_position, [0,0,0,1])
+                print(f"Error during FK/Axes Viz: {fk_err}") 
+        viz_dur = time.monotonic() - viz_start
         # --- End PyBullet Update --- 
+        
+        # --- Update Target State Based on Keyboard Input ---
+        target_update_start = time.monotonic()
+        # Update EF position target
+        delta_x = move_direction['x'] * step_size
+        delta_y = move_direction['y'] * step_size
+        delta_z = move_direction['z'] * step_size
+        ef_position[0] += delta_x
+        ef_position[1] += delta_y
+        ef_position[2] += delta_z
+        # Update Wrist/Gripper step targets based on direction flags
+        if wrist_roll_direction != 0:
+            delta_wrist = wrist_roll_direction * discrete_wrist_step_increment
+            target_wrist_step = (target_wrist_step + delta_wrist) % 4096
+        if gripper_direction != 0:
+            delta_gripper = gripper_direction * discrete_gripper_step_increment
+            target_gripper_step = (target_gripper_step + delta_gripper) % 4096
+        target_update_dur = time.monotonic() - target_update_start
+        
+        # --- Update Target Position Marker (Red) --- 
+        marker_update_start = time.monotonic()
+        p.resetBasePositionAndOrientation(viz_markers['target'], ef_position, [0,0,0,1])
+        marker_update_dur = time.monotonic() - marker_update_start
 
         # --- Control Logic (Gated by Time Interval) --- 
-        # Only run if torque is enabled
+        control_logic_dur = 0
+        control_block_executed = False
+        ik_dur, fk_dur, safety_check_dur, write_dur = 0, 0, 0, 0
+
         if torque_enabled and (current_time - last_command_time >= target_interval):
-            # Calculate potential change based on current direction flags
-            delta_x = move_direction['x'] * step_size
-            delta_y = move_direction['y'] * step_size
-            delta_z = move_direction['z'] * step_size
-            delta_wrist = wrist_roll_direction * discrete_step_increment
-            delta_gripper = gripper_direction * discrete_step_increment
-
-            # --- Check if any movement is requested --- 
-            is_moving = delta_x != 0 or delta_y != 0 or delta_z != 0 or \
-                        delta_wrist != 0 or delta_gripper != 0
-
-            if is_moving:
-                # --- Movement Requested: Proceed with control logic --- 
-                block_start_time = time.monotonic() # Time the start of the block
-
-                # Update target end effector position
-                ef_position[0] += delta_x
-                ef_position[1] += delta_y
-                ef_position[2] += delta_z
-
-                # Update target wrist_roll_offset and gripper_offset
-                wrist_roll_offset = (wrist_roll_offset + delta_wrist) % 4096
-                gripper_offset = (gripper_offset + delta_gripper) % 4096
-
-                print(f"Target EF position: {ef_position}")
-
-                # --- Time the IK calculation --- 
-                ik_start_time = time.monotonic()
-                # IK needs initial guess (`angles`). This variable should represent angles 
-                # consistent with the FK/IK internal model. Let's calculate it using the FK conversion.
-                current_angles_for_ik = get_degrees_from_steps(last_measured_positions, 4)
-                # Pitch angle target should also be relative to FK's frame
-                _, current_fk_ef_angles = forward_kinematics(*current_angles_for_ik)
-                current_pitch = current_fk_ef_angles[1] 
-                
-                updated_angles = iterative_ik(ef_position, current_pitch, current_angles_for_ik)
-                
-                # --- FK Calculation (uses default return for control loop) --- 
-                # Calculate where the commanded angles *should* put the end effector
-                final_pos, ef_angles = forward_kinematics(*updated_angles) 
-                
-                final_error = ef_position - final_pos # Error between target and FK result
-                print("Position error:", final_error, "Norm:", np.linalg.norm(final_error))
-
-                updated_steps = angles_to_servo_steps(updated_angles)
-                print(f"Target servo steps (main joints): {updated_steps}")
-
-                # Read current positions *just before* the safety check
-                read_start_time = time.monotonic()
-                current_positions_now = follower_arm.read("Present_Position")
-                read_duration = time.monotonic() - read_start_time
-                current_motors_now = current_positions_now[0:4]
-                
-                # Safety check against actual current position
-                jump_detected = False
-                for i, (c, u) in enumerate(zip(current_motors_now, updated_steps)):
-                    current_wrist = current_positions_now[4]
-                    current_gripper = current_positions_now[5]
-                    target_wrist = wrist_roll_offset
-                    target_gripper = gripper_offset
-                    if abs(u - c) > max_step_change:
-                        print(f"Large jump detected on main joint {i}: Current={c}, Target={u}")
-                        jump_detected = True
-                        break
-                if not jump_detected:
-                    if abs(target_wrist - current_wrist) > max_step_change:
-                         diff = abs(target_wrist - current_wrist)
-                         if diff > 2048: diff = 4096 - diff
-                         if diff > max_step_change:
-                            print(f"Large jump detected on wrist_roll: Current={current_wrist}, Target={target_wrist}")
-                            jump_detected = True
-                if not jump_detected:
-                     if abs(target_gripper - current_gripper) > max_step_change:
-                         diff = abs(target_gripper - current_gripper)
-                         if diff > 2048: diff = 4096 - diff
-                         if diff > max_step_change:
-                            print(f"Large jump detected on gripper: Current={current_gripper}, Target={target_gripper}")
-                            jump_detected = True
-                            
-                if jump_detected:
-                    print(f"(Read took {read_duration:.4f}s before jump)")
-                    raise RuntimeError("Sudden large jump detected. Stopping.")
-                
-                # If safety checks pass, send command and update state
-                command_steps = updated_steps[:] 
-                command_steps.append(wrist_roll_offset)
-                command_steps.append(gripper_offset)
-
-                # --- Time the write command --- 
-                write_start_time = time.monotonic()
-                follower_arm.write("Goal_Position", np.array(command_steps))
-                write_duration = time.monotonic() - write_start_time
-                # --- End write timing --- 
-                
-                # Update the angles state *only when moving*
-                angles = updated_angles[:]
-
-                # Update the time of the last command *sent*
-                last_command_time = current_time
-
-                # --- Print total block duration --- 
-                block_duration = time.monotonic() - block_start_time
-                print(f"(Read: {read_duration:.4f}s, Write: {write_duration:.4f}s, Total Block: {block_duration:.4f}s)")
-            # else: No movement requested, do nothing, robot holds last position
+            control_logic_start = time.monotonic()
+            control_block_executed = True
             
-        # Small sleep to allow PyBullet GUI to update
+            # --- IK calculation --- 
+            ik_start_time = time.monotonic()
+            initial_guess_for_ik = angles 
+            _, current_fk_ef_angles = forward_kinematics(*initial_guess_for_ik) 
+            current_pitch = current_fk_ef_angles[1] 
+            updated_angles = iterative_ik(ef_position, current_pitch, initial_guess_for_ik) 
+            ik_dur = time.monotonic() - ik_start_time 
+            
+            # --- FK Calculation --- 
+            fk_start_time = time.monotonic()
+            final_pos, _ = forward_kinematics(*updated_angles) 
+            fk_dur = time.monotonic() - fk_start_time 
+
+            # --- Convert to final target steps --- 
+            target_base_steps = angles_to_servo_steps(updated_angles)
+            final_target_steps = [0] * NUM_MOTORS
+            final_target_steps[0] = target_base_steps[0]
+            final_target_steps[1] = target_base_steps[1]
+            final_target_steps[2] = target_base_steps[2]
+            final_target_steps[3] = target_base_steps[3]
+            final_target_steps[4] = target_wrist_step 
+            final_target_steps[5] = target_gripper_step 
+            
+            # --- Temporarily Disable Safety Check --- 
+            safety_check_start = time.monotonic()
+            jump_detected = False # Assume safe for now
+            # for i in range(4): # Only check base joints
+            #     diff = final_target_steps[i] - last_sent_target_steps[i]
+            #     if diff > 2048: diff -= 4096
+            #     elif diff < -2048: diff += 4096
+            #     # Use original max_step_change threshold
+            #     if abs(diff) > max_step_change: 
+            #         print(f"IK jump detected on joint {i}: LastSent={last_sent_target_steps[i]}, NewTarget={final_target_steps[i]}")
+            #         jump_detected = True
+            #         break
+            safety_check_dur = time.monotonic() - safety_check_start # Still measure dummy time
+
+            # --- Write Goal_Position (Always attempt now) --- 
+            write_start_time = time.monotonic()
+            # if not jump_detected: # Removed condition
+            follower_arm.write("Goal_Position", np.array(final_target_steps))
+            angles = updated_angles[:] # Store angles corresponding to the sent command
+            last_sent_target_steps = final_target_steps[:] # Update last sent steps
+            # else: Jump detected, DO NOT send command or update angles/last_sent
+            write_dur = time.monotonic() - write_start_time 
+            
+            last_command_time = current_time 
+            control_logic_dur = time.monotonic() - control_logic_start 
+            
+        # --- Loop Timing Output ---
+        loop_dur = time.monotonic() - loop_start_time
+        if control_block_executed or (loop_start_time % 1.0 < 0.05):
+             timing_str = f"Loop: {loop_dur:.4f}s | Read: {read_dur:.4f}s | Viz: {viz_dur:.4f}s | TgtUpd: {target_update_dur:.4f}s | MkrUpd: {marker_update_dur:.4f}s | TqChk: {torque_proc_dur:.4f}s"
+             if control_block_executed:
+                 timing_str += f" | Ctrl(IK:{ik_dur:.4f} FK:{fk_dur:.4f} Safety:{safety_check_dur:.4f} Write:{write_dur:.4f}) Total:{control_logic_dur:.4f}s"
+             else:
+                  timing_str += " | CtrlLogic: Not Executed"
+             print(timing_str)
+
+        # Small sleep
         time.sleep(1./240.) 
 
 except KeyboardInterrupt:

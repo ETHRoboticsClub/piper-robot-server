@@ -57,9 +57,9 @@ def numeric_jacobian(fk_func, angles, eps=1e-6):
 
 def iterative_ik(target_pos, target_pitch, initial_guess=[0,0,0,0], 
                  limits_deg=None, # Add limits parameter
-                 max_iter=100,     # Reduced max iterations
-                 tol=5e-4,         # Increased tolerance further
-                 alpha=0.5):       # Increased alpha back to 0.5
+                 max_iter=100,     # <-- Reverted max iterations (was 15)
+                 tol=1e-3,         # Increased tolerance slightly
+                 alpha=0.5):       
     """Calculates inverse kinematics, optionally clamping angles to limits."""
     angles = np.array(initial_guess, dtype=float)
     
