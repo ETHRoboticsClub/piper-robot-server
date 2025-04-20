@@ -25,8 +25,8 @@ def get_full_calibration():
     # --- Use Servos Offsets from JSON as Zero Step for Viz --- 
     # --- Use Experimentally Verified Directions --- 
     # servos_offsets = [2048.0, 2052.0, 2047.0, 2047.0, 2043.0, 2048.0]
-    zero_steps = [2048.0, 2052.0, 2500.0, 2600.0, -250.0, 2048.0] # Use servos_offsets
-    directions = [-1, -1, -1, 1, -1, 1] # User: 0-3 = -1; JSON: 4=1, 5=1 (kept)
+    zero_steps = [2048.0, 2052.0, 2500.0, 2600.0, 3846.0, 2048.0] # found experimentally
+    directions = [-1, -1, -1, 1, -1, 1] # found experimentally
     
     if len(zero_steps) != 6 or len(directions) != 6:
         raise ValueError("Incorrect number of calibration values defined.")
