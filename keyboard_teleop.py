@@ -43,12 +43,12 @@ def angles_to_servo_steps(angles):
 
 follower_port = "/dev/ttyACM0"
 follower_motors = {
-    "shoulder_pan": (6, "sts3215"),
-    "shoulder_lift": (5, "sts3215"),
-    "elbow_flex": (4, "sts3215"),
-    "wrist_flex": (3, "sts3215"),
-    "wrist_roll": (2, "sts3215"),
-    "gripper": (1, "sts3215"),
+    "shoulder_pan": [1, "sts3215"],
+    "shoulder_lift": [2, "sts3215"],
+    "elbow_flex": [3, "sts3215"],
+    "wrist_flex": [4, "sts3215"],
+    "wrist_roll": [5, "sts3215"],
+    "gripper": [6, "sts3215"],
 }
 follower_config = FeetechMotorsBusConfig(port=follower_port, motors=follower_motors)
 follower_arm = FeetechMotorsBus(follower_config)
@@ -125,98 +125,103 @@ wrist_roll_offset = current_positions[4]
 gripper_offset = current_positions[5]
 
 try:
+    target_frequency = 20 # Hz
+    target_interval = 1.0 / target_frequency
+    last_command_time = time.monotonic() # Initialize before loop
+
     while True:
-        # Calculate actual change for this loop iteration based on direction flags
-        delta_x = move_direction['x'] * step_size
-        delta_y = move_direction['y'] * step_size
-        delta_z = move_direction['z'] * step_size
+        # Loop runs as fast as possible, checking time condition
+        current_time = time.monotonic()
 
-        delta_wrist = wrist_roll_direction * discrete_step_increment
-        delta_gripper = gripper_direction * discrete_step_increment
+        # --- Always process inputs (implicitly handled by listener thread) ---
+        # The direction flags (move_direction, etc.) should be up-to-date here
 
-        # Update target end effector position
-        ef_position[0] += delta_x
-        ef_position[1] += delta_y
-        ef_position[2] += delta_z
+        if current_time - last_command_time >= target_interval:
+            # --- Time interval elapsed, proceed with control logic --- 
 
-        # Update target wrist_roll_offset and gripper_offset
-        # Ensure wrap around 4096
-        wrist_roll_offset = (wrist_roll_offset + delta_wrist) % 4096
-        gripper_offset = (gripper_offset + delta_gripper) % 4096
+            # Calculate actual change based on current direction flags
+            delta_x = move_direction['x'] * step_size
+            delta_y = move_direction['y'] * step_size
+            delta_z = move_direction['z'] * step_size
 
-        print(f"Target EF position: {ef_position}") # Renamed print for clarity
+            delta_wrist = wrist_roll_direction * discrete_step_increment
+            delta_gripper = gripper_direction * discrete_step_increment
 
-        # Use the current pitch angle from ef_angles as the target for IK
-        current_pitch = ef_angles[1]
-        updated_angles = iterative_ik(ef_position, current_pitch, angles)
-        print(f"Calculated angles: {updated_angles}") # Renamed print
+            # Update target end effector position
+            ef_position[0] += delta_x
+            ef_position[1] += delta_y
+            ef_position[2] += delta_z
 
-        # Update ef_angles for the next iteration based on the new FK result
-        final_pos, ef_angles = forward_kinematics(*updated_angles)
-        final_error = ef_position - final_pos
-        print("Position error:", final_error, "Norm:", np.linalg.norm(final_error)) # Renamed print
+            # Update target wrist_roll_offset and gripper_offset
+            # Ensure wrap around 4096
+            wrist_roll_offset = (wrist_roll_offset + delta_wrist) % 4096
+            gripper_offset = (gripper_offset + delta_gripper) % 4096
 
-        updated_steps = angles_to_servo_steps(updated_angles)
-        print(f"Target servo steps (main joints): {updated_steps}") # Renamed print
+            print(f"Target EF position: {ef_position}") # Renamed print for clarity
 
-        # Read current positions *just before* the safety check
-        current_positions_now = follower_arm.read("Present_Position")
-        current_motors_now = current_positions_now[0:4]
+            # Use the current pitch angle from ef_angles as the target for IK
+            current_pitch = ef_angles[1]
+            updated_angles = iterative_ik(ef_position, current_pitch, angles)
+            print(f"Calculated angles: {updated_angles}") # Renamed print
 
-        # Safety check against actual current position
-        jump_detected = False
-        for i, (c, u) in enumerate(zip(current_motors_now, updated_steps)):
-            # Also check wrist/gripper if they are commanded (indices 4 and 5)
-            current_wrist = current_positions_now[4]
-            current_gripper = current_positions_now[5]
-            target_wrist = wrist_roll_offset
-            target_gripper = gripper_offset
+            # Update ef_angles for the next iteration based on the new FK result
+            final_pos, ef_angles = forward_kinematics(*updated_angles)
+            final_error = ef_position - final_pos
+            print("Position error:", final_error, "Norm:", np.linalg.norm(final_error)) # Renamed print
 
-            # Check main 4 joints
-            if abs(u - c) > max_step_change:
-                print(f"Large jump detected on main joint {i}: Current={c}, Target={u}")
-                jump_detected = True
-                break
-        
-        # Check wrist roll and gripper separately (they use offset logic)
-        # We might need a different threshold for these? Using max_step_change for now.
-        if not jump_detected:
-            if abs(target_wrist - current_wrist) > max_step_change:
-                 # Handle wrap around for comparison
-                 diff = abs(target_wrist - current_wrist)
-                 if diff > 2048: # Closer to wrap around
-                      diff = 4096 - diff
-                 if diff > max_step_change:
-                    print(f"Large jump detected on wrist_roll: Current={current_wrist}, Target={target_wrist}")
+            updated_steps = angles_to_servo_steps(updated_angles)
+            print(f"Target servo steps (main joints): {updated_steps}") # Renamed print
+
+            # Read current positions *just before* the safety check
+            current_positions_now = follower_arm.read("Present_Position")
+            current_motors_now = current_positions_now[0:4]
+
+            # Safety check against actual current position
+            jump_detected = False
+            for i, (c, u) in enumerate(zip(current_motors_now, updated_steps)):
+                current_wrist = current_positions_now[4]
+                current_gripper = current_positions_now[5]
+                target_wrist = wrist_roll_offset
+                target_gripper = gripper_offset
+                if abs(u - c) > max_step_change:
+                    print(f"Large jump detected on main joint {i}: Current={c}, Target={u}")
                     jump_detected = True
+                    break
+            if not jump_detected:
+                if abs(target_wrist - current_wrist) > max_step_change:
+                     diff = abs(target_wrist - current_wrist)
+                     if diff > 2048: diff = 4096 - diff
+                     if diff > max_step_change:
+                        print(f"Large jump detected on wrist_roll: Current={current_wrist}, Target={target_wrist}")
+                        jump_detected = True
+            if not jump_detected:
+                 if abs(target_gripper - current_gripper) > max_step_change:
+                     diff = abs(target_gripper - current_gripper)
+                     if diff > 2048: diff = 4096 - diff
+                     if diff > max_step_change:
+                        print(f"Large jump detected on gripper: Current={current_gripper}, Target={target_gripper}")
+                        jump_detected = True
+                        
+            if jump_detected:
+                print("Stopping due to large jump detection.")
+                raise RuntimeError("Sudden large jump detected. Stopping.")
+            
+            # If safety checks pass, send command and update state
 
-        if not jump_detected:
-             if abs(target_gripper - current_gripper) > max_step_change:
-                 # Handle wrap around for comparison
-                 diff = abs(target_gripper - current_gripper)
-                 if diff > 2048: # Closer to wrap around
-                     diff = 4096 - diff
-                 if diff > max_step_change:
-                    print(f"Large jump detected on gripper: Current={current_gripper}, Target={target_gripper}")
-                    jump_detected = True
-                    
-        if jump_detected:
-            print("Stopping due to large jump detection.")
-            # Option: Instead of stopping, maybe just don't send the command for this cycle?
-            # Or reset the target ef_position to the current actual position?
-            # For now, we stop as before.
-            raise RuntimeError("Sudden large jump detected. Stopping.")
+            # Append the updated wrist_roll and gripper target offsets
+            command_steps = updated_steps[:] # Create a copy
+            command_steps.append(wrist_roll_offset)
+            command_steps.append(gripper_offset)
 
-        # Append the updated wrist_roll and gripper target offsets
-        command_steps = updated_steps[:] # Create a copy
-        command_steps.append(wrist_roll_offset)
-        command_steps.append(gripper_offset)
+            follower_arm.write("Goal_Position", np.array(command_steps))
+            
+            # Update the angles state *after* commanding, ready for the next loop's IK initial guess
+            angles = updated_angles[:]
 
-        follower_arm.write("Goal_Position", np.array(command_steps))
+            # Update the time of the last command
+            last_command_time = current_time
         
-        # Update the angles state *after* commanding, ready for the next loop's IK initial guess
-        angles = updated_angles[:]
-        time.sleep(0.05) # Reduced delay for smoother/faster command rate
+        # --- No sleep here, loop continues immediately ---
 
 except KeyboardInterrupt:
     print("Teleoperation ended.")
