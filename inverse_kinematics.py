@@ -1,3 +1,6 @@
+# --- Inverse Kinematics ---
+# This function takes in a desired position and pitch angle and returns the angles of the motors
+# Modified from rabhishek100's uploaded code on https://github.com/huggingface/lerobot/issues/568
 import numpy as np
 from forward_kinematics import forward_kinematics
 

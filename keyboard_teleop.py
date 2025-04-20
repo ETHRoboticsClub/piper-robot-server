@@ -1,3 +1,6 @@
+# --- Keyboard Teleoperation ---
+# This script allows for teleoperation of the robot using the keyboard
+# Modified from rabhishek100's uploaded code on https://github.com/huggingface/lerobot/issues/568
 import numpy as np
 from forward_kinematics import forward_kinematics
 from inverse_kinematics import iterative_ik
