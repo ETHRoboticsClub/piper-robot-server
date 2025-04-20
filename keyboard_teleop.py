@@ -7,113 +7,187 @@ from inverse_kinematics import iterative_ik
 from lerobot.common.robot_devices.motors.feetech import FeetechMotorsBus, TorqueMode, FeetechMotorsBusConfig
 import time
 from pynput import keyboard
+import pybullet as p
+import pybullet_data
+import math
 
-def servo_steps_to_angles(steps):
-    if len(steps) != 4:
-        raise ValueError("Expected 4 steps for main joints.")
-    calibration = [
-        {"zero_step": 2048, "direction": -1},
-        {"zero_step": 2052, "direction": 1},
-        {"zero_step": 2047, "direction": 1},
-        {"zero_step": 2047, "direction": 1},
+# --- Calibration Data --- 
+def get_base_calibration():
+    """Calibration for the first 4 joints used in IK."""
+    return [
+        {"zero_step": 2048, "direction": -1}, # shoulder_pan (ID 1)
+        {"zero_step": 2052, "direction": 1},  # shoulder_lift (ID 2)
+        {"zero_step": 2047, "direction": 1},  # elbow_flex (ID 3)
+        {"zero_step": 2047, "direction": 1},  # wrist_flex (ID 4)
     ]
+
+def get_full_calibration():
+    """Calibration for all 6 joints (used for visualization)."""
+    base_calib = get_base_calibration()
+    # !!! Placeholder calibration for wrist_roll and gripper !!!
+    # !!! These should be updated with actual values if available !!!
+    wrist_roll_calib = {"zero_step": 2048, "direction": 1} # wrist_roll (ID 5)
+    gripper_calib = {"zero_step": 2048, "direction": 1}    # gripper (ID 6)
+    return base_calib + [wrist_roll_calib, gripper_calib]
+
+# --- Angle Conversion --- 
+def servo_steps_to_angles(steps):
+    # Uses base calibration (first 4 joints)
+    calib_data = get_base_calibration()
+    if len(steps) != len(calib_data):
+        raise ValueError(f"Expected {len(calib_data)} steps for servo_steps_to_angles.")
     degrees_per_step = 360.0 / 4096.0
     angle_values = []
     for i, step in enumerate(steps):
-        zero_step = calibration[i]["zero_step"]
-        direction = calibration[i]["direction"]
+        cal = calib_data[i]
+        zero_step = cal["zero_step"]
+        direction = cal["direction"]
         angle_value = (step - zero_step) * direction * degrees_per_step
         angle_values.append(angle_value % 360)
     return angle_values
 
 def angles_to_servo_steps(angles):
-    if len(angles) != 4:
-        raise ValueError("Expected 4 angles for main joints.")
-    calibration = [
-        {"zero_step": 2048, "direction": -1},
-        {"zero_step": 2052, "direction": 1},
-        {"zero_step": 2047, "direction": 1},
-        {"zero_step": 2047, "direction": 1},
-    ]
+    # Uses base calibration (first 4 joints)
+    calib_data = get_base_calibration()
+    if len(angles) != len(calib_data):
+        raise ValueError(f"Expected {len(calib_data)} angles for angles_to_servo_steps.")
     steps_per_degree = 4096 / 360.0
     step_values = []
     for i, angle in enumerate(angles):
-        zero_step = calibration[i]["zero_step"]
-        direction = calibration[i]["direction"]
+        cal = calib_data[i]
+        zero_step = cal["zero_step"]
+        direction = cal["direction"]
         step_value = int(zero_step + direction * angle * steps_per_degree)
         step_values.append(step_value % 4096)
     return step_values
 
+def steps_to_radians_for_viz(steps, calib_data):
+    """Converts full 6 steps to radians for pybullet visualization."""
+    if len(steps) != len(calib_data):
+        raise ValueError(f"Expected {len(calib_data)} steps for visualization conversion.")
+    radians_per_step = 2 * math.pi / 4096.0
+    radian_values = []
+    for i, step in enumerate(steps):
+        cal = calib_data[i]
+        zero_step = cal["zero_step"]
+        direction = cal["direction"]
+        # Calculate angle relative to zero, no modulo for pybullet
+        angle_value = (step - zero_step) * direction * radians_per_step 
+        radian_values.append(angle_value)
+    return radian_values
+
+# --- Robot and Motor Config --- 
 follower_port = "/dev/ttyACM0"
 follower_motors = {
-    "shoulder_pan": [1, "sts3215"],
-    "shoulder_lift": [2, "sts3215"],
-    "elbow_flex": [3, "sts3215"],
-    "wrist_flex": [4, "sts3215"],
-    "wrist_roll": [5, "sts3215"],
-    "gripper": [6, "sts3215"],
+    "Shoulder_Rotation": (1, "sts3215"), # Corresponds to motor controlling base rotation
+    "Shoulder_Pitch": (2, "sts3215"),    # Corresponds to motor controlling shoulder lift
+    "Elbow": (3, "sts3215"),             # Corresponds to motor controlling elbow flex
+    "Wrist_Pitch": (4, "sts3215"),      # Corresponds to motor controlling wrist flex/pitch
+    "Wrist_Roll": (5, "sts3215"),       # Corresponds to motor controlling wrist roll
+    "Gripper": (6, "sts3215"),          # Corresponds to motor controlling gripper
 }
 follower_config = FeetechMotorsBusConfig(port=follower_port, motors=follower_motors)
-follower_arm = FeetechMotorsBus(follower_config)
 
+# --- PyBullet Setup --- 
+physicsClient = p.connect(p.GUI)
+# Add data path for loading plane.urdf
+p.setAdditionalSearchPath(pybullet_data.getDataPath())
+p.setGravity(0,0,-9.81) # Set gravity (though simulation is off)
+planeId = p.loadURDF("plane.urdf") # Load a ground plane
+
+# Load the robot URDF
+urdf_path = "URDF/SO_5DOF_ARM100_05d.SLDASM/urdf/SO_5DOF_ARM100_05d.SLDASM.urdf"
+robot_start_pos = [0, 0, 0] # Start at origin
+robot_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+print(f"Loading URDF: {urdf_path}")
+robotId = p.loadURDF(urdf_path, robot_start_pos, robot_start_orientation, useFixedBase=1)
+print(f"Pybullet Robot ID: {robotId}")
+
+# Get map of joint names to pybullet indices
+num_joints = p.getNumJoints(robotId)
+p_joint_indices = {}
+for i in range(num_joints):
+    info = p.getJointInfo(robotId, i)
+    joint_name = info[1].decode('UTF-8') # Get joint name
+    # Assuming our follower_motors keys match relevant URDF joint names
+    if joint_name in follower_motors:
+        p_joint_indices[joint_name] = i
+        # Disable velocity control for visualization
+        p.setJointMotorControl2(robotId, i, p.VELOCITY_CONTROL, force=0)
+print(f"Mapped Pybullet Joint Indices: {p_joint_indices}")
+
+# Create a visual marker for the target position
+target_marker_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.02, rgbaColor=[1, 0, 0, 0.8])
+target_marker_id = p.createMultiBody(baseVisualShapeIndex=target_marker_shape, basePosition=[0,0,0])
+# --- End PyBullet Setup ---
+
+# --- Real Robot Connection --- 
+follower_arm = FeetechMotorsBus(follower_config)
 follower_arm.connect()
 follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
 current_positions = follower_arm.read("Present_Position")
-time.sleep(2)
+full_calibration = get_full_calibration() # Get full calibration data
+time.sleep(1) # Reduced sleep after enabling torque
+# --- End Real Robot Connection --- 
 
+# --- Initial State Calculation --- 
 positions = current_positions[0:4]
-print(f"Arm start positions: {positions}")
+print(f"Arm start positions (steps 0-3): {positions}")
 angles = servo_steps_to_angles(positions)
-print(f"Arm start angles: {angles}")
+print(f"Arm start angles (deg 0-3): {angles}")
 ef_position, ef_angles = forward_kinematics(*angles)
 print(f"End effector start position: {ef_position}")
 print(f"End effector start angles: {ef_angles}")
+# --- End Initial State Calculation --- 
 
-step_size = 0.002 # Increased slightly for speed
-move_direction = {'x': 0, 'y': 0, 'z': 0} # Store direction (-1, 0, 1)
-
-# For teleoperation of wrist_roll (index 4) and gripper (index 5)
-wrist_roll_direction = 0 # Store direction (-1, 0, 1)
-gripper_direction = 0  # Store direction (-1, 0, 1)
-discrete_step_increment = 20 # Increased slightly for speed
+# --- Keyboard Listener and Control Variables --- 
+step_size = 0.01 # Reduced step size again to prevent overshoots
+move_direction = {'x': 0, 'y': 0, 'z': 0}
+wrist_roll_direction = 0
+gripper_direction = 0
+discrete_step_increment = 120
 
 def on_press(key):
     global move_direction, wrist_roll_direction, gripper_direction
     try:
-        if key.char == 'w':
-            move_direction['x'] = 1
-        elif key.char == 's':
-            move_direction['x'] = -1
-        elif key.char == 'a':
-            move_direction['y'] = 1
-        elif key.char == 'd':
-            move_direction['y'] = -1
-        elif key.char == 'q':
+        # --- Remapped W/S and Q/E ---
+        if key.char == 'w':      # W = Up
             move_direction['z'] = 1
-        elif key.char == 'e':
+        elif key.char == 's':      # S = Down
             move_direction['z'] = -1
+        elif key.char == 'a':      # A = Left
+            move_direction['y'] = 1
+        elif key.char == 'd':      # D = Right
+            move_direction['y'] = -1
+        elif key.char == 'q':      # Q = Forward 
+            move_direction['x'] = 1
+        elif key.char == 'e':      # E = Backward
+            move_direction['x'] = -1
+        # --- End Remapping ---
     except AttributeError:
-        # Handle arrow keys
+        # Handle arrow keys (unchanged)
         if key == keyboard.Key.up:
-            wrist_roll_direction = 1 # Corresponds to positive increment
+            wrist_roll_direction = 1
         elif key == keyboard.Key.down:
-            wrist_roll_direction = -1 # Corresponds to negative increment
+            wrist_roll_direction = -1
         elif key == keyboard.Key.left:
-            gripper_direction = -1 # Corresponds to negative increment (e.g., open)
+            gripper_direction = -1
         elif key == keyboard.Key.right:
-            gripper_direction = 1 # Corresponds to positive increment (e.g., close)
+            gripper_direction = 1
 
 def on_release(key):
     global move_direction, wrist_roll_direction, gripper_direction
     try:
-        if key.char in ['w', 's']:
+        # --- Remapped W/S and Q/E ---
+        if key.char in ['q', 'e']: # Q/E control X
             move_direction['x'] = 0
-        elif key.char in ['a', 'd']:
+        elif key.char in ['a', 'd']: # A/D control Y
             move_direction['y'] = 0
-        elif key.char in ['q', 'e']:
+        elif key.char in ['w', 's']: # W/S control Z
             move_direction['z'] = 0
+        # --- End Remapping ---
     except AttributeError:
-        # Reset arrow key directions on release
+        # Reset arrow key directions on release (unchanged)
         if key in [keyboard.Key.up, keyboard.Key.down]:
             wrist_roll_direction = 0
         elif key in [keyboard.Key.left, keyboard.Key.right]:
@@ -121,114 +195,182 @@ def on_release(key):
 
 listener = keyboard.Listener(on_press=on_press, on_release=on_release)
 listener.start()
+# --- End Keyboard Listener --- 
 
 max_step_change = 500
-# Initialize offsets from the actual read positions
+# Initialize offsets from the actual read positions (using all 6)
 wrist_roll_offset = current_positions[4]
 gripper_offset = current_positions[5]
 
+# --- Main Control Loop --- 
 try:
     target_frequency = 20 # Hz
     target_interval = 1.0 / target_frequency
     last_command_time = time.monotonic() # Initialize before loop
+    # Store the latest full measured position for visualization
+    last_measured_positions = current_positions[:] 
 
     while True:
-        # Loop runs as fast as possible, checking time condition
         current_time = time.monotonic()
 
-        # --- Always process inputs (implicitly handled by listener thread) ---
-        # The direction flags (move_direction, etc.) should be up-to-date here
+        # --- Read current state for visualization BEFORE time check --- 
+        # Optimization: Only read if enough time passed for a viz update?
+        # For now, read every loop cycle for smoothness
+        try:
+            last_measured_positions = follower_arm.read("Present_Position")
+        except Exception as read_err:
+            print(f"Error reading position for viz: {read_err}")
+            # Keep using the previous measurement if read fails
+            pass 
 
+        # --- Update PyBullet Visualization --- 
+        if last_measured_positions is not None:
+            # Convert measured steps to radians
+            current_radians_viz = steps_to_radians_for_viz(last_measured_positions, full_calibration)
+            # Update visualized robot joints
+            motor_names = list(follower_motors.keys())
+            for i in range(len(motor_names)):
+                motor_name = motor_names[i]
+                if motor_name in p_joint_indices:
+                    joint_index = p_joint_indices[motor_name]
+                    # Use resetJointState for direct position setting
+                    p.resetJointState(robotId, joint_index, targetValue=current_radians_viz[i])
+        
+        # Update target marker position (always update viz)
+        if target_marker_id is not None:
+             # Assuming ef_position is in the same coordinate system as pybullet base
+             p.resetBasePositionAndOrientation(target_marker_id, ef_position, [0,0,0,1])
+        # --- End PyBullet Update --- 
+
+        # --- Control Logic (Gated by Time Interval) --- 
         if current_time - last_command_time >= target_interval:
-            # --- Time interval elapsed, proceed with control logic --- 
-
-            # Calculate actual change based on current direction flags
+            # Calculate potential change based on current direction flags
             delta_x = move_direction['x'] * step_size
             delta_y = move_direction['y'] * step_size
             delta_z = move_direction['z'] * step_size
-
             delta_wrist = wrist_roll_direction * discrete_step_increment
             delta_gripper = gripper_direction * discrete_step_increment
 
-            # Update target end effector position
-            ef_position[0] += delta_x
-            ef_position[1] += delta_y
-            ef_position[2] += delta_z
+            # --- Check if any movement is requested --- 
+            is_moving = delta_x != 0 or delta_y != 0 or delta_z != 0 or \
+                        delta_wrist != 0 or delta_gripper != 0
 
-            # Update target wrist_roll_offset and gripper_offset
-            # Ensure wrap around 4096
-            wrist_roll_offset = (wrist_roll_offset + delta_wrist) % 4096
-            gripper_offset = (gripper_offset + delta_gripper) % 4096
+            if is_moving:
+                # --- Movement Requested: Proceed with control logic --- 
+                block_start_time = time.monotonic() # Time the start of the block
 
-            print(f"Target EF position: {ef_position}") # Renamed print for clarity
+                # Update target end effector position
+                ef_position[0] += delta_x
+                ef_position[1] += delta_y
+                ef_position[2] += delta_z
 
-            # Use the current pitch angle from ef_angles as the target for IK
-            current_pitch = ef_angles[1]
-            updated_angles = iterative_ik(ef_position, current_pitch, angles)
-            print(f"Calculated angles: {updated_angles}") # Renamed print
+                # Update target wrist_roll_offset and gripper_offset
+                wrist_roll_offset = (wrist_roll_offset + delta_wrist) % 4096
+                gripper_offset = (gripper_offset + delta_gripper) % 4096
 
-            # Update ef_angles for the next iteration based on the new FK result
-            final_pos, ef_angles = forward_kinematics(*updated_angles)
-            final_error = ef_position - final_pos
-            print("Position error:", final_error, "Norm:", np.linalg.norm(final_error)) # Renamed print
+                print(f"Target EF position: {ef_position}")
 
-            updated_steps = angles_to_servo_steps(updated_angles)
-            print(f"Target servo steps (main joints): {updated_steps}") # Renamed print
+                # --- Time the IK calculation --- 
+                ik_start_time = time.monotonic()
+                # Use the current pitch angle from ef_angles as the target for IK
+                current_pitch = ef_angles[1]
+                updated_angles = iterative_ik(ef_position, current_pitch, angles)
+                ik_duration = time.monotonic() - ik_start_time
+                # --- End IK timing --- 
+                
+                print(f"Calculated angles: {updated_angles} (IK took {ik_duration:.4f}s)") 
 
-            # Read current positions *just before* the safety check
-            current_positions_now = follower_arm.read("Present_Position")
-            current_motors_now = current_positions_now[0:4]
+                # Update ef_angles for the next iteration based on the new FK result
+                final_pos, ef_angles = forward_kinematics(*updated_angles)
+                final_error = ef_position - final_pos
+                print("Position error:", final_error, "Norm:", np.linalg.norm(final_error))
 
-            # Safety check against actual current position
-            jump_detected = False
-            for i, (c, u) in enumerate(zip(current_motors_now, updated_steps)):
-                current_wrist = current_positions_now[4]
-                current_gripper = current_positions_now[5]
-                target_wrist = wrist_roll_offset
-                target_gripper = gripper_offset
-                if abs(u - c) > max_step_change:
-                    print(f"Large jump detected on main joint {i}: Current={c}, Target={u}")
-                    jump_detected = True
-                    break
-            if not jump_detected:
-                if abs(target_wrist - current_wrist) > max_step_change:
-                     diff = abs(target_wrist - current_wrist)
-                     if diff > 2048: diff = 4096 - diff
-                     if diff > max_step_change:
-                        print(f"Large jump detected on wrist_roll: Current={current_wrist}, Target={target_wrist}")
+                updated_steps = angles_to_servo_steps(updated_angles)
+                print(f"Target servo steps (main joints): {updated_steps}")
+
+                # Read current positions *just before* the safety check
+                read_start_time = time.monotonic()
+                current_positions_now = follower_arm.read("Present_Position")
+                read_duration = time.monotonic() - read_start_time
+                current_motors_now = current_positions_now[0:4]
+                
+                # Safety check against actual current position
+                jump_detected = False
+                for i, (c, u) in enumerate(zip(current_motors_now, updated_steps)):
+                    current_wrist = current_positions_now[4]
+                    current_gripper = current_positions_now[5]
+                    target_wrist = wrist_roll_offset
+                    target_gripper = gripper_offset
+                    if abs(u - c) > max_step_change:
+                        print(f"Large jump detected on main joint {i}: Current={c}, Target={u}")
                         jump_detected = True
-            if not jump_detected:
-                 if abs(target_gripper - current_gripper) > max_step_change:
-                     diff = abs(target_gripper - current_gripper)
-                     if diff > 2048: diff = 4096 - diff
-                     if diff > max_step_change:
-                        print(f"Large jump detected on gripper: Current={current_gripper}, Target={target_gripper}")
-                        jump_detected = True
-                        
-            if jump_detected:
-                print("Stopping due to large jump detection.")
-                raise RuntimeError("Sudden large jump detected. Stopping.")
+                        break
+                if not jump_detected:
+                    if abs(target_wrist - current_wrist) > max_step_change:
+                         diff = abs(target_wrist - current_wrist)
+                         if diff > 2048: diff = 4096 - diff
+                         if diff > max_step_change:
+                            print(f"Large jump detected on wrist_roll: Current={current_wrist}, Target={target_wrist}")
+                            jump_detected = True
+                if not jump_detected:
+                     if abs(target_gripper - current_gripper) > max_step_change:
+                         diff = abs(target_gripper - current_gripper)
+                         if diff > 2048: diff = 4096 - diff
+                         if diff > max_step_change:
+                            print(f"Large jump detected on gripper: Current={current_gripper}, Target={target_gripper}")
+                            jump_detected = True
+                            
+                if jump_detected:
+                    print(f"(Read took {read_duration:.4f}s before jump)")
+                    raise RuntimeError("Sudden large jump detected. Stopping.")
+                
+                # If safety checks pass, send command and update state
+                command_steps = updated_steps[:] 
+                command_steps.append(wrist_roll_offset)
+                command_steps.append(gripper_offset)
+
+                # --- Time the write command --- 
+                write_start_time = time.monotonic()
+                follower_arm.write("Goal_Position", np.array(command_steps))
+                write_duration = time.monotonic() - write_start_time
+                # --- End write timing --- 
+                
+                # Update the angles state *only when moving*
+                angles = updated_angles[:]
+
+                # Update the time of the last command *sent*
+                last_command_time = current_time
+
+                # --- Print total block duration --- 
+                block_duration = time.monotonic() - block_start_time
+                print(f"(Read: {read_duration:.4f}s, Write: {write_duration:.4f}s, Total Block: {block_duration:.4f}s)")
+            # else: No movement requested, do nothing, robot holds last position
             
-            # If safety checks pass, send command and update state
-
-            # Append the updated wrist_roll and gripper target offsets
-            command_steps = updated_steps[:] # Create a copy
-            command_steps.append(wrist_roll_offset)
-            command_steps.append(gripper_offset)
-
-            follower_arm.write("Goal_Position", np.array(command_steps))
-            
-            # Update the angles state *after* commanding, ready for the next loop's IK initial guess
-            angles = updated_angles[:]
-
-            # Update the time of the last command
-            last_command_time = current_time
-        
         # --- No sleep here, loop continues immediately ---
 
 except KeyboardInterrupt:
-    print("Teleoperation ended.")
+    print("\nTeleoperation ended.")
 except RuntimeError as e:
     print(str(e))
 finally:
-    listener.stop()
+    # Cleanup
+    print("Cleaning up...")
+    if listener and listener.is_alive():
+        listener.stop()
+        print("Keyboard listener stopped.")
+    if follower_arm and follower_arm.is_connected:
+        try:
+            # Attempt to disable torque before disconnecting
+            print("Attempting to disable torque...")
+            all_motor_ids = [m[0] for m in follower_motors.values()]
+            follower_arm.write("Torque_Enable", TorqueMode.DISABLED.value)
+            time.sleep(0.5)
+        except Exception as e_torque:
+            print(f"Could not disable torque on exit: {e_torque}")
+        finally:
+             follower_arm.disconnect()
+             print("Follower arm disconnected.")
+    if physicsClient >= 0:
+        p.disconnect()
+        print("PyBullet disconnected.")
+    print("Cleanup finished.")

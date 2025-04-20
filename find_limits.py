@@ -134,8 +134,14 @@ if __name__ == "__main__":
             min_steps = limit_entry["min_steps"]
             max_steps = limit_entry["max_steps"]
             # Use index `i` (0-3) for the calibration lookup
-            min_angle = servo_step_to_angle(min_steps, i) 
-            max_angle = servo_step_to_angle(max_steps, i)
+            angle1 = servo_step_to_angle(min_steps, i) 
+            angle2 = servo_step_to_angle(max_steps, i)
+            
+            # --- Ensure min_degrees <= max_degrees --- 
+            min_angle = min(angle1, angle2)
+            max_angle = max(angle1, angle2)
+            # --- End swap logic --- 
+
             limit_entry["min_degrees"] = round(min_angle, 2) # Round for cleaner JSON
             limit_entry["max_degrees"] = round(max_angle, 2)
 
