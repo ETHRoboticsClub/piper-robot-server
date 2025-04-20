@@ -2,33 +2,33 @@
     {
         "id": 1,
         "name": "shoulder_pan",
-        "min_steps": 3149,
-        "max_steps": 5195,
-        "min_degrees": -276.59,
-        "max_degrees": -96.77
+        "min_steps": 1028,
+        "max_steps": 3004,
+        "min_degrees": -84.02,
+        "max_degrees": 89.65
     },
     {
         "id": 2,
         "name": "shoulder_lift",
-        "min_steps": -961,
-        "max_steps": 902,
-        "min_degrees": -264.81,
-        "max_degrees": -101.07
+        "min_steps": 3248,
+        "max_steps": 5082,
+        "min_degrees": 105.12,
+        "max_degrees": 266.31
     },
     {
         "id": 3,
         "name": "elbow_flex",
-        "min_steps": 3066,
-        "max_steps": 5059,
-        "min_degrees": 89.56,
-        "max_degrees": 264.73
+        "min_steps": -1077,
+        "max_steps": 946,
+        "min_degrees": -274.57,
+        "max_degrees": -96.77
     },
     {
         "id": 4,
         "name": "wrist_flex",
-        "min_steps": 797,
-        "max_steps": 2735,
-        "min_degrees": -109.86,
-        "max_degrees": 60.47
+        "min_steps": 851,
+        "max_steps": 2856,
+        "min_degrees": -105.12,
+        "max_degrees": 71.1
     }
 ]
