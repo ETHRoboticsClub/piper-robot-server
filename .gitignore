@@ -78,3 +78,7 @@ cython_debug/
 
 # VSCode
 .vscode/ 
+
+# SSL Certificates
+key.pem
+cert.pem

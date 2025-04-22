@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Quest 3 Passthrough Controllers</title>
+    <meta name="description" content="Display Quest 3 controllers in passthrough with position/rotation data.">
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a-scene webxr="requiredFeatures: immersive-ar;" vr-mode-ui="enabled: false;">
+
+      <!-- Passthrough setup -->
+      <a-entity webxr-passthrough></a-entity>
+
+      <!-- Controllers Temporarily Removed -->
+      <!--
+      <a-entity id="leftHand" oculus-touch-controls="hand: left">
+        <a-text id="leftHandPos" value="Pos: 0 0 0" position="0 0.05 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+        <a-text id="leftHandRot" value="Rot: 0 0 0" position="0 0.02 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+      </a-entity>
+      <a-entity id="rightHand" oculus-touch-controls="hand: right">
+         <a-text id="rightHandPos" value="Pos: 0 0 0" position="0 0.05 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+         <a-text id="rightHandRot" value="Rot: 0 0 0" position="0 0.02 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+      </a-entity>
+      -->
+
+      <!-- Basic environment setup for reference if needed -->
+      <!-- <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane> -->
+      <!-- <a-sky color="#ECECEC"></a-sky> -->
+
+    </a-scene>
+  </body>
+</html> 
