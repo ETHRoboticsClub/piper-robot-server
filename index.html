@@ -11,23 +11,26 @@
     <a-scene vr-mode-ui="enabled: false;">
 
       <!-- Passthrough setup -->
-      <a-entity webxr-passthrough></a-entity>
+      <a-entity webxr-passthrough="referenceSpaceType: local-floor"></a-entity>
 
-      <!-- Controllers Temporarily Removed -->
-      <!--
+      <!-- Controllers -->
       <a-entity id="leftHand" oculus-touch-controls="hand: left">
-        <a-text id="leftHandPos" value="Pos: 0 0 0" position="0 0.05 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
-        <a-text id="leftHandRot" value="Rot: 0 0 0" position="0 0.02 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+        <!-- Debug sphere -->
+        <a-sphere radius="0.03" color="red"></a-sphere>
+        <a-text id="leftHandPos" value="Pos: 0 0 0" position="0 0.05 -0.05" rotation="0 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+        <a-text id="leftHandRot" value="Rot: 0 0 0" position="0 0.02 -0.05" rotation="0 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
       </a-entity>
       <a-entity id="rightHand" oculus-touch-controls="hand: right">
-         <a-text id="rightHandPos" value="Pos: 0 0 0" position="0 0.05 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
-         <a-text id="rightHandRot" value="Rot: 0 0 0" position="0 0.02 -0.05" rotation="-90 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+         <!-- Debug sphere -->
+         <a-sphere radius="0.03" color="blue"></a-sphere>
+         <a-text id="rightHandPos" value="Pos: 0 0 0" position="0 0.05 -0.05" rotation="0 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+         <a-text id="rightHandRot" value="Rot: 0 0 0" position="0 0.02 -0.05" rotation="0 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
       </a-entity>
-      -->
 
-      <!-- Basic environment setup for reference if needed -->
-      <!-- <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane> -->
-      <!-- <a-sky color="#ECECEC"></a-sky> -->
+      <!-- Basic environment setup -->
+      <a-box position="-1 -1.0 -3" rotation="0 45 0" color="#4CC3D9"></a-box>
+      <a-sphere position="0 -0.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+      <a-plane position="0 -1.5 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
 
     </a-scene>
   </body>
