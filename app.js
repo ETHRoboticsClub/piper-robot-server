@@ -111,7 +111,7 @@ function onSessionStarted(session) {
     console.log('Immersive AR session started successfully!');
     const sceneEl = document.querySelector('a-scene');
     if (sceneEl && sceneEl.renderer) {
-        sceneEl.renderer.xr.setReferenceSpaceType('local-floor'); // Or 'local', 'viewer'
+        sceneEl.renderer.xr.setReferenceSpaceType('local');
         sceneEl.renderer.xr.setSession(session).then(() => {
             console.log('A-Frame renderer set with AR session.');
             // Optionally hide the custom button after entering AR
