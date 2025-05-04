@@ -30,6 +30,15 @@ AFRAME.registerComponent('controller-updater', {
     // Update controller text if controllers are visible
     if (!this.leftHand || !this.rightHand) return; // Added safety check
 
+    // --- BEGIN DETAILED LOGGING ---
+    if (this.leftHand.object3D) {
+      // console.log(`Left Hand Raw - Visible: ${this.leftHand.object3D.visible}, Pos: ${this.leftHand.object3D.position.x.toFixed(2)},${this.leftHand.object3D.position.y.toFixed(2)},${this.leftHand.object3D.position.z.toFixed(2)}`);
+    }
+    if (this.rightHand.object3D) {
+      // console.log(`Right Hand Raw - Visible: ${this.rightHand.object3D.visible}, Pos: ${this.rightHand.object3D.position.x.toFixed(2)},${this.rightHand.object3D.position.y.toFixed(2)},${this.rightHand.object3D.position.z.toFixed(2)}`);
+    }
+    // --- END DETAILED LOGGING ---
+
     if (!this.leftHand.object3D.visible && !this.rightHand.object3D.visible) {
         // If controllers aren't visible, maybe clear the text or show 'disconnected'
         // For now, just return to avoid errors if text elements are missing
@@ -67,13 +76,20 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const scene = document.querySelector('a-scene');
 
     if (scene) {
+        // Listen for controller connection events
+        scene.addEventListener('controllerconnected', (evt) => {
+            console.log('Controller CONNECTED:', evt.detail.name, evt.detail.component.data.hand);
+        });
+        scene.addEventListener('controllerdisconnected', (evt) => {
+            console.log('Controller DISCONNECTED:', evt.detail.name, evt.detail.component.data.hand);
+        });
+
+        // Add controller-updater component when scene is loaded (A-Frame manages session)
         if (scene.hasLoaded) {
-            // Add the controller-updater component
             scene.setAttribute('controller-updater', '');
             console.log("controller-updater component added immediately.");
         } else {
             scene.addEventListener('loaded', () => {
-                 // Add the controller-updater component
                 scene.setAttribute('controller-updater', '');
                 console.log("controller-updater component added after scene loaded.");
             });
@@ -107,17 +123,28 @@ function addCustomARButton() {
                 button.style.zIndex = '9999'; // Ensure it's on top
 
                 button.onclick = () => {
-                    console.log('Custom AR button clicked. Requesting session...');
-                    navigator.xr.requestSession('immersive-ar')
-                        .then(onSessionStarted)
-                        .catch((err) => {
-                            console.error('Failed to start immersive-ar session:', err);
-                            alert(`Failed to start AR session: ${err.message}`);
+                    console.log('Custom AR button clicked. Requesting session via A-Frame...');
+                    const sceneEl = document.querySelector('a-scene');
+                    if (sceneEl) {
+                        // Use A-Frame's enterVR to handle session start
+                        sceneEl.enterVR(true).catch((err) => {
+                            console.error('A-Frame failed to enter VR/AR:', err);
+                            alert(`Failed to start AR session via A-Frame: ${err.message}`);
                         });
+                    } else {
+                         console.error('A-Frame scene not found for enterVR call!');
+                    }
+                    // Remove manual session request
+                    // navigator.xr.requestSession('immersive-ar')
+                    //     .then(onSessionStarted)
+                    //     .catch((err) => {
+                    //         console.error('Failed to start immersive-ar session:', err);
+                    //         alert(`Failed to start AR session: ${err.message}`);
+                    //     });
                 };
 
                 document.body.appendChild(button);
-                console.log('Custom AR button added.');
+                console.log('Custom AR button added (uses scene.enterVR).');
             } else {
                 console.warn('immersive-ar session not supported by this browser/device.');
             }
@@ -129,13 +156,22 @@ function addCustomARButton() {
     }
 }
 
+// REMOVED onSessionStarted function as A-Frame handles session now
+/*
 function onSessionStarted(session) {
     console.log('Immersive AR session started successfully!');
     const sceneEl = document.querySelector('a-scene');
     if (sceneEl && sceneEl.renderer) {
-        sceneEl.renderer.xr.setReferenceSpaceType('local');
+        sceneEl.renderer.xr.setReferenceSpaceType('local'); // Reverted back to 'local'
         sceneEl.renderer.xr.setSession(session).then(() => {
-            console.log('A-Frame renderer set with AR session using local reference space.');
+            console.log('A-Frame renderer set with AR session using local reference space.'); // Reverted log message
+
+            // ADD controller-updater component AFTER session is set
+            if (!sceneEl.hasAttribute('controller-updater')) {
+                sceneEl.setAttribute('controller-updater', '');
+                console.log("controller-updater component added AFTER session was set.");
+            }
+
             // Optionally hide the custom button after entering AR
             const customButton = document.querySelector('button');
             if (customButton && customButton.textContent.includes('Custom Button')) {
@@ -157,3 +193,4 @@ function onSessionStarted(session) {
         console.error('A-Frame scene or renderer not ready when session started.');
     }
 } 
+*/ 
