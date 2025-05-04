@@ -24,6 +24,13 @@ AFRAME.registerComponent('controller-updater', {
       return;
     }
 
+    // Apply initial rotation to text elements
+    const textRotation = '-90 0 0'; // Rotate -90 degrees around X-axis
+    if (this.leftHandPosText) this.leftHandPosText.setAttribute('rotation', textRotation);
+    if (this.leftHandRotText) this.leftHandRotText.setAttribute('rotation', textRotation);
+    if (this.rightHandPosText) this.rightHandPosText.setAttribute('rotation', textRotation);
+    if (this.rightHandRotText) this.rightHandRotText.setAttribute('rotation', textRotation);
+
   },
 
   tick: function () {
@@ -39,32 +46,29 @@ AFRAME.registerComponent('controller-updater', {
     }
     // --- END DETAILED LOGGING ---
 
-    if (!this.leftHand.object3D.visible && !this.rightHand.object3D.visible) {
-        // If controllers aren't visible, maybe clear the text or show 'disconnected'
-        // For now, just return to avoid errors if text elements are missing
-        if (!this.leftHandPosText || !this.leftHandRotText || !this.rightHandPosText || !this.rightHandRotText) return;
-        // Optional: Clear text when not tracking
-        // this.leftHandPosText.setAttribute('value', 'Pos: ---');
-        // this.leftHandRotText.setAttribute('value', 'Rot: ---');
-        // this.rightHandPosText.setAttribute('value', 'Pos: ---');
-        // this.rightHandRotText.setAttribute('value', 'Rot: ---');
-        return; 
-    }
 
     // Update Left Hand Text
     if (this.leftHand.object3D.visible && this.leftHandPosText && this.leftHandRotText) {
         const leftPos = this.leftHand.object3D.position;
-        const leftRot = this.leftHand.object3D.rotation; // Euler angles in radians
+        const leftRotEuler = this.leftHand.object3D.rotation; // Euler angles in radians
+        // Convert to degrees without offset
+        const leftRotX = THREE.MathUtils.radToDeg(leftRotEuler.x);
+        const leftRotY = THREE.MathUtils.radToDeg(leftRotEuler.y);
+        const leftRotZ = THREE.MathUtils.radToDeg(leftRotEuler.z);
         this.leftHandPosText.setAttribute('value', `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(2)} ${leftPos.z.toFixed(2)}`);
-        this.leftHandRotText.setAttribute('value', `Rot: ${THREE.MathUtils.radToDeg(leftRot.x).toFixed(0)} ${THREE.MathUtils.radToDeg(leftRot.y).toFixed(0)} ${THREE.MathUtils.radToDeg(leftRot.z).toFixed(0)}`);
+        this.leftHandRotText.setAttribute('value', `Rot: ${leftRotX.toFixed(0)} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`);
     }
 
     // Update Right Hand Text
     if (this.rightHand.object3D.visible && this.rightHandPosText && this.rightHandRotText) {
         const rightPos = this.rightHand.object3D.position;
-        const rightRot = this.rightHand.object3D.rotation; // Euler angles in radians
+        const rightRotEuler = this.rightHand.object3D.rotation; // Euler angles in radians
+        // Convert to degrees without offset
+        const rightRotX = THREE.MathUtils.radToDeg(rightRotEuler.x);
+        const rightRotY = THREE.MathUtils.radToDeg(rightRotEuler.y);
+        const rightRotZ = THREE.MathUtils.radToDeg(rightRotEuler.z);
         this.rightHandPosText.setAttribute('value', `Pos: ${rightPos.x.toFixed(2)} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(2)}`);
-        this.rightHandRotText.setAttribute('value', `Rot: ${THREE.MathUtils.radToDeg(rightRot.x).toFixed(0)} ${THREE.MathUtils.radToDeg(rightRot.y).toFixed(0)} ${THREE.MathUtils.radToDeg(rightRot.z).toFixed(0)}`);
+        this.rightHandRotText.setAttribute('value', `Rot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(0)} ${rightRotZ.toFixed(0)}`);
     }
 
   }
