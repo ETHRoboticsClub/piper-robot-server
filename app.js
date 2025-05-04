@@ -7,29 +7,23 @@ AFRAME.registerComponent('controller-updater', {
 
     this.leftHand = document.querySelector('#leftHand');
     this.rightHand = document.querySelector('#rightHand');
-    this.leftHandPosText = document.querySelector('#leftHandPos');
-    this.leftHandRotText = document.querySelector('#leftHandRot');
-    this.rightHandPosText = document.querySelector('#rightHandPos');
-    this.rightHandRotText = document.querySelector('#rightHandRot');
+    this.leftHandInfoText = document.querySelector('#leftHandInfo');
+    this.rightHandInfoText = document.querySelector('#rightHandInfo');
 
-    if (!this.leftHand || !this.rightHand || !this.leftHandPosText || !this.rightHandPosText) {
+    if (!this.leftHand || !this.rightHand || !this.leftHandInfoText || !this.rightHandInfoText) {
       console.error("Controller or text entities not found!");
       // Check which specific elements are missing
       if (!this.leftHand) console.error("Left hand entity not found");
       if (!this.rightHand) console.error("Right hand entity not found");
-      if (!this.leftHandPosText) console.error("Left hand position text not found");
-      if (!this.leftHandRotText) console.error("Left hand rotation text not found");
-      if (!this.rightHandPosText) console.error("Right hand position text not found");
-      if (!this.rightHandRotText) console.error("Right hand rotation text not found");
+      if (!this.leftHandInfoText) console.error("Left hand info text not found");
+      if (!this.rightHandInfoText) console.error("Right hand info text not found");
       return;
     }
 
-    // Apply initial rotation to text elements
+    // Apply initial rotation to combined text elements
     const textRotation = '-90 0 0'; // Rotate -90 degrees around X-axis
-    if (this.leftHandPosText) this.leftHandPosText.setAttribute('rotation', textRotation);
-    if (this.leftHandRotText) this.leftHandRotText.setAttribute('rotation', textRotation);
-    if (this.rightHandPosText) this.rightHandPosText.setAttribute('rotation', textRotation);
-    if (this.rightHandRotText) this.rightHandRotText.setAttribute('rotation', textRotation);
+    if (this.leftHandInfoText) this.leftHandInfoText.setAttribute('rotation', textRotation);
+    if (this.rightHandInfoText) this.rightHandInfoText.setAttribute('rotation', textRotation);
 
   },
 
@@ -47,28 +41,28 @@ AFRAME.registerComponent('controller-updater', {
     // --- END DETAILED LOGGING ---
 
 
-    // Update Left Hand Text
-    if (this.leftHand.object3D.visible && this.leftHandPosText && this.leftHandRotText) {
+    // Update Left Hand Text (Combined)
+    if (this.leftHand.object3D.visible && this.leftHandInfoText) {
         const leftPos = this.leftHand.object3D.position;
         const leftRotEuler = this.leftHand.object3D.rotation; // Euler angles in radians
         // Convert to degrees without offset
         const leftRotX = THREE.MathUtils.radToDeg(leftRotEuler.x);
         const leftRotY = THREE.MathUtils.radToDeg(leftRotEuler.y);
         const leftRotZ = THREE.MathUtils.radToDeg(leftRotEuler.z);
-        this.leftHandPosText.setAttribute('value', `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(2)} ${leftPos.z.toFixed(2)}`);
-        this.leftHandRotText.setAttribute('value', `Rot: ${leftRotX.toFixed(0)} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`);
+        const combinedLeftText = `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(2)} ${leftPos.z.toFixed(2)}\nRot: ${leftRotX.toFixed(0)} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`;
+        this.leftHandInfoText.setAttribute('value', combinedLeftText);
     }
 
-    // Update Right Hand Text
-    if (this.rightHand.object3D.visible && this.rightHandPosText && this.rightHandRotText) {
+    // Update Right Hand Text (Combined)
+    if (this.rightHand.object3D.visible && this.rightHandInfoText) {
         const rightPos = this.rightHand.object3D.position;
         const rightRotEuler = this.rightHand.object3D.rotation; // Euler angles in radians
         // Convert to degrees without offset
         const rightRotX = THREE.MathUtils.radToDeg(rightRotEuler.x);
         const rightRotY = THREE.MathUtils.radToDeg(rightRotEuler.y);
         const rightRotZ = THREE.MathUtils.radToDeg(rightRotEuler.z);
-        this.rightHandPosText.setAttribute('value', `Pos: ${rightPos.x.toFixed(2)} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(2)}`);
-        this.rightHandRotText.setAttribute('value', `Rot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(0)} ${rightRotZ.toFixed(0)}`);
+        const combinedRightText = `Pos: ${rightPos.x.toFixed(2)} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(2)}\nRot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(0)} ${rightRotZ.toFixed(0)}`;
+        this.rightHandInfoText.setAttribute('value', combinedRightText);
     }
 
   }
