@@ -58,7 +58,7 @@ def steps_to_radians_for_viz(steps, calib_data):
     return radian_values
 
 # --- Robot and Motor Config (Copied, using URDF names) --- 
-follower_port = "/dev/ttyACM0"
+follower_port = "/dev/ttySO100follower"
 follower_motors = {
     "Shoulder_Rotation": (1, "sts3215"),
     "Shoulder_Pitch": (2, "sts3215"),

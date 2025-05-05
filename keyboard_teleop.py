@@ -111,8 +111,8 @@ def get_degrees_from_steps(steps, num_joints=4):
 # --- End revert --- 
 
 # --- Robot and Motor Config --- 
-follower_port = "/dev/ttyACM0"
-follower_motors = {
+leader_port = "/dev/ttySO100leader"
+leader_motors = {
     "Shoulder_Rotation": (1, "sts3215"), # Corresponds to motor controlling base rotation
     "Shoulder_Pitch": (2, "sts3215"),    # Corresponds to motor controlling shoulder lift
     "Elbow": (3, "sts3215"),             # Corresponds to motor controlling elbow flex
@@ -120,9 +120,9 @@ follower_motors = {
     "Wrist_Roll": (5, "sts3215"),       # Corresponds to motor controlling wrist roll
     "Gripper": (6, "sts3215"),          # Corresponds to motor controlling gripper
 }
-follower_config = FeetechMotorsBusConfig(port=follower_port, motors=follower_motors)
+leader_config = FeetechMotorsBusConfig(port=leader_port, motors=leader_motors)
 # --- Define NUM_MOTORS --- 
-NUM_MOTORS = len(follower_motors)
+NUM_MOTORS = len(leader_motors)
 
 # --- PyBullet Setup --- 
 def setup_pybullet():
@@ -145,8 +145,8 @@ def setup_pybullet():
     for i in range(num_joints):
         info = p.getJointInfo(robotId, i)
         joint_name = info[1].decode('UTF-8') # Get joint name
-        # Assuming our follower_motors keys match relevant URDF joint names
-        if joint_name in follower_motors:
+        # Assuming our leader_motors keys match relevant URDF joint names
+        if joint_name in leader_motors:
             p_joint_indices[joint_name] = i
             # Disable velocity control for visualization
             p.setJointMotorControl2(robotId, i, p.VELOCITY_CONTROL, force=0)
@@ -172,8 +172,8 @@ def setup_pybullet():
 physicsClient, robotId, p_joint_indices, viz_markers = setup_pybullet()
 
 # --- Real Robot Connection --- 
-follower_arm = FeetechMotorsBus(follower_config)
-follower_arm.connect()
+leader_arm = FeetechMotorsBus(leader_config)
+leader_arm.connect()
 
 # --- Set Hardware Motion Profile Parameters --- 
 print("Setting initial motor profile velocity and acceleration...")
@@ -185,35 +185,35 @@ try:
     INITIAL_GOAL_SPEED = 1500 # Value for Goal Speed (Units? Steps/s?)
 
     # Unlock EPROM if necessary (Might not be needed if already unlocked or RAM register)
-    # follower_arm.write("Lock", 0) 
+    # leader_arm.write("Lock", 0) 
     
-    all_motor_names = list(follower_motors.keys())
+    all_motor_names = list(leader_motors.keys())
     # Set Acceleration first
-    follower_arm.write(ACCELERATION_NAME, INITIAL_ACCELERATION, motor_names=all_motor_names)
+    leader_arm.write(ACCELERATION_NAME, INITIAL_ACCELERATION, motor_names=all_motor_names)
     print(f"  Set {ACCELERATION_NAME} to {INITIAL_ACCELERATION}")
     # Set Goal Speed next
-    follower_arm.write(GOAL_SPEED_NAME, INITIAL_GOAL_SPEED, motor_names=all_motor_names)
+    leader_arm.write(GOAL_SPEED_NAME, INITIAL_GOAL_SPEED, motor_names=all_motor_names)
     print(f"  Set {GOAL_SPEED_NAME} to {INITIAL_GOAL_SPEED}")
     
     # Re-lock EPROM if unlocked
-    # follower_arm.write("Lock", 1)
+    # leader_arm.write("Lock", 1)
     
     # Enable Torque AFTER setting profiles (or ensure it was enabled before)
-    follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
+    leader_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
     print("  Torque Enabled.")
     
 except Exception as e:
     print(f"\nWARNING: Failed to set initial motion parameters: {e}")
     print("Attempting to enable torque anyway...")
     try:
-        follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
+        leader_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
         print("  Torque Enabled.")
     except Exception as torque_e:
         print(f"ERROR: Failed to enable torque: {torque_e}")
         # Decide how to handle this - maybe exit?
 # --- End Profile Setup ---
 
-current_positions = follower_arm.read("Present_Position")
+current_positions = leader_arm.read("Present_Position")
 full_calibration = get_full_calibration() 
 
 # --- Reinstate Initial State Calculation --- 
@@ -331,7 +331,7 @@ try:
             status_str = "ENABLED" if torque_enabled else "DISABLED"
             print(f"\nSetting torque to {status_str}...", end='')
             try:
-                follower_arm.write("Torque_Enable", mode) # Apply to all
+                leader_arm.write("Torque_Enable", mode) # Apply to all
                 print(" Done.")
                 if not torque_enabled:
                     print("--- MANUAL MODE ACTIVE: Move arm physically --- ")
@@ -346,29 +346,19 @@ try:
         read_start = time.monotonic()
         read_error = False
         try:
-            current_read = follower_arm.read("Present_Position")
+            current_read = leader_arm.read("Present_Position")
             if len(current_read) == NUM_MOTORS:
                 last_measured_positions = list(current_read) 
             else: read_error = True
         except Exception as read_err: read_error = True
         read_dur = time.monotonic() - read_start
-
-        # --- Remove the Debug Line Removal Loop --- 
-        # debug_lines_remove_start = time.monotonic()
-        # active_line_ids = [id for id in debug_line_ids.values() if id != -1]
-        # for line_id in active_line_ids:
-        #     try: p.removeUserDebugItem(line_id)
-        #     except: pass 
-        # debug_line_ids = {k: -1 for k in debug_line_ids}
-        debug_lines_remove_dur = 0 # Set duration to 0
-        
         # --- Update PyBullet Visualization (Robot Part) --- 
         viz_start = time.monotonic()
         if not read_error and len(last_measured_positions) == NUM_MOTORS:
             # Update Robot Model 
             try:
                 current_radians_viz = steps_to_radians_for_viz(last_measured_positions, full_calibration)
-                motor_names = list(follower_motors.keys())
+                motor_names = list(leader_motors.keys())
                 for i, motor_name in enumerate(motor_names):
                     if motor_name in p_joint_indices:
                         joint_index = p_joint_indices[motor_name]
@@ -467,21 +457,12 @@ try:
             # --- Temporarily Disable Safety Check --- 
             safety_check_start = time.monotonic()
             jump_detected = False # Assume safe for now
-            # for i in range(4): # Only check base joints
-            #     diff = final_target_steps[i] - last_sent_target_steps[i]
-            #     if diff > 2048: diff -= 4096
-            #     elif diff < -2048: diff += 4096
-            #     # Use original max_step_change threshold
-            #     if abs(diff) > max_step_change: 
-            #         print(f"IK jump detected on joint {i}: LastSent={last_sent_target_steps[i]}, NewTarget={final_target_steps[i]}")
-            #         jump_detected = True
-            #         break
             safety_check_dur = time.monotonic() - safety_check_start # Still measure dummy time
 
             # --- Write Goal_Position (Always attempt now) --- 
             write_start_time = time.monotonic()
             # if not jump_detected: # Removed condition
-            follower_arm.write("Goal_Position", np.array(final_target_steps))
+            leader_arm.write("Goal_Position", np.array(final_target_steps))
             angles = updated_angles[:] # Store angles corresponding to the sent command
             last_sent_target_steps = final_target_steps[:] # Update last sent steps
             # else: Jump detected, DO NOT send command or update angles/last_sent
@@ -513,18 +494,18 @@ finally:
     if listener and listener.is_alive():
         listener.stop()
         print("Keyboard listener stopped.")
-    if follower_arm and follower_arm.is_connected:
+    if leader_arm and leader_arm.is_connected:
         try:
             # Attempt to disable torque before disconnecting
             print("Attempting to disable torque...")
-            all_motor_ids = [m[0] for m in follower_motors.values()]
-            follower_arm.write("Torque_Enable", TorqueMode.DISABLED.value)
+            all_motor_ids = [m[0] for m in leader_motors.values()]
+            leader_arm.write("Torque_Enable", TorqueMode.DISABLED.value)
             time.sleep(0.5)
         except Exception as e_torque:
             print(f"Could not disable torque on exit: {e_torque}")
         finally:
-             follower_arm.disconnect()
-             print("Follower arm disconnected.")
+             leader_arm.disconnect()
+             print("leader arm disconnected.")
     if physicsClient >= 0:
         p.disconnect()
         print("PyBullet disconnected.")

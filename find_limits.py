@@ -15,7 +15,7 @@ calibration = [
     # Calibration only needed for the first 4 controllable via IK in the other script
 ]
 
-follower_port = "/dev/ttyACM0" # Make sure this is correct
+follower_port = "/dev/ttySO100follower" # Make sure this is correct
 # --- Updated Motor IDs --- 
 follower_motors = {
     "shoulder_pan": (1, "sts3215"),
