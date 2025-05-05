@@ -14,6 +14,8 @@ AFRAME.registerComponent('controller-updater', {
     this.websocket = null;
     this.leftGripDown = false;
     this.rightGripDown = false;
+    this.leftTriggerDown = false;
+    this.rightTriggerDown = false;
     // --- Get hostname dynamically ---
     const serverHostname = window.location.hostname;
     const websocketPort = 8442; // Make sure this matches controller_server.py
@@ -64,6 +66,11 @@ AFRAME.registerComponent('controller-updater', {
     // --- Modify Event Listeners ---
     this.leftHand.addEventListener('triggerdown', (evt) => {
         console.log('Left Trigger Pressed');
+        this.leftTriggerDown = true;
+    });
+    this.leftHand.addEventListener('triggerup', (evt) => {
+        console.log('Left Trigger Released');
+        this.leftTriggerDown = false;
     });
     this.leftHand.addEventListener('gripdown', (evt) => {
         console.log('Left Grip Pressed');
@@ -76,6 +83,11 @@ AFRAME.registerComponent('controller-updater', {
 
     this.rightHand.addEventListener('triggerdown', (evt) => {
         console.log('Right Trigger Pressed');
+        this.rightTriggerDown = true;
+    });
+    this.rightHand.addEventListener('triggerup', (evt) => {
+        console.log('Right Trigger Released');
+        this.rightTriggerDown = false;
     });
     this.rightHand.addEventListener('gripdown', (evt) => {
         console.log('Right Grip Pressed');
@@ -121,7 +133,8 @@ AFRAME.registerComponent('controller-updater', {
             const dataToSend = {
                 hand: 'left',
                 position: { x: leftPos.x, y: leftPos.y, z: leftPos.z },
-                rotation: { x: leftRotX, y: leftRotY, z: leftRotZ } // Send degrees
+                rotation: { x: leftRotX, y: leftRotY, z: leftRotZ },
+                trigger: this.leftTriggerDown ? 1 : 0
             };
             this.websocket.send(JSON.stringify(dataToSend));
             // Optional: Log sending
@@ -148,7 +161,8 @@ AFRAME.registerComponent('controller-updater', {
             const dataToSend = {
                 hand: 'right',
                 position: { x: rightPos.x, y: rightPos.y, z: rightPos.z },
-                rotation: { x: rightRotX, y: rightRotY, z: rightRotZ } // Send degrees
+                rotation: { x: rightRotX, y: rightRotY, z: rightRotZ },
+                trigger: this.rightTriggerDown ? 1 : 0
             };
             this.websocket.send(JSON.stringify(dataToSend));
             // Optional: Log sending
