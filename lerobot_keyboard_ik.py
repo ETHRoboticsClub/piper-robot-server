@@ -130,6 +130,7 @@ def setup_pybullet():
     robot_start_pos = [0, 0, 0]
     robot_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
     try:
+        # --- Load URDF (removed problematic flags arg) --- #
         robotId = p.loadURDF(urdf_path, robot_start_pos, robot_start_orientation, useFixedBase=1)
     except p.error as load_err:
          print(f"ERROR: Failed to load URDF: {load_err}", file=sys.stderr)
@@ -201,17 +202,16 @@ def setup_pybullet():
     print(f"\nFinal PyBullet Indices (matched to {JOINT_NAMES}): {p_joint_indices}")
 
     # --- Find End Effector Link Index --- #
-    # This likely needs adjustment based on the new URDF's link names
-    # Check the printout above. Common names: 'gripper_link', 'tool_link', 'ee_link'
-    target_link_name = "Fixed_Jaw" # Updated - Associated with Wrist_Roll joint
+    # Try targeting the Fixed_Jaw_tip link (controlled by joint index 7 in this URDF)
+    target_link_name = "Fixed_Jaw_tip" # Changed from Fixed_Jaw
     end_effector_link_index = -1
     print(f"\nSearching for End Effector Link: '{target_link_name}'")
     found_link_index = None
+    # We need the *index of the joint* that controls the target link
     for i in range(num_p_joints):
         info = p.getJointInfo(robotId, i)
         link_name_str = info[12].decode('UTF-8')
         if link_name_str == target_link_name:
-            # PyBullet uses the link index matching the joint index CONROLLING that link
             found_link_index = i
             break
 
@@ -220,8 +220,7 @@ def setup_pybullet():
         print(f"Found End Effector Link '{target_link_name}' controlled by Joint Index: {end_effector_link_index}")
     else:
         print(f"ERROR: Could not find end-effector link '{target_link_name}' in URDF.", file=sys.stderr)
-        # Don't disconnect yet
-        # return False # Signal failure
+        # Allow limit reading, but check later
 
     # --- Extract and Store URDF Limits for ALL Joints --- #
     temp_min_rad = list(URDF_LIMITS_MIN_RAD) # Start with defaults
@@ -503,17 +502,24 @@ if __name__ == "__main__":
 
                 ik_joint_indices = p_joint_indices[:NUM_IK_JOINTS]
 
+                # --- Define rest pose with non-zero for shoulder_pan --- #
+                # Use the current lerobot state as a base, convert to PB coords, set pan to 45 deg
+                # This might provide a better starting point/bias than pure zeros.
+                # Alternatively, just set the first element non-zero: [math.pi/4, 0.0, 0.0, 0.0]
+                rest_poses_pb_rad = [0.0] * len(ik_joint_indices)
+                rest_poses_pb_rad[0] = math.pi / 4.0 # Set shoulder_pan rest pose to 45 degrees
+
                 try:
                     # IK result (ik_solution_rad) is in PyBullet's coordinate system
                     ik_solution_rad = p.calculateInverseKinematics(
                         bodyUniqueId=robotId,
                         endEffectorLinkIndex=end_effector_link_index,
                         targetPosition=target_ef_position.tolist(),
-                        targetOrientation=target_orientation_quat,
+                        targetOrientation=None, # Let solver choose orientation
                         lowerLimits=ik_lower_limits,     # Use URDF limits
                         upperLimits=ik_upper_limits,     # Use URDF limits
                         jointRanges=ik_joint_ranges,     # Use URDF limits
-                        restPoses=[0.0] * len(ik_joint_indices),
+                        restPoses=rest_poses_pb_rad, # Use modified rest poses
                         maxNumIterations=100,
                         residualThreshold=1e-4
                     )
@@ -546,6 +552,7 @@ if __name__ == "__main__":
             current_time = time.time()
             if current_time - last_send_time >= send_interval:
                 action_tensor = torch.from_numpy(action_angles_deg).float()
+                print(f"Sending Action (Deg): {action_angles_deg}") 
                 try:
                     robot.send_action(action_tensor)
                     last_send_time = current_time
