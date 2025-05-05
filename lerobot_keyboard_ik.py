@@ -9,19 +9,31 @@ import json
 import os
 import sys
 
+
 # TODO: Import or copy IK/FK functions
 # from forward_kinematics import forward_kinematics, get_transform # Assuming FK returns T matrices now
 # from inverse_kinematics import iterative_ik, load_joint_limits # Assuming limits loading is separate
 
 from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
 from lerobot.common.robot_devices.robots.configs import So100RobotConfig
+from lerobot.common.robot_devices.motors.configs import FeetechMotorsBusConfig
+from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError 
+
 
 # --- Constants ---
 # Define control steps (adjust sensitivity as needed)
 POS_STEP = 0.01  # meters
 ANGLE_STEP = 5.0 # degrees
 GRIPPER_STEP = 10.0 # degrees (or adjust based on gripper range)
-
+common_motors = {
+    # name: (index, model) - Standard SO100
+    "shoulder_pan": [1, "sts3215"],
+    "shoulder_lift": [2, "sts3215"],
+    "elbow_flex": [3, "sts3215"],
+    "wrist_flex": [4, "sts3215"],
+    "wrist_roll": [5, "sts3215"],
+    "gripper": [6, "sts3215"],
+}
 # Joint names order expected by So100RobotConfig/ManipulatorRobot
 # Check lerobot/common/robot_devices/robots/configs.py if unsure
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
@@ -35,7 +47,7 @@ GRIPPER_INDEX = 5
 robot_config = So100RobotConfig(
     # Example: Override default ports if needed
     # leader_arms={"main": FeetechMotorsBusConfig(port="/dev/ttyYOUR_LEADER_PORT", ...)},
-    # follower_arms={"main": FeetechMotorsBusConfig(port="/dev/ttyYOUR_FOLLOWER_PORT", ...)},
+    follower_arms={"main": FeetechMotorsBusConfig(port="/dev/ttySO100follower", motors=common_motors.copy())},
     # Disable cameras if not needed
     cameras={}
 )
@@ -70,16 +82,33 @@ viz_markers = {}
 debug_line_ids = {}
 end_effector_link_index = -1 # PyBullet index for the link used as IK target
 
-# Joint limits (loaded from inverse_kinematics or defined here)
-# REMOVED - Assuming lerobot handles limits or they are enforced by PyBullet IK implicitly
+# --- URDF Joint Limits for IK (Using Wide Fallback) --- #
+# We use wide limits for IK because empirical limits might wrap around
+# and URDF limits were reported as invalid.
+urdf_limits_min_rad = [-math.pi] * NUM_IK_JOINTS
+urdf_limits_max_rad = [ math.pi] * NUM_IK_JOINTS
+urdf_limits_range_rad = [2 * math.pi] * NUM_IK_JOINTS
 
-# --- Kinematics Functions Removed ---
-# Using PyBullet's internal kinematics based on the loaded URDF
+# --- Empirical Degree Limits (from investigate.py output) --- #
+# Define based on the min/max reported degrees (ASSUMING NO WRAPPING based on user investigation)
+EMPIRICAL_MIN_DEG = np.array([ 90, -10,  -10, -105, -130,  0])
+EMPIRICAL_MAX_DEG = np.array([ 270, 180, 170, 70,   80, 100])
 
+# Calculate Radian versions for PyBullet IK (first NUM_IK_JOINTS)
+EMPIRICAL_MIN_RAD = np.deg2rad(EMPIRICAL_MIN_DEG[:NUM_IK_JOINTS])
+EMPIRICAL_MAX_RAD = np.deg2rad(EMPIRICAL_MAX_DEG[:NUM_IK_JOINTS])
+EMPIRICAL_RANGE_RAD = EMPIRICAL_MAX_RAD - EMPIRICAL_MIN_RAD
+
+print("--- Using Empirical Degree Limits (Assumed Non-Wrapping) ---")
+for i, name in enumerate(JOINT_NAMES):
+    print(f"  {name}: Min={EMPIRICAL_MIN_DEG[i]:.2f}, Max={EMPIRICAL_MAX_DEG[i]:.2f}")
+print("---------------------------------------------------------")
 
 # --- PyBullet Setup (Adapted from keyboard_teleop.py) ---
 def setup_pybullet():
     global physicsClient, robotId, p_joint_indices, viz_markers, debug_line_ids, end_effector_link_index
+    # No specific limit setup needed here anymore, done globally
+
     try:
         physicsClient = p.connect(p.GUI)
     except p.error as e:
@@ -187,6 +216,9 @@ def setup_pybullet():
     p_joint_indices = p_joint_indices_list # Store the ordered list of indices
 
     print(f"PyBullet Joint Indices (matched to JOINT_NAMES order {JOINT_NAMES}): {p_joint_indices}")
+
+    # Using empirical limits (calculated globally) for PyBullet IK.
+    print("Using empirical radian limits for PyBullet IK.")
 
     # Create Visual Markers
     markers = {}
@@ -314,63 +346,56 @@ if __name__ == "__main__":
         robot.connect()
         print("Robot connected successfully.")
 
-        # Load joint limits for IK - REMOVED, assuming lerobot handles this.
-        # load_joint_limits()
-
-        # Initialize PyBullet
+        # Initialize PyBullet (this now reads URDF limits)
         print("Initializing PyBullet...")
         pybullet_enabled = setup_pybullet()
         if not pybullet_enabled:
             print("Continuing without PyBullet visualization.")
 
-        # Get initial robot state
+        # Get initial robot state (use this directly)
         print("Reading initial robot state...")
         observation = robot.capture_observation()
-        # Ensure the key matches how ManipulatorRobot structures observations
-        # It's often 'observation.state' for the concatenated tensor
         if "observation.state" in observation:
             initial_joint_angles_deg_tensor = observation["observation.state"]
-            # Ensure it's a CPU numpy array for calculations
             current_joint_angles_deg = initial_joint_angles_deg_tensor.cpu().numpy()
-            print(f"Initial joint angles (degrees): {current_joint_angles_deg}")
-
-            # --- Use PyBullet FK to get initial EF state ---
-            if pybullet_enabled and end_effector_link_index != -1:
-                 # Set PyBullet joints to initial state to calculate FK accurately
-                current_angles_rad = np.deg2rad(current_joint_angles_deg)
-                for i in range(NUM_JOINTS):
-                    if p_joint_indices[i] is not None:
-                         p.resetJointState(robotId, p_joint_indices[i], targetValue=current_angles_rad[i])
-
-                link_state = p.getLinkState(robotId, end_effector_link_index)
-                current_ef_position = np.array(link_state[0]) # World position [x,y,z]
-                current_ef_orientation_quat = link_state[1] # World orientation [x,y,z,w]
-                current_ef_rpy_rad = p.getEulerFromQuaternion(current_ef_orientation_quat)
-                current_ef_rpy_deg = np.rad2deg(current_ef_rpy_rad)
-                print(f"Initial PyBullet FK EF Position: {current_ef_position}")
-                print(f"Initial PyBullet FK EF RPY (deg): {current_ef_rpy_deg}")
-                # Set initial target state to current FK state
-                target_ef_position = current_ef_position.copy()
-                target_pitch_deg = current_ef_rpy_deg[1] # Use pitch from FK
-                # Keep direct angle control for wrist roll and gripper based on initial read
-                target_wrist_roll_deg = current_joint_angles_deg[WRIST_ROLL_INDEX]
-                target_gripper_deg = current_joint_angles_deg[GRIPPER_INDEX]
-            else:
-                 print("Warning: Cannot get initial FK state (PyBullet disabled or end effector not found). Using defaults.", file=sys.stderr)
-                 # Keep the default initial target values from global scope if FK fails
-                 # FK from zeros is no longer relevant as the function is removed.
-                 current_joint_angles_deg = np.zeros(NUM_JOINTS) # Fallback
-
+            print(f"Initial state read (degrees): {current_joint_angles_deg}")
+            # DO NOT CLAMP initial state here
         else:
-            print("Warning: 'observation.state' not found in initial observation. Using default state values.", file=sys.stderr)
-            # Keep the default initial target values
-            current_joint_angles_deg = np.zeros(NUM_JOINTS) # Fallback
-            # Cannot calculate FK from zeros anymore. Default targets remain.
+            print("Warning: Could not read initial state. Using zeros.", file=sys.stderr)
+            current_joint_angles_deg = np.zeros(NUM_JOINTS)
 
-        # Update PyBullet with initial state (handles case where FK failed)
+        # --- Use PyBullet FK based on ACTUAL INITIAL STATE to get initial EF state --- #
+        if pybullet_enabled and end_effector_link_index != -1:
+            current_angles_rad = np.deg2rad(current_joint_angles_deg) # Use actual initial angles
+            # Reset PyBullet state to match actual initial state
+            for i in range(NUM_JOINTS):
+                if p_joint_indices[i] is not None:
+                     p.resetJointState(robotId, p_joint_indices[i], targetValue=current_angles_rad[i])
+
+            link_state = p.getLinkState(robotId, end_effector_link_index)
+            current_ef_position = np.array(link_state[0])
+            current_ef_orientation_quat = link_state[1]
+            current_ef_rpy_rad = p.getEulerFromQuaternion(current_ef_orientation_quat)
+            current_ef_rpy_deg = np.rad2deg(current_ef_rpy_rad)
+            print(f"Initial FK EF Position: {current_ef_position}")
+            print(f"Initial FK EF RPY (deg): {current_ef_rpy_deg}")
+            # Set initial target state based on initial FK
+            target_ef_position = current_ef_position.copy()
+            target_pitch_deg = current_ef_rpy_deg[1]
+            target_wrist_roll_deg = current_joint_angles_deg[WRIST_ROLL_INDEX] # From initial state
+            target_gripper_deg = current_joint_angles_deg[GRIPPER_INDEX]     # From initial state
+        else:
+             print("Warning: PyBullet disabled or EF link not found. Cannot get initial FK.", file=sys.stderr)
+             # Use initial angles directly for initial targets
+             target_ef_position = np.array([0.2, 0.0, 0.15]) # Default target pos if FK fails
+             target_pitch_deg = 0.0
+             target_wrist_roll_deg = current_joint_angles_deg[WRIST_ROLL_INDEX] # From initial state
+             target_gripper_deg = current_joint_angles_deg[GRIPPER_INDEX]     # From initial state
+
+        # Update PyBullet with initial state
         if pybullet_enabled:
-            update_pybullet_visuals(current_joint_angles_deg, target_ef_position, current_ef_position) # current_ef_position might be default here
-            if end_effector_link_index != -1: # Place markers accurately if FK worked
+            update_pybullet_visuals(current_joint_angles_deg, target_ef_position, current_ef_position)
+            if end_effector_link_index != -1:
                 p.resetBasePositionAndOrientation(viz_markers['target'], target_ef_position, [0,0,0,1])
                 p.resetBasePositionAndOrientation(viz_markers['actual_ef'], current_ef_position, [0,0,0,1])
 
@@ -378,7 +403,7 @@ if __name__ == "__main__":
         # Start keyboard listener
         start_keyboard_listener()
 
-        # --- Main Control Loop ---
+        # --- Main Control Loop (starts from actual initial state) --- #
         print("\nEntering main control loop...")
         last_send_time = time.time()
         send_interval = 0.05 # Send commands roughly every 50ms (20Hz)
@@ -387,121 +412,86 @@ if __name__ == "__main__":
             loop_start_time = time.time()
 
             # 1. Update Target State based on Keyboard Input
-            # Apply the step directly, as delta values are set to +/- STEP or 0 by keyboard callbacks
             target_ef_position += delta_pos
             target_pitch_deg += delta_pitch
             target_wrist_roll_deg += delta_wrist_roll
             target_gripper_deg += delta_gripper
-            # TODO: Clamp target angles (wrist roll, gripper) to reasonable limits if known
-            # Example clamping (adjust ranges as needed):
-            # target_wrist_roll_deg = np.clip(target_wrist_roll_deg, -180, 180)
-            # target_gripper_deg = np.clip(target_gripper_deg, 0, 100) # Assuming 0-100 range for gripper
 
             # 2. Get Current Robot State (for visualization) using PyBullet FK
-            ik_solution_angles_deg = np.zeros(NUM_IK_JOINTS) # Initialize
+            ik_solution_angles_deg = np.zeros(NUM_IK_JOINTS)
             if pybullet_enabled and end_effector_link_index != -1:
-                # Update PyBullet sim joints based on last command (approximation of reality)
+                # Update PyBullet sim joints based on last command
                 current_angles_rad = np.deg2rad(current_joint_angles_deg)
                 for i in range(NUM_JOINTS):
                     if p_joint_indices[i] is not None:
                          p.resetJointState(robotId, p_joint_indices[i], targetValue=current_angles_rad[i])
 
-                # Get current EF position from PyBullet FK
+                # Get current EF position from PyBullet FK for visualization
                 link_state = p.getLinkState(robotId, end_effector_link_index)
-                current_ef_position = np.array(link_state[0])
-                # current_ef_orientation_quat = link_state[1] # Orientation if needed
-                # current_ef_rpy_rad = p.getEulerFromQuaternion(current_ef_orientation_quat)
-                # current_ef_rpy_deg = np.rad2deg(current_ef_rpy_rad)
+                current_ef_position_viz = np.array(link_state[0])
 
                 # 3. Calculate IK using PyBullet for the first NUM_IK_JOINTS
-                # Target orientation: We only control pitch directly via keyboard.
-                # Let IK determine roll and yaw based on position target.
-                # Construct target orientation quaternion with desired pitch.
-                # Assume target roll and yaw are 0 relative to the base or let IK solve freely.
-                # For simplicity, let's try without specifying orientation first (targetOrientation=None)
-                # If that doesn't work well, construct quat from Euler [0, target_pitch_rad, 0]
                 target_pitch_rad = np.deg2rad(target_pitch_deg)
-                target_orientation_quat = p.getQuaternionFromEuler([0, target_pitch_rad, 0]) # Roll=0, Pitch=Target, Yaw=0
+                target_orientation_quat = p.getQuaternionFromEuler([0, target_pitch_rad, 0])
 
-                # Get joint limits from PyBullet if needed (optional, IK might handle it)
-                pb_lower_limits = []
-                pb_upper_limits = []
-                pb_joint_ranges = []
-                for i in range(NUM_IK_JOINTS):
-                    joint_info = p.getJointInfo(robotId, p_joint_indices[i])
-                    pb_lower_limits.append(joint_info[8])
-                    pb_upper_limits.append(joint_info[9])
-                    pb_joint_ranges.append(joint_info[9] - joint_info[8])
+                # Use EMPIRICAL limits (converted to radians) for IK
+                ik_lower_limits = EMPIRICAL_MIN_RAD.tolist()
+                ik_upper_limits = EMPIRICAL_MAX_RAD.tolist()
+                ik_joint_ranges = EMPIRICAL_RANGE_RAD.tolist()
 
-
-                # PyBullet IK calculates for joints 0 to end_effector_link_index
-                # We need the first NUM_IK_JOINTS = 4: Shoulder Pan/Lift, Elbow Flex, Wrist Flex
-                # The p_joint_indices should map our first 4 JOINT_NAMES to the correct pybullet indices.
                 ik_joint_indices = p_joint_indices[:NUM_IK_JOINTS]
 
-                # Use current pose as starting point? PyBullet IK doesn't explicitly take initial guess like ours did.
-                # It uses the current state of the simulation model.
                 try:
-                    # Note: calculateInverseKinematics returns angles in RADIANS
                     ik_solution_rad = p.calculateInverseKinematics(
                         bodyUniqueId=robotId,
                         endEffectorLinkIndex=end_effector_link_index,
                         targetPosition=target_ef_position.tolist(),
-                        targetOrientation=target_orientation_quat, # Provide target pitch
-                        lowerLimits=pb_lower_limits, # Use URDF limits
-                        upperLimits=pb_upper_limits, # Use URDF limits
-                        jointRanges=pb_joint_ranges, # Use URDF ranges
-                        restPoses=[0.0] * len(ik_joint_indices), # Neutral rest pose
+                        targetOrientation=target_orientation_quat,
+                        lowerLimits=ik_lower_limits,     # Use Empirical limits
+                        upperLimits=ik_upper_limits,     # Use Empirical limits
+                        jointRanges=ik_joint_ranges,     # Use Empirical limits
+                        restPoses=[0.0] * len(ik_joint_indices),
                         maxNumIterations=100,
                         residualThreshold=1e-4
                     )
-                    # Ensure we only take the first NUM_IK_JOINTS solutions returned
                     ik_solution_angles_deg = np.rad2deg(ik_solution_rad[:NUM_IK_JOINTS])
-
                 except Exception as ik_err:
                      print(f"Warning: PyBullet IK failed: {ik_err}", file=sys.stderr)
-                     # Keep previous angles or zeros if IK fails? Keep ik_solution_angles_deg as zeros for now.
-
-
             else:
-                # Cannot run FK or IK if PyBullet is not enabled or EF link not found
-                # Actions will be based on zero IK result + keyboard overrides for wrist/gripper
-                 current_ef_position = target_ef_position # No FK, assume target is actual for viz
+                 current_ef_position_viz = target_ef_position
                  print("Warning: PyBullet disabled or EF link not found. IK cannot be calculated.", file=sys.stderr)
 
-
-            # 4. Construct Full Action Command (Angles in Degrees)
-            # Combine IK solution with direct keyboard control for wrist/gripper
+            # 4. Construct Full Action Command
             action_angles_deg = np.zeros(NUM_JOINTS)
-            action_angles_deg[:NUM_IK_JOINTS] = ik_solution_angles_deg # Result from PyBullet IK
-            action_angles_deg[WRIST_ROLL_INDEX] = target_wrist_roll_deg # Wrist roll (index 4)
-            action_angles_deg[GRIPPER_INDEX] = target_gripper_deg   # Gripper (index 5)
+            action_angles_deg[:NUM_IK_JOINTS] = ik_solution_angles_deg
+            action_angles_deg[WRIST_ROLL_INDEX] = target_wrist_roll_deg # Use target directly
+            action_angles_deg[GRIPPER_INDEX] = target_gripper_deg   # Use target directly
 
-            # Update current angles based on command for smoother Viz next iteration
-            # and as the base for the next PyBullet state reset before FK/IK
+            # >>> Final Clamp: Use simple np.clip with empirical degree limits <<<
+            action_angles_deg = np.clip(action_angles_deg,
+                                        EMPIRICAL_MIN_DEG,
+                                        EMPIRICAL_MAX_DEG)
+
+            # Update current angles based on the *clamped* command
             current_joint_angles_deg = action_angles_deg.copy()
-            # current_ef_position is updated above using PyBullet FK
 
-
-            # 5. Send Action to Robot (if enough time has passed)
-            current_time = time.time()
+            # 5. Send Action to Robot
+            current_time = time.time() # Need time import back
             if current_time - last_send_time >= send_interval:
                 action_tensor = torch.from_numpy(action_angles_deg).float()
                 try:
-                    # print(f"Sending action: {action_tensor.numpy()}") # Debug print
                     robot.send_action(action_tensor)
                     last_send_time = current_time
                 except Exception as send_err:
                     print(f"Error sending action: {send_err}", file=sys.stderr)
-                    # Maybe break or add error handling
 
-            # 6. Update PyBullet Visualization
+            # 6. Update PyBullet Visualization (use _viz position)
             if pybullet_enabled:
-                update_pybullet_visuals(current_joint_angles_deg, target_ef_position, current_ef_position)
+                update_pybullet_visuals(current_joint_angles_deg, target_ef_position, current_ef_position_viz)
 
             # 7. Loop Rate Control
             elapsed_time = time.time() - loop_start_time
-            sleep_time = max(0, send_interval - elapsed_time) # Maintain roughly send_interval Hz loop rate
+            sleep_time = max(0, send_interval - elapsed_time)
             time.sleep(sleep_time)
 
     except KeyboardInterrupt:
@@ -521,8 +511,18 @@ if __name__ == "__main__":
             # listener.join() # Optional: wait for listener thread
 
         # Disable torque and disconnect robot
+        # Check if robot object exists and has the is_connected attribute/method
+        robot_is_connected = False
         try:
-            if robot.is_connected:
+            # Use hasattr to be safe, although lerobot API should guarantee is_connected
+            if robot and hasattr(robot, 'is_connected') and robot.is_connected:
+                robot_is_connected = True
+        except Exception as check_err:
+             print(f"Could not check robot connection status: {check_err}")
+             robot_is_connected = False # Assume not connected if check fails
+        
+        if robot_is_connected:
+            try:
                 print("Disabling torque on follower motors...")
                 # Iterate through follower arms and attempt to disable torque directly
                 for arm_name, follower_arm_instance in robot.follower_arms.items():
@@ -532,18 +532,22 @@ if __name__ == "__main__":
                         print(f"Torque disabled for arm: {arm_name}")
                     except Exception as torque_err:
                         print(f"Could not disable torque for arm {arm_name}: {torque_err}")
-        except AttributeError:
-            print("Robot object state prevents torque disable check (e.g., connection failed).")
-        except Exception as final_err:
-            print(f"An error occurred during torque disable: {final_err}")
+            except AttributeError:
+                print("Robot object state prevents torque disable check (e.g., missing follower_arms).", file=sys.stderr)
+            except Exception as final_err:
+                print(f"An error occurred during torque disable: {final_err}", file=sys.stderr)
 
-        # Disconnect robot
-        if robot and hasattr(robot, 'disconnect') and callable(getattr(robot, 'disconnect')):
-             print("Disconnecting robot...")
-             robot.disconnect()
-             print("Robot disconnected.")
+            # Disconnect robot only if it was connected
+            try:
+                 print("Disconnecting robot...")
+                 robot.disconnect()
+                 print("Robot disconnected.")
+            except RobotDeviceNotConnectedError:
+                 print("Robot was already disconnected.") # Handle expected error
+            except Exception as disc_err:
+                 print(f"An error occurred during robot disconnect: {disc_err}", file=sys.stderr)
         else:
-            print("Robot object not available or disconnect method missing.")
+            print("Robot not connected or connection status unknown, skipping torque disable and disconnect.")
             
         # Disconnect PyBullet
         if physicsClient is not None and p.isConnected(physicsClient):
