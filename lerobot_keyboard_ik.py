@@ -82,32 +82,23 @@ viz_markers = {}
 debug_line_ids = {}
 end_effector_link_index = -1 # PyBullet index for the link used as IK target
 
-# --- URDF Joint Limits for IK (Using Wide Fallback) --- #
-# We use wide limits for IK because empirical limits might wrap around
-# and URDF limits were reported as invalid.
-urdf_limits_min_rad = [-math.pi] * NUM_IK_JOINTS
-urdf_limits_max_rad = [ math.pi] * NUM_IK_JOINTS
-urdf_limits_range_rad = [2 * math.pi] * NUM_IK_JOINTS
+# --- URDF Joint Limits (Read from file) --- #
+# Global variables to store URDF limits read by PyBullet
+URDF_LIMITS_MIN_RAD = np.full(NUM_JOINTS, -math.pi) # Default fallback
+URDF_LIMITS_MAX_RAD = np.full(NUM_JOINTS, math.pi)
+URDF_LIMITS_RANGE_RAD = np.full(NUM_JOINTS, 2 * math.pi)
+URDF_LIMITS_MIN_DEG = np.rad2deg(URDF_LIMITS_MIN_RAD)
+URDF_LIMITS_MAX_DEG = np.rad2deg(URDF_LIMITS_MAX_RAD)
 
-# --- Empirical Degree Limits (from investigate.py output) --- #
-# Define based on the min/max reported degrees (ASSUMING NO WRAPPING based on user investigation)
-EMPIRICAL_MIN_DEG = np.array([ 90, -10,  -10, -105, -130,  0])
-EMPIRICAL_MAX_DEG = np.array([ 270, 180, 170, 70,   80, 100])
-
-# Calculate Radian versions for PyBullet IK (first NUM_IK_JOINTS)
-EMPIRICAL_MIN_RAD = np.deg2rad(EMPIRICAL_MIN_DEG[:NUM_IK_JOINTS])
-EMPIRICAL_MAX_RAD = np.deg2rad(EMPIRICAL_MAX_DEG[:NUM_IK_JOINTS])
-EMPIRICAL_RANGE_RAD = EMPIRICAL_MAX_RAD - EMPIRICAL_MIN_RAD
-
-print("--- Using Empirical Degree Limits (Assumed Non-Wrapping) ---")
-for i, name in enumerate(JOINT_NAMES):
-    print(f"  {name}: Min={EMPIRICAL_MIN_DEG[i]:.2f}, Max={EMPIRICAL_MAX_DEG[i]:.2f}")
-print("---------------------------------------------------------")
+print("--- Using URDF Limits (from file) ---")
+# Note: Limits will be printed after reading in setup_pybullet
 
 # --- PyBullet Setup (Adapted from keyboard_teleop.py) ---
 def setup_pybullet():
     global physicsClient, robotId, p_joint_indices, viz_markers, debug_line_ids, end_effector_link_index
-    # No specific limit setup needed here anymore, done globally
+    # --- Add URDF Limit globals --- #
+    global URDF_LIMITS_MIN_RAD, URDF_LIMITS_MAX_RAD, URDF_LIMITS_RANGE_RAD
+    global URDF_LIMITS_MIN_DEG, URDF_LIMITS_MAX_DEG
 
     try:
         physicsClient = p.connect(p.GUI)
@@ -118,107 +109,170 @@ def setup_pybullet():
         except p.error as direct_e:
             print(f"Failed to connect to PyBullet DIRECT mode: {direct_e}")
             print("PyBullet visualization will be disabled.")
-            physicsClient = -1 # Indicate connection failure
-            return False # Signal failure
+            physicsClient = -1
+            return False
 
-    if physicsClient < 0: return False # Early exit if connection failed
+    if physicsClient < 0: return False
 
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.setGravity(0,0,-9.81)
     p.loadURDF("plane.urdf")
 
-    # Load the robot URDF (Ensure path is correct relative to workspace root)
-    urdf_path = "URDF/SO_5DOF_ARM100_05d.SLDASM/urdf/SO_5DOF_ARM100_05d.SLDASM.urdf"
+    # --- Load the NEW robot URDF --- #
+    urdf_path = "URDF/SO_5DOF_ARM100_8j/urdf/so100.urdf"
+    print(f"Loading URDF: {urdf_path}")
     if not os.path.exists(urdf_path):
         print(f"ERROR: URDF file not found at {urdf_path}", file=sys.stderr)
-        p.disconnect(physicsClient)
+        if p.isConnected(physicsClient): p.disconnect(physicsClient)
         physicsClient = -1
-        return False # Signal failure
+        return False
 
     robot_start_pos = [0, 0, 0]
     robot_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-    robotId = p.loadURDF(urdf_path, robot_start_pos, robot_start_orientation, useFixedBase=1)
+    try:
+        robotId = p.loadURDF(urdf_path, robot_start_pos, robot_start_orientation, useFixedBase=1)
+    except p.error as load_err:
+         print(f"ERROR: Failed to load URDF: {load_err}", file=sys.stderr)
+         if p.isConnected(physicsClient): p.disconnect(physicsClient)
+         physicsClient = -1
+         return False
 
     # Map JOINT_NAMES to pybullet joint indices
+    # NOTE: Joint names in this new URDF might be different!
+    # We need to inspect the URDF or adjust the mapping if startup fails.
     num_p_joints = p.getNumJoints(robotId)
-    p_joint_indices = {}
-    # Need to map URDF joint names (from pybullet) to our internal JOINT_NAMES order
-    # This requires knowing the URDF joint names. Let's assume they match the keys
-    # used in the old script's `leader_motors` dict for now, but this might need adjustment.
-    # URDF names likely: "Shoulder_Rotation", "Shoulder_Pitch", "Elbow", "Wrist_Pitch", "Wrist_Roll", "Gripper"
-    # Our JOINT_NAMES: ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
-    # --> We need a mapping! <--
-    urdf_to_internal_name_map = {
-        "Shoulder_Rotation": "shoulder_pan",
-        "Shoulder_Pitch": "shoulder_lift",
-        "Elbow": "elbow_flex",
-        "Wrist_Pitch": "wrist_flex",
-        "Wrist_Roll": "wrist_roll",
-        "Gripper": "gripper",
-        # Add other potential mappings if URDF names differ significantly
-    }
-
     p_name_to_index = {}
+    print("\nAvailable PyBullet Joints in URDF:")
     for i in range(num_p_joints):
         info = p.getJointInfo(robotId, i)
         joint_name_bytes = info[1]
         joint_name_str = joint_name_bytes.decode('UTF-8')
+        link_name_str = info[12].decode('UTF-8')
+        joint_type = info[2]
+        print(f"  Index: {i}, Name: '{joint_name_str}', Type: {joint_type}, Link: '{link_name_str}'")
         p_name_to_index[joint_name_str] = i
-        # Disable default velocity control
-        p.setJointMotorControl2(robotId, i, p.VELOCITY_CONTROL, force=0)
+        if joint_type != p.JOINT_FIXED:
+            p.setJointMotorControl2(robotId, i, p.VELOCITY_CONTROL, force=0)
 
-    # Find the end-effector link index for IK calculations
-    # We target the frame BEFORE the wrist roll joint. From URDF, Wrist_Roll connects Wrist_Pitch_Roll -> Fixed_Gripper
-    # So, we use the link "Fixed_Gripper" as the end point for the 4-DOF IK.
-    target_link_name = "Fixed_Gripper"
+    # --- Attempt to map our expected JOINT_NAMES to PyBullet indices --- #
+    # This map likely needs adjustment based on the new URDF's joint names
+    # Check the printout above to see the actual names
+    urdf_to_internal_name_map = {
+        # --- Updated based on URDF printout --- #
+        "Rotation": "shoulder_pan",
+        "Pitch": "shoulder_lift",
+        "Elbow": "elbow_flex",
+        "Wrist_Pitch": "wrist_flex",
+        "Wrist_Roll": "wrist_roll",
+        "Jaw": "gripper",
+    }
+    print("\nAttempting to map internal names to PyBullet indices using map:")
+    print(urdf_to_internal_name_map)
+
+    p_joint_indices_list = [None] * NUM_JOINTS
+    missing_joints = []
+    mapped_internal_names = set()
+    for urdf_name, internal_name in urdf_to_internal_name_map.items():
+        if internal_name not in JOINT_NAMES:
+             print(f"Warning: Internal name '{internal_name}' in map is not in expected JOINT_NAMES list. Skipping.", file=sys.stderr)
+             continue
+        if urdf_name in p_name_to_index:
+            target_idx = JOINT_NAMES.index(internal_name)
+            if p_joint_indices_list[target_idx] is not None:
+                 print(f"Warning: Internal name '{internal_name}' already mapped. Check map for duplicates.", file=sys.stderr)
+            else:
+                 p_joint_indices_list[target_idx] = p_name_to_index[urdf_name]
+                 mapped_internal_names.add(internal_name)
+                 print(f"  Mapped: '{internal_name}' -> URDF '{urdf_name}' (Index {p_name_to_index[urdf_name]})")
+        else:
+            missing_joints.append(urdf_name)
+            print(f"  Failed map: URDF joint '{urdf_name}' (for '{internal_name}') not found in loaded URDF.")
+
+    unmapped_internal = [name for name in JOINT_NAMES if name not in mapped_internal_names]
+    if unmapped_internal:
+        print(f"ERROR: Could not map required internal joints: {unmapped_internal}", file=sys.stderr)
+        # Don't disconnect yet, allow limit reading attempt
+        # return False # Signal failure
+
+    if missing_joints:
+         print(f"Warning: Some URDF joints specified in the map were not found in the loaded URDF: {missing_joints}", file=sys.stderr)
+
+    p_joint_indices = p_joint_indices_list
+    print(f"\nFinal PyBullet Indices (matched to {JOINT_NAMES}): {p_joint_indices}")
+
+    # --- Find End Effector Link Index --- #
+    # This likely needs adjustment based on the new URDF's link names
+    # Check the printout above. Common names: 'gripper_link', 'tool_link', 'ee_link'
+    target_link_name = "Fixed_Jaw" # Updated - Associated with Wrist_Roll joint
     end_effector_link_index = -1
+    print(f"\nSearching for End Effector Link: '{target_link_name}'")
+    found_link_index = None
     for i in range(num_p_joints):
         info = p.getJointInfo(robotId, i)
         link_name_str = info[12].decode('UTF-8')
         if link_name_str == target_link_name:
-            # IMPORTANT: PyBullet's getLinkState uses the LINK index, which matches the JOINT index controlling it.
-            end_effector_link_index = i
+            # PyBullet uses the link index matching the joint index CONROLLING that link
+            found_link_index = i
             break
 
-    if end_effector_link_index == -1:
-        print(f"ERROR: Could not find end-effector link '{target_link_name}' in URDF.", file=sys.stderr)
-        p.disconnect(physicsClient)
-        physicsClient = -1
-        return False # Signal failure
+    if found_link_index is not None:
+        end_effector_link_index = found_link_index
+        print(f"Found End Effector Link '{target_link_name}' controlled by Joint Index: {end_effector_link_index}")
     else:
-        print(f"Using link '{target_link_name}' (PyBullet Index: {end_effector_link_index}) as IK/FK target.")
+        print(f"ERROR: Could not find end-effector link '{target_link_name}' in URDF.", file=sys.stderr)
+        # Don't disconnect yet
+        # return False # Signal failure
 
-    # Create the final mapping based on our JOINT_NAMES order
-    p_joint_indices_list = [None] * NUM_JOINTS
-    missing_joints = []
-    for urdf_name, internal_name in urdf_to_internal_name_map.items():
-        if urdf_name in p_name_to_index:
+    # --- Extract and Store URDF Limits for ALL Joints --- #
+    temp_min_rad = list(URDF_LIMITS_MIN_RAD) # Start with defaults
+    temp_max_rad = list(URDF_LIMITS_MAX_RAD)
+    temp_range_rad = list(URDF_LIMITS_RANGE_RAD)
+    temp_min_deg = list(URDF_LIMITS_MIN_DEG)
+    temp_max_deg = list(URDF_LIMITS_MAX_DEG)
+
+    print("\nReading URDF limits for all mapped joints:")
+    limits_read_count = 0
+    for i in range(NUM_JOINTS):
+        pb_index = p_joint_indices[i]
+        joint_name = JOINT_NAMES[i]
+        if pb_index is not None:
             try:
-                target_idx = JOINT_NAMES.index(internal_name)
-                p_joint_indices_list[target_idx] = p_name_to_index[urdf_name]
-            except ValueError:
-                print(f"Warning: Internal name '{internal_name}' from map not in JOINT_NAMES list.", file=sys.stderr)
+                joint_info = p.getJointInfo(robotId, pb_index)
+                lower = joint_info[8] # Lower limit in radians
+                upper = joint_info[9] # Upper limit in radians
+
+                # Use limits only if valid (lower < upper)
+                if lower < upper:
+                    temp_min_rad[i] = lower
+                    temp_max_rad[i] = upper
+                    temp_range_rad[i] = upper - lower
+                    temp_min_deg[i] = math.degrees(lower)
+                    temp_max_deg[i] = math.degrees(upper)
+                    print(f"  {joint_name:<15} (Idx:{pb_index}): Min={temp_min_deg[i]:8.2f} deg, Max={temp_max_deg[i]:8.2f} deg")
+                    limits_read_count += 1
+                else:
+                    print(f"  {joint_name:<15} (Idx:{pb_index}): Invalid/No limits in URDF (lower={lower:.2f}, upper={upper:.2f}). Using defaults [-180, 180].")
+            except p.error as info_err:
+                 print(f"Error getting joint info for {joint_name} (Idx:{pb_index}): {info_err}", file=sys.stderr)
         else:
-            missing_joints.append(urdf_name)
+             print(f"  {joint_name:<15}: Not mapped to PyBullet index. Using default limits.")
+    
+    # Store globally
+    URDF_LIMITS_MIN_RAD = np.array(temp_min_rad)
+    URDF_LIMITS_MAX_RAD = np.array(temp_max_rad)
+    URDF_LIMITS_RANGE_RAD = np.array(temp_range_rad)
+    URDF_LIMITS_MIN_DEG = np.array(temp_min_deg)
+    URDF_LIMITS_MAX_DEG = np.array(temp_max_deg)
+    
+    if limits_read_count < NUM_JOINTS:
+         print("Warning: Failed to read valid URDF limits for one or more joints. Default limits were used.")
 
-    if None in p_joint_indices_list:
-        print("ERROR: Could not map all required joints to PyBullet indices:", file=sys.stderr)
-        for i, name in enumerate(JOINT_NAMES):
-             if p_joint_indices_list[i] is None:
-                 print(f"  - '{name}' not found or mapped in URDF.", file=sys.stderr)
-        p.disconnect(physicsClient)
+    # Final check for fatal errors
+    if None in p_joint_indices or end_effector_link_index == -1:
+        print("ERROR: Failed to map all required joints or find end effector link. Cannot proceed.", file=sys.stderr)
+        if p.isConnected(physicsClient): p.disconnect(physicsClient)
         physicsClient = -1
-        return False # Signal failure
-
-    if missing_joints:
-         print(f"Warning: Some URDF joints in the map were not found in the loaded URDF: {missing_joints}", file=sys.stderr)
-
-    p_joint_indices = p_joint_indices_list # Store the ordered list of indices
-
-    print(f"PyBullet Joint Indices (matched to JOINT_NAMES order {JOINT_NAMES}): {p_joint_indices}")
-
-    # Using empirical limits (calculated globally) for PyBullet IK.
-    print("Using empirical radian limits for PyBullet IK.")
+        return False
 
     # Create Visual Markers
     markers = {}
@@ -346,11 +400,17 @@ if __name__ == "__main__":
         robot.connect()
         print("Robot connected successfully.")
 
-        # Initialize PyBullet (this now reads URDF limits)
+        # Initialize PyBullet (this now reads URDF limits for all joints)
         print("Initializing PyBullet...")
         pybullet_enabled = setup_pybullet()
         if not pybullet_enabled:
-            print("Continuing without PyBullet visualization.")
+            print("ERROR: PyBullet initialization failed. Exiting.", file=sys.stderr)
+            # Attempt cleanup even if setup failed partially
+            if physicsClient is not None and p.isConnected(physicsClient):
+                 p.disconnect(physicsClient)
+            sys.exit(1)
+        
+        print("PyBullet setup successful.")
 
         # Get initial robot state (use this directly)
         print("Reading initial robot state...")
@@ -366,12 +426,13 @@ if __name__ == "__main__":
 
         # --- Use PyBullet FK based on ACTUAL INITIAL STATE to get initial EF state --- #
         if pybullet_enabled and end_effector_link_index != -1:
-            current_angles_rad = np.deg2rad(current_joint_angles_deg) # Use actual initial angles
+            current_angles_rad = np.deg2rad(current_joint_angles_deg)
             # Reset PyBullet state to match actual initial state
             for i in range(NUM_JOINTS):
                 if p_joint_indices[i] is not None:
                      p.resetJointState(robotId, p_joint_indices[i], targetValue=current_angles_rad[i])
 
+            # FK calculation
             link_state = p.getLinkState(robotId, end_effector_link_index)
             current_ef_position = np.array(link_state[0])
             current_ef_orientation_quat = link_state[1]
@@ -418,9 +479,9 @@ if __name__ == "__main__":
             target_gripper_deg += delta_gripper
 
             # 2. Get Current Robot State (for visualization) using PyBullet FK
-            ik_solution_angles_deg = np.zeros(NUM_IK_JOINTS)
+            ik_solution_angles_deg = current_joint_angles_deg[:NUM_IK_JOINTS] # Default to current if IK fails
             if pybullet_enabled and end_effector_link_index != -1:
-                # Update PyBullet sim joints based on last command
+                # Update PyBullet sim joints based on last command state
                 current_angles_rad = np.deg2rad(current_joint_angles_deg)
                 for i in range(NUM_JOINTS):
                     if p_joint_indices[i] is not None:
@@ -434,22 +495,24 @@ if __name__ == "__main__":
                 target_pitch_rad = np.deg2rad(target_pitch_deg)
                 target_orientation_quat = p.getQuaternionFromEuler([0, target_pitch_rad, 0])
 
-                # Use EMPIRICAL limits (converted to radians) for IK
-                ik_lower_limits = EMPIRICAL_MIN_RAD.tolist()
-                ik_upper_limits = EMPIRICAL_MAX_RAD.tolist()
-                ik_joint_ranges = EMPIRICAL_RANGE_RAD.tolist()
+                # Use URDF limits (read during setup) for IK
+                # Slice the global arrays for the IK joints
+                ik_lower_limits = URDF_LIMITS_MIN_RAD[:NUM_IK_JOINTS].tolist()
+                ik_upper_limits = URDF_LIMITS_MAX_RAD[:NUM_IK_JOINTS].tolist()
+                ik_joint_ranges = URDF_LIMITS_RANGE_RAD[:NUM_IK_JOINTS].tolist()
 
                 ik_joint_indices = p_joint_indices[:NUM_IK_JOINTS]
 
                 try:
+                    # IK result (ik_solution_rad) is in PyBullet's coordinate system
                     ik_solution_rad = p.calculateInverseKinematics(
                         bodyUniqueId=robotId,
                         endEffectorLinkIndex=end_effector_link_index,
                         targetPosition=target_ef_position.tolist(),
                         targetOrientation=target_orientation_quat,
-                        lowerLimits=ik_lower_limits,     # Use Empirical limits
-                        upperLimits=ik_upper_limits,     # Use Empirical limits
-                        jointRanges=ik_joint_ranges,     # Use Empirical limits
+                        lowerLimits=ik_lower_limits,     # Use URDF limits
+                        upperLimits=ik_upper_limits,     # Use URDF limits
+                        jointRanges=ik_joint_ranges,     # Use URDF limits
                         restPoses=[0.0] * len(ik_joint_indices),
                         maxNumIterations=100,
                         residualThreshold=1e-4
@@ -457,26 +520,30 @@ if __name__ == "__main__":
                     ik_solution_angles_deg = np.rad2deg(ik_solution_rad[:NUM_IK_JOINTS])
                 except Exception as ik_err:
                      print(f"Warning: PyBullet IK failed: {ik_err}", file=sys.stderr)
+                     # Keep previous angles if IK fails
+                     ik_solution_angles_deg = current_joint_angles_deg[:NUM_IK_JOINTS]
             else:
                  current_ef_position_viz = target_ef_position
                  print("Warning: PyBullet disabled or EF link not found. IK cannot be calculated.", file=sys.stderr)
+                 # Keep previous angles if no PyBullet
+                 ik_solution_angles_deg = current_joint_angles_deg[:NUM_IK_JOINTS]
 
-            # 4. Construct Full Action Command
+            # 4. Construct Full Action Command (in Lerobot/PyBullet Degrees - assumed aligned now)
             action_angles_deg = np.zeros(NUM_JOINTS)
             action_angles_deg[:NUM_IK_JOINTS] = ik_solution_angles_deg
-            action_angles_deg[WRIST_ROLL_INDEX] = target_wrist_roll_deg # Use target directly
-            action_angles_deg[GRIPPER_INDEX] = target_gripper_deg   # Use target directly
+            action_angles_deg[WRIST_ROLL_INDEX] = target_wrist_roll_deg
+            action_angles_deg[GRIPPER_INDEX] = target_gripper_deg
 
-            # >>> Final Clamp: Use simple np.clip with empirical degree limits <<<
+            # >>> Final Clamp: Use simple np.clip with URDF degree limits <<<
             action_angles_deg = np.clip(action_angles_deg,
-                                        EMPIRICAL_MIN_DEG,
-                                        EMPIRICAL_MAX_DEG)
+                                        URDF_LIMITS_MIN_DEG,
+                                        URDF_LIMITS_MAX_DEG)
 
             # Update current angles based on the *clamped* command
             current_joint_angles_deg = action_angles_deg.copy()
 
             # 5. Send Action to Robot
-            current_time = time.time() # Need time import back
+            current_time = time.time()
             if current_time - last_send_time >= send_interval:
                 action_tensor = torch.from_numpy(action_angles_deg).float()
                 try:
@@ -485,7 +552,7 @@ if __name__ == "__main__":
                 except Exception as send_err:
                     print(f"Error sending action: {send_err}", file=sys.stderr)
 
-            # 6. Update PyBullet Visualization (use _viz position)
+            # 6. Update PyBullet Visualization (use non-offset angles)
             if pybullet_enabled:
                 update_pybullet_visuals(current_joint_angles_deg, target_ef_position, current_ef_position_viz)
 
