@@ -527,19 +527,19 @@ if __name__ == "__main__":
             loop_start_time = time.time()
 
             # 1. Update Target State based on Keyboard Input
-            target_ef_position += delta_pos * (loop_start_time - last_send_time) # Scale movement by time
-            target_pitch_deg += delta_pitch * (loop_start_time - last_send_time)
-            target_wrist_roll_deg += delta_wrist_roll * (loop_start_time - last_send_time)
-            target_gripper_deg += delta_gripper * (loop_start_time - last_send_time)
+            # Apply the step directly, as delta values are set to +/- STEP or 0 by keyboard callbacks
+            target_ef_position += delta_pos
+            target_pitch_deg += delta_pitch
+            target_wrist_roll_deg += delta_wrist_roll
+            target_gripper_deg += delta_gripper
             # TODO: Clamp target angles (wrist roll, gripper) to reasonable limits if known
+            # Example clamping (adjust ranges as needed):
+            # target_wrist_roll_deg = np.clip(target_wrist_roll_deg, -180, 180)
+            # target_gripper_deg = np.clip(target_gripper_deg, 0, 100) # Assuming 0-100 range for gripper
 
             # 2. Get Current Robot State (Optional, for updating visualization)
             # Avoid reading too frequently if it slows things down
             # observation = robot.capture_observation()
-            # if "observation.state" in observation:
-            #     current_joint_angles_deg = observation["observation.state"].cpu().numpy()
-            #     # Optional: Recalculate current EF pos/rpy for viz marker
-            #     current_ef_position, current_ef_rpy_deg = forward_kinematics(*current_joint_angles_deg[:NUM_IK_JOINTS])
 
             # 3. Calculate IK for the first NUM_IK_JOINTS
             # Use current angles as initial guess for smoothness
