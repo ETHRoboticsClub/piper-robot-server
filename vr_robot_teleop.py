@@ -619,6 +619,32 @@ def shutdown():
     """Clean shutdown of all systems."""
     logger.info("Shutting down...")
     
+    # Move robot back to initial positions before disconnecting
+    if state.robot_connected and state.robot:
+        try:
+            logger.info("🏠 Moving robot arms back to initial positions...")
+            
+            # Use the specific initial positions you provided
+            initial_left_arm = np.array([1.7578125, 185.09766, 175.3418, 72.1582, 3.6914062, 0.3358522])
+            initial_right_arm = np.array([4.3066406, 193.35938, 181.05469, 74.0918, 177.1875, 0.0])
+            
+            # Create action tensor with initial joint angles for both arms
+            initial_action = np.concatenate([initial_left_arm, initial_right_arm])
+            action_tensor = torch.from_numpy(initial_action).float()
+            
+            # Send robot to initial position
+            state.robot.send_action(action_tensor)
+            logger.info(f"🏠 Commanded return to initial positions:")
+            logger.info(f"   Left arm: {initial_left_arm.round(1)}")
+            logger.info(f"   Right arm: {initial_right_arm.round(1)}")
+            
+            # Give the robot time to move to initial position
+            logger.info("⏳ Waiting 3 seconds for robot to reach initial position...")
+            time.sleep(3.0)
+            
+        except Exception as e:
+            logger.error(f"❌ Error moving robot to initial position: {e}")
+    
     # Disconnect robot
     if state.robot_connected and state.robot:
         try:
