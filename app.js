@@ -230,32 +230,46 @@ document.addEventListener('DOMContentLoaded', (event) => {
         console.error('A-Frame scene not found!');
     }
 
-
-    // Add custom AR button logic
-    addCustomARButton();
+    // Add controller tracking button logic
+    addControllerTrackingButton();
 });
 
-function addCustomARButton() {
+function addControllerTrackingButton() {
     if (navigator.xr) {
         navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
             if (supported) {
-                const button = document.createElement('button');
-                button.textContent = 'Enter AR (Custom Button)';
-                button.style.position = 'fixed';
-                button.style.bottom = '20px';
-                button.style.left = '50%';
-                button.style.transform = 'translateX(-50%)';
-                button.style.padding = '12px';
-                button.style.fontSize = '16px';
-                button.style.backgroundColor = '#ff9800';
-                button.style.color = 'white';
-                button.style.border = 'none';
-                button.style.borderRadius = '4px';
-                button.style.cursor = 'pointer';
-                button.style.zIndex = '9999'; // Ensure it's on top
+                // Create Start Controller Tracking button
+                const startButton = document.createElement('button');
+                startButton.id = 'start-tracking-button';
+                startButton.textContent = 'Start Controller Tracking';
+                startButton.style.position = 'fixed';
+                startButton.style.top = '50%';
+                startButton.style.left = '50%';
+                startButton.style.transform = 'translate(-50%, -50%)';
+                startButton.style.padding = '20px 40px';
+                startButton.style.fontSize = '20px';
+                startButton.style.fontWeight = 'bold';
+                startButton.style.backgroundColor = '#4CAF50';
+                startButton.style.color = 'white';
+                startButton.style.border = 'none';
+                startButton.style.borderRadius = '8px';
+                startButton.style.cursor = 'pointer';
+                startButton.style.zIndex = '9999';
+                startButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+                startButton.style.transition = 'all 0.3s ease';
 
-                button.onclick = () => {
-                    console.log('Custom AR button clicked. Requesting session via A-Frame...');
+                // Hover effects
+                startButton.addEventListener('mouseenter', () => {
+                    startButton.style.backgroundColor = '#45a049';
+                    startButton.style.transform = 'translate(-50%, -50%) scale(1.05)';
+                });
+                startButton.addEventListener('mouseleave', () => {
+                    startButton.style.backgroundColor = '#4CAF50';
+                    startButton.style.transform = 'translate(-50%, -50%) scale(1)';
+                });
+
+                startButton.onclick = () => {
+                    console.log('Start Controller Tracking button clicked. Requesting session via A-Frame...');
                     const sceneEl = document.querySelector('a-scene');
                     if (sceneEl) {
                         // Use A-Frame's enterVR to handle session start
@@ -266,17 +280,25 @@ function addCustomARButton() {
                     } else {
                          console.error('A-Frame scene not found for enterVR call!');
                     }
-                    // Remove manual session request
-                    // navigator.xr.requestSession('immersive-ar')
-                    //     .then(onSessionStarted)
-                    //     .catch((err) => {
-                    //         console.error('Failed to start immersive-ar session:', err);
-                    //         alert(`Failed to start AR session: ${err.message}`);
-                    //     });
                 };
 
-                document.body.appendChild(button);
-                console.log('Custom AR button added (uses scene.enterVR).');
+                document.body.appendChild(startButton);
+                console.log('Official "Start Controller Tracking" button added.');
+
+                // Listen for VR session events to hide/show start button
+                const sceneEl = document.querySelector('a-scene');
+                if (sceneEl) {
+                    sceneEl.addEventListener('enter-vr', () => {
+                        console.log('Entered VR - hiding start button');
+                        startButton.style.display = 'none';
+                    });
+
+                    sceneEl.addEventListener('exit-vr', () => {
+                        console.log('Exited VR - showing start button');
+                        startButton.style.display = 'block';
+                    });
+                }
+
             } else {
                 console.warn('immersive-ar session not supported by this browser/device.');
             }
@@ -286,43 +308,4 @@ function addCustomARButton() {
     } else {
         console.warn('WebXR not supported by this browser.');
     }
-}
-
-// REMOVED onSessionStarted function as A-Frame handles session now
-/*
-function onSessionStarted(session) {
-    console.log('Immersive AR session started successfully!');
-    const sceneEl = document.querySelector('a-scene');
-    if (sceneEl && sceneEl.renderer) {
-        sceneEl.renderer.xr.setReferenceSpaceType('local'); // Reverted back to 'local'
-        sceneEl.renderer.xr.setSession(session).then(() => {
-            console.log('A-Frame renderer set with AR session using local reference space.'); // Reverted log message
-
-            // ADD controller-updater component AFTER session is set
-            if (!sceneEl.hasAttribute('controller-updater')) {
-                sceneEl.setAttribute('controller-updater', '');
-                console.log("controller-updater component added AFTER session was set.");
-            }
-
-            // Optionally hide the custom button after entering AR
-            const customButton = document.querySelector('button');
-            if (customButton && customButton.textContent.includes('Custom Button')) {
-                customButton.style.display = 'none';
-            }
-        }).catch(err => {
-             console.error('Error setting A-Frame renderer session:', err);
-        });
-
-        session.addEventListener('end', () => {
-            console.log('AR session ended.');
-             // Optionally show the button again
-            const customButton = document.querySelector('button');
-            if (customButton && customButton.textContent.includes('Custom Button')) {
-                customButton.style.display = 'block';
-            }
-        });
-    } else {
-        console.error('A-Frame scene or renderer not ready when session started.');
-    }
 } 
-*/ 
