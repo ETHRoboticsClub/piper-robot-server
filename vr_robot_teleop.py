@@ -48,26 +48,21 @@ NUM_IK_JOINTS = 4
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
-# --- Robot Configuration (Both Arms) ---
-# We'll create separate robot instances for leader and follower arms
-leader_robot_config = So100RobotConfig(
-    leader_arms={"main": FeetechMotorsBusConfig(port="/dev/ttySO100leader", motors=common_motors.copy())},
-    cameras={}
-)
-
-follower_robot_config = So100RobotConfig(
-    follower_arms={"main": FeetechMotorsBusConfig(port="/dev/ttySO100follower", motors=common_motors.copy())},
+# --- Robot Configuration (Both Physical Arms as Followers) ---
+robot_config = So100RobotConfig(
+    follower_arms={
+        "left": FeetechMotorsBusConfig(port="/dev/ttySO100follower", motors=common_motors.copy()),
+        "right": FeetechMotorsBusConfig(port="/dev/ttySO100leader", motors=common_motors.copy())
+    },
     cameras={}
 )
 
 # --- Global State ---
 class VRTeleopState:
     def __init__(self):
-        # Robot
-        self.leader_robot = None
-        self.follower_robot = None
-        self.leader_connected = False
-        self.follower_connected = False
+        # Robot (single instance managing both arms as followers)
+        self.robot = None
+        self.robot_connected = False
         
         # VR Controller states
         self.left_controller_data = None
@@ -77,11 +72,11 @@ class VRTeleopState:
         self.left_origin_position = None  # VR position when grip was first pressed
         self.right_origin_position = None
         
-        # Robot arm states (current joint angles)
-        self.leader_joint_angles = np.zeros(NUM_JOINTS)
-        self.follower_joint_angles = np.zeros(NUM_JOINTS)
-        self.leader_origin_position = None  # Robot EF position when grip was pressed
-        self.follower_origin_position = None
+        # Robot arm states (current joint angles) - now both are followers
+        self.left_arm_joint_angles = np.zeros(NUM_JOINTS)   # Left follower arm
+        self.right_arm_joint_angles = np.zeros(NUM_JOINTS)  # Right follower arm
+        self.left_arm_origin_position = None  # Robot EF position when grip was pressed
+        self.right_arm_origin_position = None
         
         # PyBullet
         self.physics_client = None
@@ -282,122 +277,181 @@ def get_current_ef_position(joint_angles: np.ndarray) -> np.ndarray:
 
 def send_robot_commands():
     """Send computed joint angles to robot arms."""
-    if not state.leader_connected and not state.follower_connected:
+    if not state.robot_connected:
+        logger.error("⚠️ No robot connected, skipping command send")
         return
     
     current_time = time.time()
     if current_time - state.last_send_time < SEND_INTERVAL:
         return
     
+    logger.info(f"🤖 Checking robot commands - Left grip: {state.left_grip_active}, Right grip: {state.right_grip_active}")
+    logger.info(f"🎉 Robot connected: {state.robot_connected}")
+    
     try:
-        # Send commands based on which grips are active
-        if state.left_grip_active and state.follower_connected:
-            # Send follower arm command
-            follower_tensor = torch.from_numpy(state.follower_joint_angles).float()
-            state.follower_robot.send_action(follower_tensor)
-            logger.debug(f"Sent follower command: {state.follower_joint_angles}")
-        elif state.right_grip_active and state.leader_connected:
-            # Send leader arm command  
-            leader_tensor = torch.from_numpy(state.leader_joint_angles).float()
-            state.leader_robot.send_action(leader_tensor)
-            logger.debug(f"Sent leader command: {state.leader_joint_angles}")
+        # Try concatenated tensor format (12 joints total: 6 left + 6 right)
+        # This might be what LeRobot expects for dual follower arms
+        concatenated_angles = np.concatenate([state.left_arm_joint_angles, state.right_arm_joint_angles])
+        action_tensor = torch.from_numpy(concatenated_angles).float()
+        
+        commands_sent = []
+        if state.left_grip_active:
+            commands_sent.append("LEFT (active)")
+            logger.info(f"📤 LEFT arm command (active): {state.left_arm_joint_angles}")
+        else:
+            commands_sent.append("LEFT (holding)")
+            
+        if state.right_grip_active:
+            commands_sent.append("RIGHT (active)")
+            logger.info(f"📤 RIGHT arm command (active): {state.right_arm_joint_angles}")
+        else:
+            commands_sent.append("RIGHT (holding)")
+        
+        logger.info(f"🚀 Sending concatenated tensor ({len(concatenated_angles)} joints): {concatenated_angles}")
+        state.robot.send_action(action_tensor)
+        logger.info(f"✅ Commands sent to: {', '.join(commands_sent)}")
         
         state.last_send_time = current_time
         
     except Exception as e:
-        logger.error(f"Error sending robot commands: {e}")
+        logger.error(f"❌ Error sending robot commands: {e}")
+        import traceback
+        traceback.print_exc()
 
 # --- VR Controller Processing ---
 def process_controller_data(data: Dict):
-    """Process incoming VR controller data."""
-    hand = data.get('hand')
+    """Process incoming VR controller dual-packet data."""
     
-    # Handle grip release messages
-    if data.get('gripReleased'):
-        handle_grip_release(hand)
+    # Handle new dual controller format
+    if 'leftController' in data and 'rightController' in data:
+        left_data = data['leftController']
+        right_data = data['rightController']
+        
+        logger.info(f"🎮 Dual controller packet - Left grip: {left_data.get('gripActive', False)}, Right grip: {right_data.get('gripActive', False)}")
+        
+        # Process left controller
+        if left_data.get('position') and left_data.get('gripActive', False):
+            process_single_controller('left', left_data)
+        elif not left_data.get('gripActive', False) and state.left_grip_active:
+            # Handle grip release for left
+            handle_grip_release('left')
+            
+        # Process right controller  
+        if right_data.get('position') and right_data.get('gripActive', False):
+            process_single_controller('right', right_data)
+        elif not right_data.get('gripActive', False) and state.right_grip_active:
+            # Handle grip release for right
+            handle_grip_release('right')
+            
         return
     
+    # Handle legacy single controller format (for backward compatibility)
+    hand = data.get('hand')
+    if data.get('gripReleased'):
+        logger.info(f"🔓 Processing grip release for {hand} hand")
+        handle_grip_release(hand)
+        return
+        
+    # Process single controller data
+    if hand and data.get('position'):
+        process_single_controller(hand, data)
+
+def process_single_controller(hand: str, data: Dict):
+    """Process data for a single controller."""
     position = data.get('position', {})
     rotation = data.get('rotation', {})
     grip_active = data.get('gripActive', False)
     
+    logger.info(f"🎮 {hand} controller - Grip active: {grip_active}, Position: {position}")
+    
     if hand == 'left' and grip_active:
+        logger.info(f"🤖 Processing LEFT controller for LEFT arm")
         state.left_controller_data = data
         
-        # Handle grip activation for follower arm
+        # Handle grip activation for left arm
         if not state.left_grip_active:
             # Grip just activated - set origin
             state.left_grip_active = True
             state.left_origin_position = position.copy()
-            state.follower_origin_position = get_current_ef_position(state.follower_joint_angles)
-            logger.info("Left grip activated - Follower arm control started")
+            state.left_arm_origin_position = get_current_ef_position(state.left_arm_joint_angles)
+            logger.info(f"🔒 Left grip activated - LEFT arm control started. Origin: {state.left_origin_position}")
         
-        # Compute target position for follower arm
-        if state.left_origin_position and state.follower_origin_position is not None:
+        # Compute target position for left arm
+        if state.left_origin_position and state.left_arm_origin_position is not None:
             relative_delta = compute_relative_position(position, state.left_origin_position)
-            target_position = state.follower_origin_position + relative_delta
+            target_position = state.left_arm_origin_position + relative_delta
+            
+            logger.info(f"🎯 LEFT->LEFT: Delta: {relative_delta}, Target: {target_position}")
             
             # Smooth the position update
-            current_ef_pos = get_current_ef_position(state.follower_joint_angles)
+            current_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
             
             # Compute IK
-            ik_solution = compute_ik(smoothed_target, state.follower_joint_angles)
+            ik_solution = compute_ik(smoothed_target, state.left_arm_joint_angles)
             
             # Update joint angles (keep wrist_roll and gripper unchanged for now)
-            state.follower_joint_angles[:NUM_IK_JOINTS] = ik_solution
-            state.follower_joint_angles = np.clip(
-                state.follower_joint_angles,
+            state.left_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
+            state.left_arm_joint_angles = np.clip(
+                state.left_arm_joint_angles,
                 state.joint_limits_min_deg,
                 state.joint_limits_max_deg
             )
+            logger.info(f"🤖 Updated LEFT joint angles: {state.left_arm_joint_angles}")
     
     elif hand == 'right' and grip_active:
+        logger.info(f"🤖 Processing RIGHT controller for RIGHT arm")
         state.right_controller_data = data
         
-        # Handle grip activation for leader arm
+        # Handle grip activation for right arm
         if not state.right_grip_active:
             # Grip just activated - set origin
             state.right_grip_active = True
             state.right_origin_position = position.copy()
-            state.leader_origin_position = get_current_ef_position(state.leader_joint_angles)
-            logger.info("Right grip activated - Leader arm control started")
+            state.right_arm_origin_position = get_current_ef_position(state.right_arm_joint_angles)
+            logger.info(f"🔒 Right grip activated - RIGHT arm control started. Origin: {state.right_origin_position}")
         
-        # Compute target position for leader arm
-        if state.right_origin_position and state.leader_origin_position is not None:
+        # Compute target position for right arm
+        if state.right_origin_position and state.right_arm_origin_position is not None:
             relative_delta = compute_relative_position(position, state.right_origin_position)
-            target_position = state.leader_origin_position + relative_delta
+            target_position = state.right_arm_origin_position + relative_delta
+            
+            logger.info(f"🎯 RIGHT->RIGHT: Delta: {relative_delta}, Target: {target_position}")
             
             # Smooth the position update
-            current_ef_pos = get_current_ef_position(state.leader_joint_angles)
+            current_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
             
             # Compute IK
-            ik_solution = compute_ik(smoothed_target, state.leader_joint_angles)
+            ik_solution = compute_ik(smoothed_target, state.right_arm_joint_angles)
             
             # Update joint angles (keep wrist_roll and gripper unchanged for now)
-            state.leader_joint_angles[:NUM_IK_JOINTS] = ik_solution
-            state.leader_joint_angles = np.clip(
-                state.leader_joint_angles,
+            state.right_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
+            state.right_arm_joint_angles = np.clip(
+                state.right_arm_joint_angles,
                 state.joint_limits_min_deg,
                 state.joint_limits_max_deg
             )
+            logger.info(f"🤖 Updated RIGHT joint angles: {state.right_arm_joint_angles}")
+    else:
+        logger.info(f"⚠️ No action taken for {hand} controller (grip_active: {grip_active})")
 
 def handle_grip_release(hand: str):
     """Handle grip release for a controller."""
+    logger.info(f"🔓 Handling grip release for {hand} hand")
     if hand == 'left':
         if state.left_grip_active:
             state.left_grip_active = False
             state.left_origin_position = None
-            state.follower_origin_position = None
-            logger.info("Left grip released - Follower arm control stopped")
+            state.left_arm_origin_position = None
+            logger.info("🔓 Left grip released - LEFT arm control stopped")
     
     elif hand == 'right':
         if state.right_grip_active:
             state.right_grip_active = False
             state.right_origin_position = None
-            state.leader_origin_position = None
-            logger.info("Right grip released - Leader arm control stopped")
+            state.right_arm_origin_position = None
+            logger.info("🔓 Right grip released - RIGHT arm control stopped")
 
 # --- WebSocket Handler ---
 async def websocket_handler(websocket, path=None):
@@ -442,12 +496,12 @@ async def control_loop():
                 # Update robot visualization with current joint angles
                 for i in range(NUM_JOINTS):
                     if state.p_joint_indices[i] is not None:
-                        angle_rad = math.radians(state.follower_joint_angles[i])
+                        angle_rad = math.radians(state.left_arm_joint_angles[i])
                         p.resetJointState(state.robot_id, state.p_joint_indices[i], angle_rad)
                 
                 # Update target markers
                 if state.left_grip_active and state.left_origin_position:
-                    follower_ef_pos = get_current_ef_position(state.follower_joint_angles)
+                    follower_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
                     p.resetBasePositionAndOrientation(
                         state.viz_markers['left_target'], 
                         follower_ef_pos, 
@@ -455,7 +509,7 @@ async def control_loop():
                     )
                 
                 if state.right_grip_active and state.right_origin_position:
-                    leader_ef_pos = get_current_ef_position(state.leader_joint_angles)
+                    leader_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
                     p.resetBasePositionAndOrientation(
                         state.viz_markers['right_target'],
                         leader_ef_pos,
@@ -473,65 +527,60 @@ async def control_loop():
 # --- Robot Setup ---
 def setup_robot():
     """Initialize and connect to robot."""
-    leader_success = False
-    follower_success = False
+    logger.info("🔌 Starting robot setup...")
     
-    # Try to connect leader robot
+    # Try to connect robot
     try:
-        state.leader_robot = ManipulatorRobot(leader_robot_config)
-        state.leader_robot.connect()
-        state.leader_connected = True
-        leader_success = True
-        logger.info("Leader robot connected successfully")
+        logger.info("🔌 Attempting to connect robot...")
+        state.robot = ManipulatorRobot(robot_config)
+        state.robot.connect()
+        state.robot_connected = True
+        logger.info("✅ Robot connected successfully")
     except Exception as e:
-        logger.warning(f"Failed to connect to leader robot: {e}")
-        state.leader_connected = False
+        logger.warning(f"❌ Failed to connect to robot: {e}")
+        state.robot_connected = False
     
-    # Try to connect follower robot
-    try:
-        state.follower_robot = ManipulatorRobot(follower_robot_config)
-        state.follower_robot.connect()
-        state.follower_connected = True
-        follower_success = True
-        logger.info("Follower robot connected successfully")
-    except Exception as e:
-        logger.warning(f"Failed to connect to follower robot: {e}")
-        state.follower_connected = False
-    
-    if not leader_success and not follower_success:
-        logger.error("Failed to connect to any robot arms")
+    if not state.robot_connected:
+        logger.error("❌ Failed to connect to robot")
         return False
     
-    # Read initial joint states from whichever robot is available
+    # Read initial joint states from robot
     try:
-        if state.follower_connected:
-            observation = state.follower_robot.capture_observation()
-        elif state.leader_connected:
-            observation = state.leader_robot.capture_observation()
-        else:
-            observation = None
-            
+        observation = state.robot.capture_observation()
+        logger.info("📊 Reading initial state from robot")
+        
         if observation and "observation.state" in observation:
             initial_state = observation["observation.state"].cpu().numpy()
-            state.leader_joint_angles = initial_state.copy()
-            state.follower_joint_angles = initial_state.copy()
-            logger.info(f"Initial joint state: {initial_state}")
-        else:
-            logger.warning("Could not read initial robot state, using defaults")
-            state.leader_joint_angles = np.zeros(NUM_JOINTS)
-            state.follower_joint_angles = np.zeros(NUM_JOINTS)
-        
-        if leader_success and follower_success:
-            logger.info("Both robot arms connected successfully")
-        elif leader_success:
-            logger.info("Only leader robot connected")
-        elif follower_success:
-            logger.info("Only follower robot connected")
+            logger.info(f"📊 Raw initial joint state shape: {initial_state.shape}, values: {initial_state}")
             
+            # Handle concatenated state from dual follower arms
+            if len(initial_state) == NUM_JOINTS * 2:  # 12 joints total (6 per arm)
+                # Split concatenated state into left and right arm states
+                state.left_arm_joint_angles = initial_state[:NUM_JOINTS].copy()
+                state.right_arm_joint_angles = initial_state[NUM_JOINTS:].copy()
+                logger.info(f"📊 Split state - Left arm: {state.left_arm_joint_angles}")
+                logger.info(f"📊 Split state - Right arm: {state.right_arm_joint_angles}")
+            elif len(initial_state) == NUM_JOINTS:  # 6 joints (single arm or fallback)
+                # Use same state for both arms
+                state.left_arm_joint_angles = initial_state.copy()
+                state.right_arm_joint_angles = initial_state.copy()
+                logger.info(f"📊 Single arm state used for both arms: {initial_state}")
+            else:
+                logger.warning(f"⚠️ Unexpected state length {len(initial_state)}, using defaults")
+                state.left_arm_joint_angles = np.zeros(NUM_JOINTS)
+                state.right_arm_joint_angles = np.zeros(NUM_JOINTS)
+        else:
+            logger.warning("⚠️ Could not read initial robot state, using defaults")
+            state.left_arm_joint_angles = np.zeros(NUM_JOINTS)
+            state.right_arm_joint_angles = np.zeros(NUM_JOINTS)
+        
+        logger.info(f"🎉 Robot setup complete! Connected robot: {state.robot_connected}")
         return True
         
     except Exception as e:
-        logger.error(f"Error during robot setup: {e}")
+        logger.error(f"❌ Error during robot setup: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # --- Shutdown ---
@@ -539,35 +588,22 @@ def shutdown():
     """Clean shutdown of all systems."""
     logger.info("Shutting down...")
     
-    # Disconnect leader robot
-    if state.leader_connected and state.leader_robot:
-        try:
-            # Disable torque on leader arms
-            for arm_name, arm in state.leader_robot.leader_arms.items():
-                try:
-                    arm.write("Torque_Enable", 0)
-                except:
-                    pass
-            
-            state.leader_robot.disconnect()
-            logger.info("Leader robot disconnected")
-        except Exception as e:
-            logger.error(f"Error disconnecting leader robot: {e}")
-    
-    # Disconnect follower robot  
-    if state.follower_connected and state.follower_robot:
+    # Disconnect robot
+    if state.robot_connected and state.robot:
         try:
             # Disable torque on follower arms
-            for arm_name, arm in state.follower_robot.follower_arms.items():
-                try:
-                    arm.write("Torque_Enable", 0)
-                except:
-                    pass
+            if hasattr(state.robot, 'follower_arms'):
+                for arm_name, arm in state.robot.follower_arms.items():
+                    try:
+                        arm.write("Torque_Enable", 0)
+                        logger.info(f"Disabled torque on follower arm: {arm_name}")
+                    except Exception as e:
+                        logger.warning(f"Could not disable torque on follower arm {arm_name}: {e}")
             
-            state.follower_robot.disconnect()
-            logger.info("Follower robot disconnected")
+            state.robot.disconnect()
+            logger.info("Robot disconnected")
         except Exception as e:
-            logger.error(f"Error disconnecting follower robot: {e}")
+            logger.error(f"Error disconnecting robot: {e}")
     
     # Disconnect PyBullet
     if state.physics_client is not None and p.isConnected(state.physics_client):
@@ -606,8 +642,8 @@ async def main():
         
         logger.info("VR Robot Teleoperation System ready!")
         logger.info("Connect your VR headset and use grip buttons to control the robot arms:")
-        logger.info("  - Left controller grip: Controls follower arm")
-        logger.info("  - Right controller grip: Controls leader arm")
+        logger.info("  - Left controller grip: Controls left follower arm")
+        logger.info("  - Right controller grip: Controls right follower arm")
         
         # Run forever
         await asyncio.gather(

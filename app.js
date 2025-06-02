@@ -128,8 +128,24 @@ AFRAME.registerComponent('controller-updater', {
     }
     // --- END DETAILED LOGGING ---
 
+    // Collect data from both controllers
+    const leftController = {
+        hand: 'left',
+        position: null,
+        rotation: null,
+        gripActive: false,
+        trigger: 0
+    };
+    
+    const rightController = {
+        hand: 'right',
+        position: null,
+        rotation: null,
+        gripActive: false,
+        trigger: 0
+    };
 
-    // Update Left Hand Text & Send Data if Grip Down
+    // Update Left Hand Text & Collect Data
     if (this.leftHand.object3D.visible) {
         const leftPos = this.leftHand.object3D.position;
         const leftRotEuler = this.leftHand.object3D.rotation; // Euler angles in radians
@@ -142,23 +158,14 @@ AFRAME.registerComponent('controller-updater', {
             this.leftHandInfoText.setAttribute('value', combinedLeftText);
         }
 
-        // Send data if WebSocket is open and grip is down
-        if (this.websocket && this.websocket.readyState === WebSocket.OPEN && this.leftGripDown) {
-            const dataToSend = {
-                hand: 'left',
-                position: { x: leftPos.x, y: leftPos.y, z: leftPos.z },
-                rotation: { x: leftRotX, y: leftRotY, z: leftRotZ },
-                trigger: this.leftTriggerDown ? 1 : 0,
-                gripActive: true
-            };
-            this.websocket.send(JSON.stringify(dataToSend));
-            // Optional: Log sending
-            // console.log('Sent left hand data');
-        }
+        // Collect left controller data
+        leftController.position = { x: leftPos.x, y: leftPos.y, z: leftPos.z };
+        leftController.rotation = { x: leftRotX, y: leftRotY, z: leftRotZ };
+        leftController.trigger = this.leftTriggerDown ? 1 : 0;
+        leftController.gripActive = this.leftGripDown;
     }
 
-
-    // Update Right Hand Text & Send Data if Grip Down
+    // Update Right Hand Text & Collect Data
     if (this.rightHand.object3D.visible) {
         const rightPos = this.rightHand.object3D.position;
         const rightRotEuler = this.rightHand.object3D.rotation; // Euler angles in radians
@@ -171,21 +178,27 @@ AFRAME.registerComponent('controller-updater', {
             this.rightHandInfoText.setAttribute('value', combinedRightText);
         }
 
-        // Send data if WebSocket is open and grip is down
-        if (this.websocket && this.websocket.readyState === WebSocket.OPEN && this.rightGripDown) {
-            const dataToSend = {
-                hand: 'right',
-                position: { x: rightPos.x, y: rightPos.y, z: rightPos.z },
-                rotation: { x: rightRotX, y: rightRotY, z: rightRotZ },
-                trigger: this.rightTriggerDown ? 1 : 0,
-                gripActive: true
-            };
-            this.websocket.send(JSON.stringify(dataToSend));
-            // Optional: Log sending
-            // console.log('Sent right hand data');
-        }
+        // Collect right controller data
+        rightController.position = { x: rightPos.x, y: rightPos.y, z: rightPos.z };
+        rightController.rotation = { x: rightRotX, y: rightRotY, z: rightRotZ };
+        rightController.trigger = this.rightTriggerDown ? 1 : 0;
+        rightController.gripActive = this.rightGripDown;
     }
 
+    // Send combined packet if WebSocket is open and at least one controller has valid data
+    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        const hasValidLeft = leftController.position && (leftController.position.x !== 0 || leftController.position.y !== 0 || leftController.position.z !== 0);
+        const hasValidRight = rightController.position && (rightController.position.x !== 0 || rightController.position.y !== 0 || rightController.position.z !== 0);
+        
+        if (hasValidLeft || hasValidRight) {
+            const dualControllerData = {
+                timestamp: Date.now(),
+                leftController: leftController,
+                rightController: rightController
+            };
+            this.websocket.send(JSON.stringify(dualControllerData));
+        }
+    }
   }
 });
 
