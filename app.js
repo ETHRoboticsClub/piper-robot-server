@@ -63,6 +63,18 @@ AFRAME.registerComponent('controller-updater', {
     if (this.leftHandInfoText) this.leftHandInfoText.setAttribute('rotation', textRotation);
     if (this.rightHandInfoText) this.rightHandInfoText.setAttribute('rotation', textRotation);
 
+    // --- Helper function to send grip release message ---
+    this.sendGripRelease = (hand) => {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        const releaseMessage = {
+          hand: hand,
+          gripReleased: true
+        };
+        this.websocket.send(JSON.stringify(releaseMessage));
+        console.log(`Sent grip release for ${hand} hand`);
+      }
+    };
+
     // --- Modify Event Listeners ---
     this.leftHand.addEventListener('triggerdown', (evt) => {
         console.log('Left Trigger Pressed');
@@ -79,6 +91,7 @@ AFRAME.registerComponent('controller-updater', {
     this.leftHand.addEventListener('gripup', (evt) => { // Add gripup listener
         console.log('Left Grip Released');
         this.leftGripDown = false; // Reset grip state
+        this.sendGripRelease('left'); // Send grip release message
     });
 
     this.rightHand.addEventListener('triggerdown', (evt) => {
@@ -96,6 +109,7 @@ AFRAME.registerComponent('controller-updater', {
     this.rightHand.addEventListener('gripup', (evt) => { // Add gripup listener
         console.log('Right Grip Released');
         this.rightGripDown = false; // Reset grip state
+        this.sendGripRelease('right'); // Send grip release message
     });
     // --- End Modify Event Listeners ---
 
@@ -134,7 +148,8 @@ AFRAME.registerComponent('controller-updater', {
                 hand: 'left',
                 position: { x: leftPos.x, y: leftPos.y, z: leftPos.z },
                 rotation: { x: leftRotX, y: leftRotY, z: leftRotZ },
-                trigger: this.leftTriggerDown ? 1 : 0
+                trigger: this.leftTriggerDown ? 1 : 0,
+                gripActive: true
             };
             this.websocket.send(JSON.stringify(dataToSend));
             // Optional: Log sending
@@ -162,7 +177,8 @@ AFRAME.registerComponent('controller-updater', {
                 hand: 'right',
                 position: { x: rightPos.x, y: rightPos.y, z: rightPos.z },
                 rotation: { x: rightRotX, y: rightRotY, z: rightRotZ },
-                trigger: this.rightTriggerDown ? 1 : 0
+                trigger: this.rightTriggerDown ? 1 : 0,
+                gripActive: true
             };
             this.websocket.send(JSON.stringify(dataToSend));
             // Optional: Log sending
