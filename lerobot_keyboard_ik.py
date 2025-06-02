@@ -341,12 +341,12 @@ def on_press(key):
     global control_active, delta_pos, delta_pitch, delta_wrist_roll, delta_gripper
     try:
         # Position Control (World Frame)
-        if key.char == 'w': delta_pos[0] = POS_STEP   # Forward (+X)
-        elif key.char == 's': delta_pos[0] = -POS_STEP  # Backward (-X)
-        elif key.char == 'a': delta_pos[1] = POS_STEP   # Left (+Y)
-        elif key.char == 'd': delta_pos[1] = -POS_STEP  # Right (-Y)
-        elif key.char == 'q': delta_pos[2] = POS_STEP   # Up (+Z)
-        elif key.char == 'e': delta_pos[2] = -POS_STEP  # Down (-Z)
+        if key.char == 'a': delta_pos[0] = POS_STEP   # Forward (+X), actually left
+        elif key.char == 'd': delta_pos[0] = -POS_STEP  # Backward (-X), actually right
+        elif key.char == 's': delta_pos[1] = POS_STEP   # Left (+Y), actually down
+        elif key.char == 'w': delta_pos[1] = -POS_STEP  # Right (-Y), actually forward
+        elif key.char == 'e': delta_pos[2] = POS_STEP   # Up (+Z), actually up
+        elif key.char == 'q': delta_pos[2] = -POS_STEP  # Down (-Z), actually down
 
         # Gripper Control
         elif key.char == '+': delta_gripper = GRIPPER_STEP # Open/Increase Angle
@@ -368,8 +368,8 @@ def on_release(key):
     global control_active, delta_pos, delta_pitch, delta_wrist_roll, delta_gripper
     try:
         # Reset delta on key release
-        if key.char in ('w', 's'): delta_pos[0] = 0
-        elif key.char in ('a', 'd'): delta_pos[1] = 0
+        if key.char in ('a', 'd'): delta_pos[0] = 0
+        elif key.char in ('w', 's'): delta_pos[1] = 0
         elif key.char in ('q', 'e'): delta_pos[2] = 0
         elif key.char in ('+', '-'): delta_gripper = 0
     except AttributeError:
@@ -381,8 +381,8 @@ def start_keyboard_listener():
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
     print("\nKeyboard Teleoperation Enabled:")
-    print("  W/S: Move Target X (+/-)")
-    print("  A/D: Move Target Y (+/-)")
+    print("  A/D: Move Target X (+/-)")
+    print("  W/S: Move Target Y (+/-)")
     print("  Q/E: Move Target Z (+/-)")
     print("  Up/Down: Adjust Target Pitch (+/-)")
     print("  Left/Right: Adjust Wrist Roll (+/-)")
