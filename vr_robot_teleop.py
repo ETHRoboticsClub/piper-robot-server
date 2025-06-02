@@ -33,6 +33,12 @@ VR_TO_ROBOT_SCALE = 1.0  # Scale factor for VR movements (adjust as needed)
 SEND_INTERVAL = 0.05     # Send robot commands every 50ms (20Hz)
 POSITION_SMOOTHING = 0.1 # Smoothing factor for position updates (0=no smoothing, 1=full smoothing)
 
+# PyBullet Visualization Markers:
+# - Red sphere: Left arm current end effector position
+# - Blue sphere: Right arm current end effector position  
+# - Green sphere: Left arm goal position (from VR controller)
+# - Yellow sphere: Right arm goal position (from VR controller)
+
 # Joint configuration
 common_motors = {
     "shoulder_pan": [1, "sts3215"],
@@ -208,6 +214,13 @@ def setup_pybullet():
     actual_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.02, rgbaColor=[0, 0, 1, 0.8])
     state.viz_markers['right_target'] = p.createMultiBody(baseVisualShapeIndex=actual_shape, basePosition=[0, 0, 1])
     
+    # Add goal position markers (green for left goal, yellow for right goal)
+    left_goal_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.025, rgbaColor=[0, 1, 0, 0.9])
+    state.viz_markers['left_goal'] = p.createMultiBody(baseVisualShapeIndex=left_goal_shape, basePosition=[0, 0, 1])
+
+    right_goal_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.025, rgbaColor=[1, 1, 0, 0.9])
+    state.viz_markers['right_goal'] = p.createMultiBody(baseVisualShapeIndex=right_goal_shape, basePosition=[0, 0, 1])
+    
     logger.info("PyBullet setup complete")
     return True
 
@@ -380,6 +393,14 @@ def process_single_controller(hand: str, data: Dict):
             relative_delta = compute_relative_position(position, state.left_origin_position)
             target_position = state.left_arm_origin_position + relative_delta
             
+            # Update goal position visualization
+            if state.physics_client is not None and 'left_goal' in state.viz_markers:
+                p.resetBasePositionAndOrientation(
+                    state.viz_markers['left_goal'], 
+                    target_position.tolist(), 
+                    [0, 0, 0, 1]
+                )
+            
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
@@ -431,6 +452,14 @@ def process_single_controller(hand: str, data: Dict):
             relative_delta = compute_relative_position(position, state.right_origin_position)
             target_position = state.right_arm_origin_position + relative_delta
             
+            # Update goal position visualization
+            if state.physics_client is not None and 'right_goal' in state.viz_markers:
+                p.resetBasePositionAndOrientation(
+                    state.viz_markers['right_goal'], 
+                    target_position.tolist(), 
+                    [0, 0, 0, 1]
+                )
+            
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
@@ -473,6 +502,15 @@ def handle_grip_release(hand: str):
             state.left_arm_origin_position = None
             state.left_origin_rotation = None
             state.left_arm_origin_wrist_angles = None
+            
+            # Hide goal marker
+            if state.physics_client is not None and 'left_goal' in state.viz_markers:
+                p.resetBasePositionAndOrientation(
+                    state.viz_markers['left_goal'], 
+                    [0, 0, -1], 
+                    [0, 0, 0, 1]
+                )
+            
             logger.info("🔓 LEFT grip released - control stopped")
     
     elif hand == 'right':
@@ -482,6 +520,15 @@ def handle_grip_release(hand: str):
             state.right_arm_origin_position = None
             state.right_origin_rotation = None
             state.right_arm_origin_wrist_angles = None
+            
+            # Hide goal marker
+            if state.physics_client is not None and 'right_goal' in state.viz_markers:
+                p.resetBasePositionAndOrientation(
+                    state.viz_markers['right_goal'], 
+                    [0, 0, -1], 
+                    [0, 0, 0, 1]
+                )
+            
             logger.info("🔓 RIGHT grip released - control stopped")
 
 # --- WebSocket Handler ---
@@ -530,7 +577,9 @@ async def control_loop():
                         angle_rad = math.radians(state.left_arm_joint_angles[i])
                         p.resetJointState(state.robot_id, state.p_joint_indices[i], angle_rad)
                 
-                # Update target markers
+                # Update visualization markers:
+                # - Red/Blue spheres: Current end effector positions
+                # - Green/Yellow spheres: Goal positions from VR controllers (updated in VR processing)
                 if state.left_grip_active and state.left_origin_position:
                     follower_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
                     p.resetBasePositionAndOrientation(
