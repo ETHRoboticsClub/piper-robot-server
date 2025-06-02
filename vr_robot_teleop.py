@@ -10,6 +10,7 @@ import math
 import sys
 import logging
 from typing import Dict, Optional, Tuple
+from scipy.spatial.transform import Rotation as R  # Add this for quaternion operations
 
 import pybullet as p
 import pybullet_data
@@ -71,12 +72,16 @@ class VRTeleopState:
         self.right_grip_active = False
         self.left_origin_position = None  # VR position when grip was first pressed
         self.right_origin_position = None
+        self.left_origin_rotation = None  # VR rotation when grip was first pressed
+        self.right_origin_rotation = None
         
         # Robot arm states (current joint angles) - now both are followers
         self.left_arm_joint_angles = np.zeros(NUM_JOINTS)   # Left follower arm
         self.right_arm_joint_angles = np.zeros(NUM_JOINTS)  # Right follower arm
         self.left_arm_origin_position = None  # Robot EF position when grip was pressed
         self.right_arm_origin_position = None
+        self.left_arm_origin_wrist_angles = None  # Original wrist angles when grip was pressed
+        self.right_arm_origin_wrist_angles = None
         
         # PyBullet
         self.physics_client = None
@@ -225,7 +230,7 @@ def compute_relative_position(current_vr_pos: Dict[str, float], origin_vr_pos: D
 
 # --- Robot Control ---
 def compute_ik(target_position: np.ndarray, current_angles: np.ndarray) -> np.ndarray:
-    """Compute inverse kinematics for target position."""
+    """Compute inverse kinematics for target position (position-only IK)."""
     if state.physics_client is None or state.robot_id is None:
         return current_angles[:NUM_IK_JOINTS]
     
@@ -235,7 +240,7 @@ def compute_ik(target_position: np.ndarray, current_angles: np.ndarray) -> np.nd
         if state.p_joint_indices[i] is not None:
             p.resetJointState(state.robot_id, state.p_joint_indices[i], current_angles_rad[i])
     
-    # Compute IK
+    # Compute position-only IK
     try:
         ik_lower = np.deg2rad(state.joint_limits_min_deg[:NUM_IK_JOINTS])
         ik_upper = np.deg2rad(state.joint_limits_max_deg[:NUM_IK_JOINTS])
@@ -247,7 +252,7 @@ def compute_ik(target_position: np.ndarray, current_angles: np.ndarray) -> np.nd
             bodyUniqueId=state.robot_id,
             endEffectorLinkIndex=state.end_effector_link_index,
             targetPosition=target_position.tolist(),
-            targetOrientation=None,
+            targetOrientation=None,  # Position-only IK
             lowerLimits=ik_lower.tolist(),
             upperLimits=ik_upper.tolist(),
             jointRanges=ik_ranges.tolist(),
@@ -374,6 +379,8 @@ def process_single_controller(hand: str, data: Dict):
             state.left_grip_active = True
             state.left_origin_position = position.copy()
             state.left_arm_origin_position = get_current_ef_position(state.left_arm_joint_angles)
+            state.left_origin_rotation = rotation.copy()
+            state.left_arm_origin_wrist_angles = state.left_arm_joint_angles[3:].copy()
             logger.info(f"🔒 Left grip activated - LEFT arm control started. Origin: {state.left_origin_position}")
         
         # Compute target position for left arm
@@ -381,17 +388,39 @@ def process_single_controller(hand: str, data: Dict):
             relative_delta = compute_relative_position(position, state.left_origin_position)
             target_position = state.left_arm_origin_position + relative_delta
             
-            logger.info(f"🎯 LEFT->LEFT: Delta: {relative_delta}, Target: {target_position}")
+            logger.info(f"🎯 LEFT->LEFT: Position delta: {relative_delta}, Target: {target_position}")
             
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
             
-            # Compute IK
+            # Compute position-only IK for first 4 joints
             ik_solution = compute_ik(smoothed_target, state.left_arm_joint_angles)
             
-            # Update joint angles (keep wrist_roll and gripper unchanged for now)
+            # Update first 4 joints with IK solution
             state.left_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
+            
+            # Apply orientation deltas directly to wrist joints
+            if state.left_origin_rotation is not None and state.left_arm_origin_wrist_angles is not None:
+                # VR script now sends relative rotations (already calculated from reference)
+                # These are Euler angles representing rotation from grip start position
+                x_rotation = rotation.get('x', 0)  # pitch
+                y_rotation = rotation.get('y', 0)  # yaw  
+                z_rotation = rotation.get('z', 0)  # roll
+                
+                logger.info(f"🔍 LEFT relative rotations - X:{x_rotation:.1f}° Y:{y_rotation:.1f}° Z:{z_rotation:.1f}°")
+                
+                # Map controller rotations to wrist joints
+                # X-axis (pitch) -> wrist_flex, Z-axis (roll) -> wrist_roll
+                pitch_delta = x_rotation
+                roll_delta = z_rotation
+                
+                # Apply relative rotations to original wrist angles
+                state.left_arm_joint_angles[3] = state.left_arm_origin_wrist_angles[0] + (-pitch_delta)  # wrist_flex (pitch) - inverted
+                state.left_arm_joint_angles[4] = state.left_arm_origin_wrist_angles[1] + roll_delta   # wrist_roll
+                
+                logger.info(f"🔄 LEFT orientation: pitch_delta={pitch_delta:.1f}°, roll_delta={roll_delta:.1f}°")
+            
             state.left_arm_joint_angles = np.clip(
                 state.left_arm_joint_angles,
                 state.joint_limits_min_deg,
@@ -409,6 +438,8 @@ def process_single_controller(hand: str, data: Dict):
             state.right_grip_active = True
             state.right_origin_position = position.copy()
             state.right_arm_origin_position = get_current_ef_position(state.right_arm_joint_angles)
+            state.right_origin_rotation = rotation.copy()
+            state.right_arm_origin_wrist_angles = state.right_arm_joint_angles[3:].copy()
             logger.info(f"🔒 Right grip activated - RIGHT arm control started. Origin: {state.right_origin_position}")
         
         # Compute target position for right arm
@@ -416,17 +447,39 @@ def process_single_controller(hand: str, data: Dict):
             relative_delta = compute_relative_position(position, state.right_origin_position)
             target_position = state.right_arm_origin_position + relative_delta
             
-            logger.info(f"🎯 RIGHT->RIGHT: Delta: {relative_delta}, Target: {target_position}")
+            logger.info(f"🎯 RIGHT->RIGHT: Position delta: {relative_delta}, Target: {target_position}")
             
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
             
-            # Compute IK
+            # Compute position-only IK for first 4 joints
             ik_solution = compute_ik(smoothed_target, state.right_arm_joint_angles)
             
-            # Update joint angles (keep wrist_roll and gripper unchanged for now)
+            # Update first 4 joints with IK solution
             state.right_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
+            
+            # Apply orientation deltas directly to wrist joints
+            if state.right_origin_rotation is not None and state.right_arm_origin_wrist_angles is not None:
+                # VR script now sends relative rotations (already calculated from reference)
+                # These are Euler angles representing rotation from grip start position
+                x_rotation = rotation.get('x', 0)  # pitch
+                y_rotation = rotation.get('y', 0)  # yaw  
+                z_rotation = rotation.get('z', 0)  # roll
+                
+                logger.info(f"🔍 RIGHT relative rotations - X:{x_rotation:.1f}° Y:{y_rotation:.1f}° Z:{z_rotation:.1f}°")
+                
+                # Map controller rotations to wrist joints
+                # X-axis (pitch) -> wrist_flex, Z-axis (roll) -> wrist_roll
+                pitch_delta = x_rotation
+                roll_delta = z_rotation
+                
+                # Apply relative rotations to original wrist angles
+                state.right_arm_joint_angles[3] = state.right_arm_origin_wrist_angles[0] + (-pitch_delta)  # wrist_flex (pitch) - inverted
+                state.right_arm_joint_angles[4] = state.right_arm_origin_wrist_angles[1] + roll_delta   # wrist_roll
+                
+                logger.info(f"🔄 RIGHT orientation: pitch_delta={pitch_delta:.1f}°, roll_delta={roll_delta:.1f}°")
+            
             state.right_arm_joint_angles = np.clip(
                 state.right_arm_joint_angles,
                 state.joint_limits_min_deg,
@@ -444,6 +497,8 @@ def handle_grip_release(hand: str):
             state.left_grip_active = False
             state.left_origin_position = None
             state.left_arm_origin_position = None
+            state.left_origin_rotation = None
+            state.left_arm_origin_wrist_angles = None
             logger.info("🔓 Left grip released - LEFT arm control stopped")
     
     elif hand == 'right':
@@ -451,6 +506,8 @@ def handle_grip_release(hand: str):
             state.right_grip_active = False
             state.right_origin_position = None
             state.right_arm_origin_position = None
+            state.right_origin_rotation = None
+            state.right_arm_origin_wrist_angles = None
             logger.info("🔓 Right grip released - RIGHT arm control stopped")
 
 # --- WebSocket Handler ---
