@@ -97,6 +97,10 @@ class VRTeleopState:
         # Control timing
         self.last_send_time = 0
         
+        # Logging timing - new additions for throttled logging
+        self.last_log_time = 0
+        self.log_interval = 1.0  # Log once per second
+        
         # WebSocket
         self.websocket_clients = set()
 
@@ -280,48 +284,42 @@ def get_current_ef_position(joint_angles: np.ndarray) -> np.ndarray:
     link_state = p.getLinkState(state.robot_id, state.end_effector_link_index)
     return np.array(link_state[0])
 
+def should_log_now() -> bool:
+    """Check if enough time has passed to log again."""
+    current_time = time.time()
+    if current_time - state.last_log_time >= state.log_interval:
+        state.last_log_time = current_time
+        return True
+    return False
+
 def send_robot_commands():
     """Send computed joint angles to robot arms."""
     if not state.robot_connected:
-        logger.error("⚠️ No robot connected, skipping command send")
         return
     
     current_time = time.time()
     if current_time - state.last_send_time < SEND_INTERVAL:
         return
     
-    logger.info(f"🤖 Checking robot commands - Left grip: {state.left_grip_active}, Right grip: {state.right_grip_active}")
-    logger.info(f"🎉 Robot connected: {state.robot_connected}")
+    # Only log if grips are active and enough time has passed
+    if (state.left_grip_active or state.right_grip_active) and should_log_now():
+        active_arms = []
+        if state.left_grip_active:
+            active_arms.append("LEFT")
+        if state.right_grip_active:
+            active_arms.append("RIGHT")
+        logger.info(f"🤖 Active control: {', '.join(active_arms)} | Left joints: {state.left_arm_joint_angles.round(1)} | Right joints: {state.right_arm_joint_angles.round(1)}")
     
     try:
         # Try concatenated tensor format (12 joints total: 6 left + 6 right)
-        # This might be what LeRobot expects for dual follower arms
         concatenated_angles = np.concatenate([state.left_arm_joint_angles, state.right_arm_joint_angles])
         action_tensor = torch.from_numpy(concatenated_angles).float()
         
-        commands_sent = []
-        if state.left_grip_active:
-            commands_sent.append("LEFT (active)")
-            logger.info(f"📤 LEFT arm command (active): {state.left_arm_joint_angles}")
-        else:
-            commands_sent.append("LEFT (holding)")
-            
-        if state.right_grip_active:
-            commands_sent.append("RIGHT (active)")
-            logger.info(f"📤 RIGHT arm command (active): {state.right_arm_joint_angles}")
-        else:
-            commands_sent.append("RIGHT (holding)")
-        
-        logger.info(f"🚀 Sending concatenated tensor ({len(concatenated_angles)} joints): {concatenated_angles}")
         state.robot.send_action(action_tensor)
-        logger.info(f"✅ Commands sent to: {', '.join(commands_sent)}")
-        
         state.last_send_time = current_time
         
     except Exception as e:
         logger.error(f"❌ Error sending robot commands: {e}")
-        import traceback
-        traceback.print_exc()
 
 # --- VR Controller Processing ---
 def process_controller_data(data: Dict):
@@ -331,8 +329,6 @@ def process_controller_data(data: Dict):
     if 'leftController' in data and 'rightController' in data:
         left_data = data['leftController']
         right_data = data['rightController']
-        
-        logger.info(f"🎮 Dual controller packet - Left grip: {left_data.get('gripActive', False)}, Right grip: {right_data.get('gripActive', False)}")
         
         # Process left controller
         if left_data.get('position') and left_data.get('gripActive', False):
@@ -353,7 +349,6 @@ def process_controller_data(data: Dict):
     # Handle legacy single controller format (for backward compatibility)
     hand = data.get('hand')
     if data.get('gripReleased'):
-        logger.info(f"🔓 Processing grip release for {hand} hand")
         handle_grip_release(hand)
         return
         
@@ -367,10 +362,7 @@ def process_single_controller(hand: str, data: Dict):
     rotation = data.get('rotation', {})
     grip_active = data.get('gripActive', False)
     
-    logger.info(f"🎮 {hand} controller - Grip active: {grip_active}, Position: {position}")
-    
     if hand == 'left' and grip_active:
-        logger.info(f"🤖 Processing LEFT controller for LEFT arm")
         state.left_controller_data = data
         
         # Handle grip activation for left arm
@@ -381,14 +373,12 @@ def process_single_controller(hand: str, data: Dict):
             state.left_arm_origin_position = get_current_ef_position(state.left_arm_joint_angles)
             state.left_origin_rotation = rotation.copy()
             state.left_arm_origin_wrist_angles = state.left_arm_joint_angles[3:].copy()
-            logger.info(f"🔒 Left grip activated - LEFT arm control started. Origin: {state.left_origin_position}")
+            logger.info(f"🔒 LEFT grip activated - controlling left arm")
         
         # Compute target position for left arm
         if state.left_origin_position and state.left_arm_origin_position is not None:
             relative_delta = compute_relative_position(position, state.left_origin_position)
             target_position = state.left_arm_origin_position + relative_delta
-            
-            logger.info(f"🎯 LEFT->LEFT: Position delta: {relative_delta}, Target: {target_position}")
             
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
@@ -408,8 +398,6 @@ def process_single_controller(hand: str, data: Dict):
                 y_rotation = rotation.get('y', 0)  # yaw  
                 z_rotation = rotation.get('z', 0)  # roll
                 
-                logger.info(f"🔍 LEFT relative rotations - X:{x_rotation:.1f}° Y:{y_rotation:.1f}° Z:{z_rotation:.1f}°")
-                
                 # Map controller rotations to wrist joints
                 # X-axis (pitch) -> wrist_flex, Z-axis (roll) -> wrist_roll
                 pitch_delta = x_rotation
@@ -418,18 +406,14 @@ def process_single_controller(hand: str, data: Dict):
                 # Apply relative rotations to original wrist angles
                 state.left_arm_joint_angles[3] = state.left_arm_origin_wrist_angles[0] + (-pitch_delta)  # wrist_flex (pitch) - inverted
                 state.left_arm_joint_angles[4] = state.left_arm_origin_wrist_angles[1] + roll_delta   # wrist_roll
-                
-                logger.info(f"🔄 LEFT orientation: pitch_delta={pitch_delta:.1f}°, roll_delta={roll_delta:.1f}°")
             
             state.left_arm_joint_angles = np.clip(
                 state.left_arm_joint_angles,
                 state.joint_limits_min_deg,
                 state.joint_limits_max_deg
             )
-            logger.info(f"🤖 Updated LEFT joint angles: {state.left_arm_joint_angles}")
     
     elif hand == 'right' and grip_active:
-        logger.info(f"🤖 Processing RIGHT controller for RIGHT arm")
         state.right_controller_data = data
         
         # Handle grip activation for right arm
@@ -440,14 +424,12 @@ def process_single_controller(hand: str, data: Dict):
             state.right_arm_origin_position = get_current_ef_position(state.right_arm_joint_angles)
             state.right_origin_rotation = rotation.copy()
             state.right_arm_origin_wrist_angles = state.right_arm_joint_angles[3:].copy()
-            logger.info(f"🔒 Right grip activated - RIGHT arm control started. Origin: {state.right_origin_position}")
+            logger.info(f"🔒 RIGHT grip activated - controlling right arm")
         
         # Compute target position for right arm
         if state.right_origin_position and state.right_arm_origin_position is not None:
             relative_delta = compute_relative_position(position, state.right_origin_position)
             target_position = state.right_arm_origin_position + relative_delta
-            
-            logger.info(f"🎯 RIGHT->RIGHT: Position delta: {relative_delta}, Target: {target_position}")
             
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
@@ -467,8 +449,6 @@ def process_single_controller(hand: str, data: Dict):
                 y_rotation = rotation.get('y', 0)  # yaw  
                 z_rotation = rotation.get('z', 0)  # roll
                 
-                logger.info(f"🔍 RIGHT relative rotations - X:{x_rotation:.1f}° Y:{y_rotation:.1f}° Z:{z_rotation:.1f}°")
-                
                 # Map controller rotations to wrist joints
                 # X-axis (pitch) -> wrist_flex, Z-axis (roll) -> wrist_roll
                 pitch_delta = x_rotation
@@ -477,21 +457,15 @@ def process_single_controller(hand: str, data: Dict):
                 # Apply relative rotations to original wrist angles
                 state.right_arm_joint_angles[3] = state.right_arm_origin_wrist_angles[0] + (-pitch_delta)  # wrist_flex (pitch) - inverted
                 state.right_arm_joint_angles[4] = state.right_arm_origin_wrist_angles[1] + roll_delta   # wrist_roll
-                
-                logger.info(f"🔄 RIGHT orientation: pitch_delta={pitch_delta:.1f}°, roll_delta={roll_delta:.1f}°")
             
             state.right_arm_joint_angles = np.clip(
                 state.right_arm_joint_angles,
                 state.joint_limits_min_deg,
                 state.joint_limits_max_deg
             )
-            logger.info(f"🤖 Updated RIGHT joint angles: {state.right_arm_joint_angles}")
-    else:
-        logger.info(f"⚠️ No action taken for {hand} controller (grip_active: {grip_active})")
 
 def handle_grip_release(hand: str):
     """Handle grip release for a controller."""
-    logger.info(f"🔓 Handling grip release for {hand} hand")
     if hand == 'left':
         if state.left_grip_active:
             state.left_grip_active = False
@@ -499,7 +473,7 @@ def handle_grip_release(hand: str):
             state.left_arm_origin_position = None
             state.left_origin_rotation = None
             state.left_arm_origin_wrist_angles = None
-            logger.info("🔓 Left grip released - LEFT arm control stopped")
+            logger.info("🔓 LEFT grip released - control stopped")
     
     elif hand == 'right':
         if state.right_grip_active:
@@ -508,7 +482,7 @@ def handle_grip_release(hand: str):
             state.right_arm_origin_position = None
             state.right_origin_rotation = None
             state.right_arm_origin_wrist_angles = None
-            logger.info("🔓 Right grip released - RIGHT arm control stopped")
+            logger.info("🔓 RIGHT grip released - control stopped")
 
 # --- WebSocket Handler ---
 async def websocket_handler(websocket, path=None):
