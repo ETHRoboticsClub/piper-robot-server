@@ -241,7 +241,7 @@ class VRWebSocketServer(BaseInputProvider):
                     arm=hand,
                     mode=ControlMode.POSITION_CONTROL,
                     target_position=relative_delta,  # Relative position delta
-                    wrist_roll_deg=controller.z_axis_rotation,
+                    wrist_roll_deg=-controller.z_axis_rotation,
                     metadata={
                         "source": "vr_grip",
                         "relative_position": True,
