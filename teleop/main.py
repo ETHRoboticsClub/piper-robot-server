@@ -141,18 +141,28 @@ class TeleopSystem:
         if not await self.https_server.start():
             logger.warning("HTTPS server failed to start")
         
+        # Start control loop first (includes robot setup)
+        control_task = asyncio.create_task(self.control_loop.start())
+        self.tasks.append(control_task)
+        
+        # Wait a moment for control loop to setup
+        await asyncio.sleep(0.5)
+        
+        # Connect keyboard listener to robot interface after control loop setup
+        if self.control_loop.robot_interface:
+            self.keyboard_listener.set_robot_interface(self.control_loop.robot_interface)
+            logger.info("Connected keyboard listener to robot interface")
+        else:
+            logger.warning("Robot interface not available for keyboard listener")
+        
         # Start input providers
         await self.vr_server.start()
         await self.keyboard_listener.start()
         
-        # Start control loop
-        control_task = asyncio.create_task(self.control_loop.start())
-        self.tasks.append(control_task)
-        
         logger.info("="*60)
         logger.info("🎉 Teleoperation system ready!")
         logger.info("VR Controllers: Connect your Quest and use grip buttons to control arms")
-        logger.info("Keyboard: Press Enter to activate, use WASD+QE for movement, 1/2 to switch arms")
+        logger.info("Keyboard: Press Tab/Enter to activate arms, use WASD+QE/UIOJKL for movement")
         logger.info("Web Interface: Check the HTTPS server address above")
         logger.info("Press Ctrl+C to shutdown")
         logger.info("="*60)
