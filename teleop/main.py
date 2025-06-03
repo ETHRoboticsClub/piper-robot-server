@@ -234,8 +234,8 @@ def parse_arguments():
     parser.add_argument("--key", default="key.pem", help="Path to SSL private key")
     
     # Robot settings
-    parser.add_argument("--left-port", default="/dev/ttySO100follower", help="Left arm serial port")
-    parser.add_argument("--right-port", default="/dev/ttySO100leader", help="Right arm serial port")
+    parser.add_argument("--left-port", default="/dev/ttySO100red", help="Left arm serial port")
+    parser.add_argument("--right-port", default="/dev/ttySO100blue", help="Right arm serial port")
     
     return parser.parse_args()
 

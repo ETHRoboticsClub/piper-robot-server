@@ -64,8 +64,8 @@ GRIPPER_STEP = 10.0 # degrees
 
 # --- Device Ports ---
 DEFAULT_FOLLOWER_PORTS = {
-    "left": "/dev/ttySO100follower",
-    "right": "/dev/ttySO100leader"
+    "left": "/dev/ttySO100red",
+    "right": "/dev/ttySO100blue"
 }
 
 @dataclass

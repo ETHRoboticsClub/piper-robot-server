@@ -59,8 +59,6 @@ Required packages include:
 
 ### SSL Certificates (Auto-Generated)
 
-**✅ AUTOMATIC**: SSL certificates are now generated automatically when the system starts!
-
 The system will automatically create self-signed SSL certificates (`cert.pem` and `key.pem`) if they don't exist. No manual setup required!
 
 If you need to generate them manually for any reason:
@@ -100,7 +98,7 @@ Options:
   --ws-port PORT    WebSocket server port (default: 8442)
   --host HOST       Host IP address (default: 0.0.0.0)
   --urdf PATH       Path to robot URDF file
-  --left-port PORT  Left arm serial port (default: /dev/ttySO100follower)
+  --left-port PORT  Left arm serial port (default: /dev/ttySO100red)
   --right-port PORT Right arm serial port (default: /dev/ttySO100leader)
 ```
 

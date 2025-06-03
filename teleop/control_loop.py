@@ -62,34 +62,58 @@ class ControlLoop:
     async def setup(self) -> bool:
         """Setup robot interface and visualizer."""
         success = True
+        setup_errors = []
         
         # Setup robot interface
-        self.robot_interface = RobotInterface(self.config)
-        if not self.robot_interface.connect():
-            logger.warning("Robot interface setup failed")
+        try:
+            self.robot_interface = RobotInterface(self.config)
+            if not self.robot_interface.connect():
+                error_msg = "Robot interface failed to connect"
+                logger.error(error_msg)
+                setup_errors.append(error_msg)
+                if self.config.enable_robot:
+                    success = False
+        except Exception as e:
+            error_msg = f"Robot interface setup failed with exception: {e}"
+            logger.error(error_msg)
+            setup_errors.append(error_msg)
             if self.config.enable_robot:
                 success = False
         
         # Setup PyBullet visualizer
         if self.config.enable_pybullet:
-            self.visualizer = PyBulletVisualizer(
-                self.config.urdf_path, 
-                use_gui=True
-            )
-            if not self.visualizer.setup():
-                logger.warning("PyBullet visualizer setup failed")
-                self.visualizer = None
-            else:
-                # Connect kinematics to robot interface
-                joint_limits_min, joint_limits_max = self.visualizer.get_joint_limits
-                self.robot_interface.setup_kinematics(
-                    self.visualizer.physics_client,
-                    self.visualizer.robot_id,
-                    self.visualizer.joint_indices,
-                    self.visualizer.end_effector_link_index,
-                    joint_limits_min,
-                    joint_limits_max
+            try:
+                self.visualizer = PyBulletVisualizer(
+                    self.config.urdf_path, 
+                    use_gui=True
                 )
+                if not self.visualizer.setup():
+                    error_msg = "PyBullet visualizer setup failed"
+                    logger.error(error_msg)
+                    setup_errors.append(error_msg)
+                    self.visualizer = None
+                else:
+                    # Connect kinematics to robot interface
+                    joint_limits_min, joint_limits_max = self.visualizer.get_joint_limits
+                    self.robot_interface.setup_kinematics(
+                        self.visualizer.physics_client,
+                        self.visualizer.robot_id,
+                        self.visualizer.joint_indices,
+                        self.visualizer.end_effector_link_index,
+                        joint_limits_min,
+                        joint_limits_max
+                    )
+            except Exception as e:
+                error_msg = f"PyBullet visualizer setup failed with exception: {e}"
+                logger.error(error_msg)
+                setup_errors.append(error_msg)
+                self.visualizer = None
+        
+        # Report all setup issues
+        if setup_errors:
+            logger.error("Setup failed with the following errors:")
+            for i, error in enumerate(setup_errors, 1):
+                logger.error(f"  {i}. {error}")
         
         return success
     

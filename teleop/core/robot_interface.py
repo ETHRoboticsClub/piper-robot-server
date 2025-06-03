@@ -52,11 +52,13 @@ class RobotInterface:
     
     def setup_robot_config(self) -> So100RobotConfig:
         """Create robot configuration based on current settings."""
+        logger.info(f"Setting up robot config with ports: {self.config.follower_ports}")
         return So100RobotConfig(
             follower_arms={
                 "left": FeetechMotorsBusConfig(port=self.config.follower_ports["left"], motors=COMMON_MOTORS.copy()),
                 "right": FeetechMotorsBusConfig(port=self.config.follower_ports["right"], motors=COMMON_MOTORS.copy())
             },
+            leader_arms={},  # Explicitly disable leader arms to prevent using default ports
             cameras={}
         )
     
