@@ -91,6 +91,18 @@ AFRAME.registerComponent('controller-updater', {
       }
     };
 
+    // --- Helper function to send trigger release message ---
+    this.sendTriggerRelease = (hand) => {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        const releaseMessage = {
+          hand: hand,
+          triggerReleased: true
+        };
+        this.websocket.send(JSON.stringify(releaseMessage));
+        console.log(`Sent trigger release for ${hand} hand`);
+      }
+    };
+
     // --- Helper function to calculate relative rotation ---
     this.calculateRelativeRotation = (currentRotation, initialRotation) => {
       return {
@@ -151,6 +163,7 @@ AFRAME.registerComponent('controller-updater', {
     this.leftHand.addEventListener('triggerup', (evt) => {
         console.log('Left Trigger Released');
         this.leftTriggerDown = false;
+        this.sendTriggerRelease('left'); // Send trigger release message
     });
     this.leftHand.addEventListener('gripdown', (evt) => {
         console.log('Left Grip Pressed');
@@ -189,6 +202,7 @@ AFRAME.registerComponent('controller-updater', {
     this.rightHand.addEventListener('triggerup', (evt) => {
         console.log('Right Trigger Released');
         this.rightTriggerDown = false;
+        this.sendTriggerRelease('right'); // Send trigger release message
     });
     this.rightHand.addEventListener('gripdown', (evt) => {
         console.log('Right Grip Pressed');

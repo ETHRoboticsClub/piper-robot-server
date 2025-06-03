@@ -59,6 +59,10 @@ NUM_IK_JOINTS = 4  # Use only first 4 joints: shoulder_pan, shoulder_lift, elbow
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
+# Gripper control constants
+GRIPPER_OPEN_ANGLE = 0.0    # Degrees - gripper open position
+GRIPPER_CLOSED_ANGLE = 45.0 # Degrees - gripper closed position (adjust as needed)
+
 # --- Robot Configuration (Both Physical Arms as Followers) ---
 robot_config = So100RobotConfig(
     follower_arms={
@@ -90,6 +94,10 @@ class VRTeleopState:
         self.right_z_axis_rotation = 0.0
         self.left_origin_wrist_angle = 0.0  # Robot's wrist_roll angle when grip was pressed
         self.right_origin_wrist_angle = 0.0
+        
+        # VR Controller trigger states for gripper control
+        self.left_trigger_active = False
+        self.right_trigger_active = False
         
         # Current goal states for visualization
         self.left_goal_position = None
@@ -390,15 +398,15 @@ def process_controller_data(data: Dict):
         left_data = data['leftController']
         right_data = data['rightController']
         
-        # Process left controller
-        if left_data.get('position') and left_data.get('gripActive', False):
+        # Process left controller - when grip is active OR trigger is pressed
+        if left_data.get('position') and (left_data.get('gripActive', False) or left_data.get('trigger', 0) > 0.5):
             process_single_controller('left', left_data)
         elif not left_data.get('gripActive', False) and state.left_grip_active:
             # Handle grip release for left
             handle_grip_release('left')
-            
-        # Process right controller  
-        if right_data.get('position') and right_data.get('gripActive', False):
+        
+        # Process right controller - when grip is active OR trigger is pressed
+        if right_data.get('position') and (right_data.get('gripActive', False) or right_data.get('trigger', 0) > 0.5):
             process_single_controller('right', right_data)
         elif not right_data.get('gripActive', False) and state.right_grip_active:
             # Handle grip release for right
@@ -408,12 +416,18 @@ def process_controller_data(data: Dict):
     
     # Handle legacy single controller format (for backward compatibility)
     hand = data.get('hand')
+    
+    # Handle explicit release messages
     if data.get('gripReleased'):
         handle_grip_release(hand)
         return
+    
+    if data.get('triggerReleased'):
+        handle_trigger_release(hand)
+        return
         
-    # Process single controller data
-    if hand and data.get('position'):
+    # Process single controller data - when grip is active OR trigger is pressed
+    if hand and data.get('position') and (data.get('gripActive', False) or data.get('trigger', 0) > 0.5):
         process_single_controller(hand, data)
 
 def euler_to_quaternion(euler_deg: Dict[str, float]) -> np.ndarray:
@@ -476,7 +490,32 @@ def process_single_controller(hand: str, data: Dict):
     position = data.get('position', {})
     rotation = data.get('rotation', {})
     grip_active = data.get('gripActive', False)
+    trigger = data.get('trigger', 0)  # 0 or 1
     
+    # Handle trigger for gripper control (independent of grip button)
+    if hand == 'left':
+        trigger_active = trigger > 0.5  # Convert to boolean
+        if trigger_active != state.left_trigger_active:
+            state.left_trigger_active = trigger_active
+            if trigger_active:
+                state.left_arm_joint_angles[GRIPPER_INDEX] = GRIPPER_CLOSED_ANGLE
+                logger.info("🤏 LEFT gripper CLOSED")
+            else:
+                state.left_arm_joint_angles[GRIPPER_INDEX] = GRIPPER_OPEN_ANGLE
+                logger.info("👐 LEFT gripper OPENED")
+    
+    elif hand == 'right':
+        trigger_active = trigger > 0.5  # Convert to boolean
+        if trigger_active != state.right_trigger_active:
+            state.right_trigger_active = trigger_active
+            if trigger_active:
+                state.right_arm_joint_angles[GRIPPER_INDEX] = GRIPPER_CLOSED_ANGLE
+                logger.info("🤏 RIGHT gripper CLOSED")
+            else:
+                state.right_arm_joint_angles[GRIPPER_INDEX] = GRIPPER_OPEN_ANGLE
+                logger.info("👐 RIGHT gripper OPENED")
+    
+    # Handle grip button for arm movement control
     if hand == 'left' and grip_active:
         state.left_controller_data = data
         
@@ -529,14 +568,18 @@ def process_single_controller(hand: str, data: Dict):
             # Compute IK for position-only control using 4 joints
             ik_solution = compute_ik(smoothed_target, None, state.left_arm_joint_angles)
             
-            # Update first 4 joints with IK solution (wrist_roll controlled separately, gripper unchanged)
+            # Update first 4 joints with IK solution (wrist_roll and gripper controlled separately)
             state.left_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
             
-            state.left_arm_joint_angles = np.clip(
+            # Clamp all joints except gripper (which is controlled by trigger)
+            clamped_angles = np.clip(
                 state.left_arm_joint_angles,
                 state.joint_limits_min_deg,
                 state.joint_limits_max_deg
             )
+            # Preserve gripper control
+            clamped_angles[GRIPPER_INDEX] = state.left_arm_joint_angles[GRIPPER_INDEX]
+            state.left_arm_joint_angles = clamped_angles
     
     elif hand == 'right' and grip_active:
         state.right_controller_data = data
@@ -590,14 +633,18 @@ def process_single_controller(hand: str, data: Dict):
             # Compute IK for position-only control using 4 joints
             ik_solution = compute_ik(smoothed_target, None, state.right_arm_joint_angles)
             
-            # Update first 4 joints with IK solution (wrist_roll controlled separately, gripper unchanged)
+            # Update first 4 joints with IK solution (wrist_roll and gripper controlled separately)
             state.right_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
             
-            state.right_arm_joint_angles = np.clip(
+            # Clamp all joints except gripper (which is controlled by trigger)
+            clamped_angles = np.clip(
                 state.right_arm_joint_angles,
                 state.joint_limits_min_deg,
                 state.joint_limits_max_deg
             )
+            # Preserve gripper control
+            clamped_angles[GRIPPER_INDEX] = state.right_arm_joint_angles[GRIPPER_INDEX]
+            state.right_arm_joint_angles = clamped_angles
 
 def handle_grip_release(hand: str):
     """Handle grip release for a controller."""
@@ -610,6 +657,7 @@ def handle_grip_release(hand: str):
             state.left_origin_wrist_angle = 0.0
             state.left_arm_origin_position = None
             state.left_goal_position = None
+            # Note: Do NOT reset trigger state - gripper control is independent
             
             # Hide goal marker
             if state.physics_client is not None and 'left_goal' in state.viz_markers:
@@ -619,7 +667,7 @@ def handle_grip_release(hand: str):
                     [0, 0, 0, 1]
                 )
             
-            logger.info("🔓 LEFT grip released - control stopped")
+            logger.info("🔓 LEFT grip released - arm control stopped (gripper still active)")
     
     elif hand == 'right':
         if state.right_grip_active:
@@ -630,6 +678,7 @@ def handle_grip_release(hand: str):
             state.right_origin_wrist_angle = 0.0
             state.right_arm_origin_position = None
             state.right_goal_position = None
+            # Note: Do NOT reset trigger state - gripper control is independent
             
             # Hide goal marker
             if state.physics_client is not None and 'right_goal' in state.viz_markers:
@@ -639,7 +688,21 @@ def handle_grip_release(hand: str):
                     [0, 0, 0, 1]
                 )
             
-            logger.info("🔓 RIGHT grip released - control stopped")
+            logger.info("🔓 RIGHT grip released - arm control stopped (gripper still active)")
+
+def handle_trigger_release(hand: str):
+    """Handle trigger release for a controller."""
+    if hand == 'left':
+        if state.left_trigger_active:
+            state.left_trigger_active = False
+            state.left_arm_joint_angles[GRIPPER_INDEX] = GRIPPER_OPEN_ANGLE
+            logger.info("👐 LEFT gripper OPENED (trigger released)")
+    
+    elif hand == 'right':
+        if state.right_trigger_active:
+            state.right_trigger_active = False
+            state.right_arm_joint_angles[GRIPPER_INDEX] = GRIPPER_OPEN_ANGLE
+            logger.info("👐 RIGHT gripper OPENED (trigger released)")
 
 # --- WebSocket Handler ---
 async def websocket_handler(websocket, path=None):
