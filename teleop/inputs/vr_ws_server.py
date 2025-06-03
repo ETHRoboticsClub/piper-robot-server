@@ -197,14 +197,15 @@ class VRWebSocketServer(BaseInputProvider):
             controller.trigger_active = trigger_active
             
             # Send gripper control goal - do not specify mode to avoid interfering with position control
+            # Reverse behavior: gripper open by default, closes when trigger pressed
             gripper_goal = ControlGoal(
                 arm=hand,
-                gripper_closed=trigger_active,
+                gripper_closed=not trigger_active,  # Inverted: closed when trigger NOT active
                 metadata={"source": "vr_trigger"}
             )
             await self.send_goal(gripper_goal)
             
-            logger.info(f"🤏 {hand.upper()} gripper {'CLOSED' if trigger_active else 'OPENED'}")
+            logger.info(f"🤏 {hand.upper()} gripper {'OPENED' if trigger_active else 'CLOSED'}")
         
         # Handle grip button for arm movement control
         if grip_active:
@@ -279,15 +280,15 @@ class VRWebSocketServer(BaseInputProvider):
         if controller.trigger_active:
             controller.trigger_active = False
             
-            # Send gripper open goal - do not specify mode to avoid interfering with position control
+            # Send gripper closed goal - reversed behavior: gripper closes when trigger released
             goal = ControlGoal(
                 arm=hand,
-                gripper_closed=False,
+                gripper_closed=True,  # Close gripper when trigger released
                 metadata={"source": "vr_trigger_release"}
             )
             await self.send_goal(goal)
             
-            logger.info(f"👐 {hand.upper()} gripper OPENED (trigger released)")
+            logger.info(f"🤏 {hand.upper()} gripper CLOSED (trigger released)")
     
     def euler_to_quaternion(self, euler_deg: Dict[str, float]) -> np.ndarray:
         """Convert Euler angles in degrees to quaternion [x, y, z, w]."""
