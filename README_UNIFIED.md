@@ -18,27 +18,52 @@ A consolidated teleoperation control system for the SO100 robot that supports mu
 1. **Robot Hardware**: One or two SO100 arm robot with USB-serial connections
 2. **Python Environment**: Python 3.8+ with required packages
 3. **VR Setup** (optional): Meta Quest or other headset with WebXR support
-4. **SSL Certificates**: For HTTPS/WSS connections
 
-### Dependencies
 
-Install required Python packages:
+
+
+### Package Installation
+
+You must first manually install LeRobot according to the official instructions at [https://github.com/huggingface/lerobot](https://github.com/huggingface/lerobot).
+
+Follow the official LeRobot installation guide:
 
 ```bash
+# Clone the official LeRobot repository
+git clone https://github.com/huggingface/lerobot.git
+cd lerobot
+
+# Install according to their instructions (typically):
+pip install -e .
+```
+
+After installing LeRobot, install this teleoperation package:
+
+```bash
+# Install in editable mode (recommended for development)
+pip install -e .
+
+# Or install basic requirements manually
 pip install -r requirements.txt
 ```
 
+### Dependencies
+
 Required packages include:
-- `lerobot` - Robot control library
+- `lerobot` - Robot control library (install manually first!)
 - `pybullet` - Physics simulation and IK/FK
 - `websockets` - WebSocket server for VR
 - `pynput` - Keyboard input handling
 - `scipy` - Spatial transformations
 - `numpy`, `torch` - Numerical computing
 
-### SSL Certificate Setup
+### SSL Certificates (Auto-Generated)
 
-Generate SSL certificates for HTTPS/WebSocket connections:
+**✅ AUTOMATIC**: SSL certificates are now generated automatically when the system starts!
+
+The system will automatically create self-signed SSL certificates (`cert.pem` and `key.pem`) if they don't exist. No manual setup required!
+
+If you need to generate them manually for any reason:
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes -subj "/C=US/ST=Test/L=Test/O=Test/OU=Test/CN=localhost"
@@ -219,8 +244,9 @@ class ControlGoal:
 
 **VR Controllers Not Connecting**:
 - Ensure Quest and robot are on same network
-- Check SSL certificates exist (`cert.pem`, `key.pem`)
+- SSL certificates are generated automatically, but check `cert.pem` and `key.pem` exist if issues persist
 - Try accessing web interface directly in browser first
+- If OpenSSL is missing, install it: `sudo apt-get install openssl` (Ubuntu) or `brew install openssl` (macOS)
 
 **PyBullet Visualization Issues**:
 - Install PyBullet: `pip install pybullet`

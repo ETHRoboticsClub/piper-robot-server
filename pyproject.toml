@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teleop"
+version = "0.5.0"
+description = "Teleoperation Control System for the SO100 Robot Arm(s)"
+authors = [{name = "Emil Rofors"}]
+readme = "README_UNIFIED.md"
+requires-python = ">=3.8"
+keywords = ["robotics", "teleoperation", "vr", "robot-control"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "numpy",
+    "torch", 
+    "scipy",
+    "pybullet",
+    "websockets",
+    "pynput",
+    "lerobot[feetech]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "flake8",
+    "mypy",
+]
+
+[project.scripts]
+teleop = "teleop.main:main_cli"
+
+[project.urls]
+Homepage = "https://github.com/your-username/vr_so100_teleoperation"
+Repository = "https://github.com/your-username/vr_so100_teleoperation"
+
+[tool.setuptools]
+packages = ["teleop"]
+include-package-data = true 

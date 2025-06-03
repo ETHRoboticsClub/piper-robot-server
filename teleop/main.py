@@ -54,10 +54,14 @@ class HTTPSServer:
     
     async def start(self):
         """Start the HTTPS server."""
+        # Automatically generate SSL certificates if they don't exist
         if not self.config.ssl_files_exist:
-            logger.error(f"SSL certificate ('{self.config.certfile}') or key ('{self.config.keyfile}') not found")
-            logger.error("Please generate them first using openssl")
-            return False
+            logger.info("SSL certificates not found, attempting to generate them...")
+            if not self.config.ensure_ssl_certificates():
+                logger.error("Failed to generate SSL certificates")
+                logger.error("Manual generation may be required:")
+                logger.error("openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes -subj \"/C=US/ST=Test/L=Test/O=Test/OU=Test/CN=localhost\"")
+                return False
         
         if not self.config.webapp_exists:
             logger.error(f"Webapp directory '{self.config.webapp_dir}' not found")

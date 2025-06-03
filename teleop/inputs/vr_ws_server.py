@@ -65,14 +65,17 @@ class VRWebSocketServer(BaseInputProvider):
     
     def setup_ssl(self) -> Optional[ssl.SSLContext]:
         """Setup SSL context for WebSocket server."""
+        # Automatically generate SSL certificates if they don't exist
         if not self.config.ssl_files_exist:
-            logger.error(f"SSL certificate ('{self.config.certfile}') or key ('{self.config.keyfile}') not found")
-            return None
+            logger.info("SSL certificates not found for WebSocket server, attempting to generate them...")
+            if not self.config.ensure_ssl_certificates():
+                logger.error("Failed to generate SSL certificates for WebSocket server")
+                return None
         
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         try:
             ssl_context.load_cert_chain(certfile=self.config.certfile, keyfile=self.config.keyfile)
-            logger.info("SSL certificate and key loaded successfully")
+            logger.info("SSL certificate and key loaded successfully for WebSocket server")
             return ssl_context
         except ssl.SSLError as e:
             logger.error(f"Error loading SSL cert/key: {e}")

@@ -1,3 +1,7 @@
+# Basic requirements for teleop package
+# For development with pinned versions, use: pip install -r requirements-dev.txt
+# For installation as package, use: pip install -e .
+
 numpy
 scipy
 lerobot[feetech]

@@ -108,6 +108,11 @@ class TeleopConfig:
         """Check if SSL certificate files exist."""
         return os.path.exists(self.certfile) and os.path.exists(self.keyfile)
     
+    def ensure_ssl_certificates(self) -> bool:
+        """Ensure SSL certificates exist, generating them if necessary."""
+        from .utils import ensure_ssl_certificates
+        return ensure_ssl_certificates(self.certfile, self.keyfile)
+    
     @property
     def urdf_exists(self) -> bool:
         """Check if URDF file exists."""
