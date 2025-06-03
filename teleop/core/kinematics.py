@@ -35,8 +35,13 @@ class ForwardKinematics:
         if self.physics_client is None or self.robot_id is None:
             return np.array([0.2, 0.0, 0.15]), np.array([0, 0, 0, 1])
         
+        # Use joint angles but keep gripper at neutral position for FK calculation
+        # to ensure Fixed_Jaw_tip position is independent of gripper state
+        fk_state_angles = joint_angles_deg.copy()
+        fk_state_angles[5] = 0.0  # Set gripper to neutral (closed) position for FK calculation
+        
         # Set joint positions
-        joint_angles_rad = np.deg2rad(joint_angles_deg)
+        joint_angles_rad = np.deg2rad(fk_state_angles)
         for i in range(NUM_JOINTS):
             if i < len(self.joint_indices) and self.joint_indices[i] is not None:
                 p.resetJointState(self.robot_id, self.joint_indices[i], joint_angles_rad[i])
@@ -90,8 +95,12 @@ class IKSolver:
         if self.physics_client is None or self.robot_id is None:
             return current_angles_deg[:NUM_IK_JOINTS]
         
-        # Use current angles to set PyBullet state
-        current_angles_rad = np.deg2rad(current_angles_deg)
+        # Use current angles to set PyBullet state, but keep gripper at neutral position
+        # to prevent gripper motion from affecting the Fixed_Jaw_tip IK target
+        ik_state_angles = current_angles_deg.copy()
+        ik_state_angles[5] = 0.0  # Set gripper to neutral (closed) position for IK calculation
+        
+        current_angles_rad = np.deg2rad(ik_state_angles)
         for i in range(NUM_JOINTS):
             if i < len(self.joint_indices) and self.joint_indices[i] is not None:
                 p.resetJointState(self.robot_id, self.joint_indices[i], current_angles_rad[i])

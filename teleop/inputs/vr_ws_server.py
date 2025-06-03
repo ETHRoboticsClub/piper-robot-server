@@ -196,10 +196,9 @@ class VRWebSocketServer(BaseInputProvider):
         if trigger_active != controller.trigger_active:
             controller.trigger_active = trigger_active
             
-            # Send gripper control goal
+            # Send gripper control goal - do not specify mode to avoid interfering with position control
             gripper_goal = ControlGoal(
                 arm=hand,
-                mode=ControlMode.IDLE,
                 gripper_closed=trigger_active,
                 metadata={"source": "vr_trigger"}
             )
@@ -280,10 +279,9 @@ class VRWebSocketServer(BaseInputProvider):
         if controller.trigger_active:
             controller.trigger_active = False
             
-            # Send gripper open goal
+            # Send gripper open goal - do not specify mode to avoid interfering with position control
             goal = ControlGoal(
                 arm=hand,
-                mode=ControlMode.IDLE,
                 gripper_closed=False,
                 metadata={"source": "vr_trigger_release"}
             )

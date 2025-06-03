@@ -199,8 +199,8 @@ class ControlLoop:
         """Execute a control goal."""
         arm_state = self.left_arm if goal.arm == "left" else self.right_arm
         
-        # Handle mode changes
-        if goal.mode != arm_state.mode:
+        # Handle mode changes (only if mode is specified)
+        if goal.mode is not None and goal.mode != arm_state.mode:
             if goal.mode == ControlMode.POSITION_CONTROL:
                 # Activate position control
                 arm_state.mode = ControlMode.POSITION_CONTROL
@@ -245,7 +245,7 @@ class ControlLoop:
                     # Absolute wrist roll from keyboard
                     arm_state.current_wrist_roll = goal.wrist_roll_deg
         
-        # Handle gripper control
+        # Handle gripper control (independent of mode)
         if goal.gripper_closed is not None and self.robot_interface:
             self.robot_interface.set_gripper(goal.arm, goal.gripper_closed)
     
