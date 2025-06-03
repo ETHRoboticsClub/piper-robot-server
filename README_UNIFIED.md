@@ -1,0 +1,280 @@
+# SO100 Robot Teleoperation System
+
+A consolidated teleoperation control system for the SO100 robot that supports multiple input methods (VR controllers, keyboard, phone support coming...) with shared inverse kinematics and 3D visualization.
+
+## Features
+
+- **Unified Architecture**: Single entry point that coordinates all components
+- **Multiple Input Methods**: VR controllers (Quest/WebXR) and keyboard control
+- **Shared IK/FK Logic**: PyBullet-based inverse and forward kinematics for both arms
+- **Real-time Visualization**: 3D PyBullet visualization with coordinate frames and markers
+- **Safety Features**: Joint limit clamping, graceful shutdown, and error handling
+- **Async/Non-blocking**: All components run concurrently without blocking
+
+## Installation
+
+### Prerequisites
+
+1. **Robot Hardware**: One or two SO100 arm robot with USB-serial connections
+2. **Python Environment**: Python 3.8+ with required packages
+3. **VR Setup** (optional): Meta Quest or other headset with WebXR support
+4. **SSL Certificates**: For HTTPS/WSS connections
+
+### Dependencies
+
+Install required Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+Required packages include:
+- `lerobot` - Robot control library
+- `pybullet` - Physics simulation and IK/FK
+- `websockets` - WebSocket server for VR
+- `pynput` - Keyboard input handling
+- `scipy` - Spatial transformations
+- `numpy`, `torch` - Numerical computing
+
+### SSL Certificate Setup
+
+Generate SSL certificates for HTTPS/WebSocket connections:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes -subj "/C=US/ST=Test/L=Test/O=Test/OU=Test/CN=localhost"
+```
+
+## Usage
+
+### Basic Usage
+
+Run the complete teleoperation system:
+
+```bash
+python -m teleop
+```
+
+This starts:
+- HTTPS server for web interface (default port 8443)
+- WebSocket server for VR controllers (default port 8442)
+- Keyboard input listener
+- Robot interface and control loop
+- PyBullet 3D visualization
+
+### Command Line Options
+
+```bash
+python -m teleop [OPTIONS]
+
+Options:
+  --no-robot        Disable robot connection (visualization only)
+  --no-viz          Disable PyBullet visualization  
+  --no-vr           Disable VR WebSocket server
+  --no-keyboard     Disable keyboard input
+  --https-port PORT HTTPS server port (default: 8443)
+  --ws-port PORT    WebSocket server port (default: 8442)
+  --host HOST       Host IP address (default: 0.0.0.0)
+  --urdf PATH       Path to robot URDF file
+  --left-port PORT  Left arm serial port (default: /dev/ttySO100follower)
+  --right-port PORT Right arm serial port (default: /dev/ttySO100leader)
+```
+
+### Development/Testing Modes
+
+**Visualization Only** (no robot hardware):
+```bash
+python -m teleop --no-robot
+```
+
+**Keyboard Only** (no VR):
+```bash
+python -m teleop --no-vr
+```
+
+**Headless** (no PyBullet GUI):
+```bash
+python -m teleop --no-viz
+```
+
+## Control Methods
+
+### VR Controller Control
+
+1. **Setup**: Connect Meta Quest to same network, navigate to `https://<robot-ip>:8443`
+2. **Arm Control**: 
+   - Press and hold **grip button** to activate position control for that arm
+   - Move controller to control end effector position
+   - Rotate controller around forward axis to control wrist roll
+3. **Gripper Control**:
+   - Press **trigger** to close gripper
+   - Release **trigger** to open gripper
+4. **Independent Control**: Left and right controllers control respective robot arms
+
+### Keyboard Control
+
+1. **Activation**: Press **Enter** to toggle position control on/off
+2. **Arm Selection**: Press **1** (left arm) or **2** (right arm)
+3. **Position Control**:
+   - **W/S**: Forward/Backward (+/- X)
+   - **A/D**: Left/Right (+/- Y) 
+   - **Q/E**: Down/Up (+/- Z)
+4. **Wrist Control**: **Left/Right arrows** for wrist roll
+5. **Gripper Control**: **Space** to toggle gripper open/closed
+6. **Exit**: **ESC** to stop the system
+
+## Architecture
+
+### Directory Structure
+
+```
+teleop/                     # Main Python package
+├── __init__.py            # Package initialization
+├── __main__.py            # Module entry point
+├── main.py                # Main system coordinator
+├── config.py              # Configuration and constants
+├── control_loop.py        # Main control loop
+├── core/                  # Core robot functionality
+│   ├── robot_interface.py # Robot control wrapper
+│   ├── kinematics.py      # IK/FK utilities
+│   └── visualizer.py      # PyBullet visualization
+└── inputs/                # Input providers
+    ├── base.py            # Base classes and data structures
+    ├── vr_ws_server.py    # VR WebSocket server
+    └── keyboard_listener.py # Keyboard input handler
+
+webapp/                    # Web application files
+├── index.html            # VR interface HTML
+└── app.js                # VR controller JavaScript
+```
+
+### Component Communication
+
+```mermaid
+graph TD
+    A[VR Controllers] --> B[WebSocket Server]
+    C[Keyboard] --> D[Keyboard Listener]
+    B --> E[Command Queue]
+    D --> E
+    E --> F[Control Loop]
+    F --> G[Robot Interface]
+    F --> H[PyBullet Visualizer]
+    G --> I[SO100 Robot Hardware]
+    H --> J[3D Visualization]
+```
+
+### Control Flow
+
+1. **Input Providers** (VR/Keyboard) generate `ControlGoal` messages
+2. **Command Queue** buffers goals for processing
+3. **Control Loop** consumes goals and executes them:
+   - Converts position goals to IK solutions
+   - Updates robot arm angles with safety clamping
+   - Sends commands to robot hardware
+   - Updates 3D visualization
+4. **Robot Interface** manages hardware communication and safety
+
+### Data Structures
+
+**ControlGoal**: High-level control command
+```python
+@dataclass
+class ControlGoal:
+    arm: Literal["left", "right"]           # Target arm
+    mode: ControlMode                       # POSITION_CONTROL or IDLE
+    target_position: Optional[np.ndarray]   # 3D position (robot coordinates)
+    wrist_roll_deg: Optional[float]         # Wrist roll angle
+    gripper_closed: Optional[bool]          # Gripper state
+    metadata: Optional[Dict]                # Additional data
+```
+
+## Configuration
+
+### Robot Configuration
+
+- **Joint Names**: `["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]`
+- **IK Joints**: First 4 joints used for position control
+- **Direct Control**: Wrist roll and gripper controlled directly
+- **Safety**: Joint limits read from URDF and enforced
+
+### Network Configuration
+
+- **HTTPS Port**: 8443 (web interface)
+- **WebSocket Port**: 8442 (VR controllers)  
+- **Host**: 0.0.0.0 (all interfaces)
+
+### Coordinate Systems
+
+- **VR**: X=right, Y=up, Z=back (toward user)
+- **Robot**: X=forward, Y=left, Z=up
+- **Transformation**: Handled automatically in kinematics module
+
+## Troubleshooting
+
+### Common Issues
+
+**Robot Connection Failed**:
+- Check USB-serial device permissions: `sudo chmod 666 /dev/ttySO100*`
+- Verify port names match actual devices
+- Try running with `--no-robot` for testing
+
+**VR Controllers Not Connecting**:
+- Ensure Quest and robot are on same network
+- Check SSL certificates exist (`cert.pem`, `key.pem`)
+- Try accessing web interface directly in browser first
+
+**PyBullet Visualization Issues**:
+- Install PyBullet: `pip install pybullet`
+- Try headless mode: `--no-viz`
+- Check URDF file exists at specified path
+
+**Keyboard Input Not Working**:
+- Run with appropriate permissions for input access
+- Check terminal has focus for key events
+- Try `--no-keyboard` to isolate issue
+
+### Debug Modes
+
+**Verbose Logging**:
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+**Component Isolation**:
+- Test individual components with disable flags
+- Check component status in logs
+- Verify queue communication
+
+## Development
+
+### Adding New Input Methods
+
+1. Create new input provider inheriting from `BaseInputProvider`
+2. Implement `start()`, `stop()`, and command generation
+3. Add to `TeleopSystem` initialization
+4. Configure via command line arguments
+
+### Extending Robot Interface
+
+1. Add new methods to `RobotInterface`
+2. Update `ControlGoal` data structure if needed
+3. Modify control loop execution logic
+4. Test with `--no-robot` mode first
+
+### Custom Visualization
+
+1. Extend `PyBulletVisualizer` class
+2. Add new marker types or coordinate frames
+3. Update visualization calls in control loop
+
+## Safety Notes
+
+- **Emergency Stop**: Press Ctrl+C for graceful shutdown
+- **Joint Limits**: Automatically enforced from URDF
+- **Initial Position**: Robot returns to safe position on shutdown
+- **Torque Disable**: Motors disabled during shutdown sequence
+- **Error Handling**: System continues running if non-critical components fail
+
+## License
+
+This project is part of the SO100 robot teleoperation research. See individual component licenses for details. 

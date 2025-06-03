@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Quest 3 Passthrough Controllers</title>
+    <meta name="description" content="Display Quest 3 controllers in passthrough with position/rotation data.">
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a-scene vr-mode-ui="enabled: false;">
+
+      <!-- Passthrough setup -->
+      <a-entity webxr-passthrough="referenceSpaceType: local-floor"></a-entity>
+
+      <!-- Controllers -->
+      <a-entity id="leftHand" oculus-touch-controls="hand: left">
+        <a-text id="leftHandInfo" value="Pos: ...\nRot: ..." position="0 0.04 -0.05" rotation="0 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+      </a-entity>
+      <a-entity id="rightHand" oculus-touch-controls="hand: right">
+        <a-text id="rightHandInfo" value="Pos: ...\nRot: ..." position="0 0.04 -0.05" rotation="0 0 0" scale="0.05 0.05 0.05" color="white" align="center"></a-text>
+      </a-entity>
+
+    </a-scene>
+  </body>
+</html> 

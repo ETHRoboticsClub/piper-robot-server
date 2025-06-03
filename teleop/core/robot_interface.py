@@ -1,0 +1,297 @@
+"""
+Robot interface module for the SO100 teleoperation system.
+Provides a clean wrapper around ManipulatorRobot with safety checks and convenience methods.
+"""
+
+import numpy as np
+import torch
+import time
+import logging
+from typing import Optional, Dict, Tuple
+
+from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
+from lerobot.common.robot_devices.robots.configs import So100RobotConfig
+from lerobot.common.robot_devices.motors.configs import FeetechMotorsBusConfig
+from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
+
+from ..config import (
+    TeleopConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
+    GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE
+)
+from .kinematics import ForwardKinematics, IKSolver
+
+logger = logging.getLogger(__name__)
+
+
+class RobotInterface:
+    """High-level interface for SO100 robot control with safety features."""
+    
+    def __init__(self, config: TeleopConfig):
+        self.config = config
+        self.robot = None
+        self.is_connected = False
+        
+        # Joint state
+        self.left_arm_angles = np.zeros(NUM_JOINTS)
+        self.right_arm_angles = np.zeros(NUM_JOINTS)
+        
+        # Joint limits (will be set by visualizer)
+        self.joint_limits_min_deg = np.full(NUM_JOINTS, -180.0)
+        self.joint_limits_max_deg = np.full(NUM_JOINTS, 180.0)
+        
+        # Kinematics solvers (will be set after PyBullet setup)
+        self.fk_solver = None
+        self.ik_solver = None
+        
+        # Control timing
+        self.last_send_time = 0
+        
+        # Initial positions for safe shutdown
+        self.initial_left_arm = np.array([1.7578125, 185.09766, 175.3418, 72.1582, 3.6914062, 0.3358522])
+        self.initial_right_arm = np.array([-9.316406, 193.27148, 181.05469, 72.77344, -4.0429688, 0.8780488])
+    
+    def setup_robot_config(self) -> So100RobotConfig:
+        """Create robot configuration based on current settings."""
+        return So100RobotConfig(
+            follower_arms={
+                "left": FeetechMotorsBusConfig(port=self.config.follower_ports["left"], motors=COMMON_MOTORS.copy()),
+                "right": FeetechMotorsBusConfig(port=self.config.follower_ports["right"], motors=COMMON_MOTORS.copy())
+            },
+            cameras={}
+        )
+    
+    def connect(self) -> bool:
+        """Connect to the robot."""
+        if not self.config.enable_robot:
+            logger.info("Robot disabled in configuration")
+            return False
+        
+        try:
+            robot_config = self.setup_robot_config()
+            logger.info("Connecting to robot...")
+            self.robot = ManipulatorRobot(robot_config)
+            self.robot.connect()
+            self.is_connected = True
+            logger.info("✅ Robot connected successfully")
+            
+            # Read initial state
+            self._read_initial_state()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to connect to robot: {e}")
+            self.is_connected = False
+            return False
+    
+    def _read_initial_state(self):
+        """Read initial joint state from robot."""
+        try:
+            observation = self.robot.capture_observation()
+            if observation and "observation.state" in observation:
+                initial_state = observation["observation.state"].cpu().numpy()
+                logger.info(f"Initial joint state shape: {initial_state.shape}")
+                logger.info(f"Initial joint state values: {initial_state}")
+                
+                if len(initial_state) == NUM_JOINTS * 2:  # Dual arm configuration
+                    self.left_arm_angles = initial_state[:NUM_JOINTS].copy()
+                    self.right_arm_angles = initial_state[NUM_JOINTS:].copy()
+                    logger.info(f"Left arm initial: {self.left_arm_angles.round(1)}")
+                    logger.info(f"Right arm initial: {self.right_arm_angles.round(1)}")
+                elif len(initial_state) == NUM_JOINTS:  # Single arm
+                    self.left_arm_angles = initial_state.copy()
+                    self.right_arm_angles = initial_state.copy()
+                    logger.info(f"Single arm state used for both: {initial_state.round(1)}")
+                else:
+                    logger.warning(f"Unexpected state length {len(initial_state)}, using defaults")
+                    
+        except Exception as e:
+            logger.warning(f"Could not read initial robot state: {e}")
+    
+    def setup_kinematics(self, physics_client, robot_id: int, joint_indices: list, 
+                        end_effector_link_index: int, joint_limits_min_deg: np.ndarray, 
+                        joint_limits_max_deg: np.ndarray):
+        """Setup kinematics solvers using PyBullet components."""
+        self.joint_limits_min_deg = joint_limits_min_deg.copy()
+        self.joint_limits_max_deg = joint_limits_max_deg.copy()
+        
+        self.fk_solver = ForwardKinematics(
+            physics_client, robot_id, joint_indices, end_effector_link_index
+        )
+        
+        self.ik_solver = IKSolver(
+            physics_client, robot_id, joint_indices, end_effector_link_index,
+            joint_limits_min_deg, joint_limits_max_deg
+        )
+        
+        logger.info("Kinematics solvers initialized")
+    
+    def get_current_end_effector_position(self, arm: str) -> np.ndarray:
+        """Get current end effector position for specified arm."""
+        if arm == "left":
+            angles = self.left_arm_angles
+        elif arm == "right":
+            angles = self.right_arm_angles
+        else:
+            raise ValueError(f"Invalid arm: {arm}")
+        
+        if self.fk_solver:
+            position, _ = self.fk_solver.compute(angles)
+            return position
+        else:
+            return np.array([0.2, 0.0, 0.15])  # Default position
+    
+    def solve_ik(self, arm: str, target_position: np.ndarray, 
+                 target_orientation: Optional[np.ndarray] = None) -> np.ndarray:
+        """Solve inverse kinematics for specified arm."""
+        if arm == "left":
+            current_angles = self.left_arm_angles
+        elif arm == "right":
+            current_angles = self.right_arm_angles
+        else:
+            raise ValueError(f"Invalid arm: {arm}")
+        
+        if self.ik_solver:
+            return self.ik_solver.solve(target_position, target_orientation, current_angles)
+        else:
+            return current_angles[:4]  # Return current angles if no IK solver
+    
+    def clamp_joint_angles(self, joint_angles: np.ndarray) -> np.ndarray:
+        """Clamp joint angles to safe limits."""
+        return np.clip(joint_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
+    
+    def update_arm_angles(self, arm: str, ik_angles: np.ndarray, wrist_roll: float, gripper: float):
+        """Update joint angles for specified arm with IK solution and direct wrist/gripper control."""
+        if arm == "left":
+            target_angles = self.left_arm_angles
+        elif arm == "right":
+            target_angles = self.right_arm_angles
+        else:
+            raise ValueError(f"Invalid arm: {arm}")
+        
+        # Update first 4 joints with IK solution
+        target_angles[:4] = ik_angles
+        target_angles[4] = wrist_roll  # wrist_roll
+        target_angles[5] = gripper     # gripper
+        
+        # Clamp to limits
+        clamped_angles = self.clamp_joint_angles(target_angles)
+        
+        # Preserve gripper control (don't clamp gripper if it was set intentionally)
+        clamped_angles[5] = target_angles[5]
+        
+        if arm == "left":
+            self.left_arm_angles = clamped_angles
+        else:
+            self.right_arm_angles = clamped_angles
+    
+    def send_command(self) -> bool:
+        """Send current joint angles to robot."""
+        if not self.is_connected or not self.robot:
+            return False
+        
+        current_time = time.time()
+        if current_time - self.last_send_time < self.config.send_interval:
+            return False
+        
+        try:
+            # Create concatenated command for dual arm robot
+            concatenated_angles = np.concatenate([self.left_arm_angles, self.right_arm_angles])
+            action_tensor = torch.from_numpy(concatenated_angles).float()
+            
+            self.robot.send_action(action_tensor)
+            self.last_send_time = current_time
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error sending robot command: {e}")
+            return False
+    
+    def set_gripper(self, arm: str, closed: bool):
+        """Set gripper state for specified arm."""
+        angle = GRIPPER_CLOSED_ANGLE if closed else GRIPPER_OPEN_ANGLE
+        
+        if arm == "left":
+            self.left_arm_angles[5] = angle
+        elif arm == "right":
+            self.right_arm_angles[5] = angle
+        else:
+            raise ValueError(f"Invalid arm: {arm}")
+    
+    def get_arm_angles(self, arm: str) -> np.ndarray:
+        """Get current joint angles for specified arm."""
+        if arm == "left":
+            return self.left_arm_angles.copy()
+        elif arm == "right":
+            return self.right_arm_angles.copy()
+        else:
+            raise ValueError(f"Invalid arm: {arm}")
+    
+    def return_to_initial_position(self):
+        """Move robot arms back to initial positions."""
+        if not self.is_connected:
+            return
+        
+        try:
+            logger.info("🏠 Moving robot arms back to initial positions...")
+            
+            # Set to initial positions
+            self.left_arm_angles = self.initial_left_arm.copy()
+            self.right_arm_angles = self.initial_right_arm.copy()
+            
+            # Send command
+            self.send_command()
+            logger.info("🏠 Commanded return to initial positions")
+            
+            # Wait for movement
+            time.sleep(1.0)
+            
+        except Exception as e:
+            logger.error(f"Error moving to initial position: {e}")
+    
+    def disable_torque(self):
+        """Disable torque on all robot joints."""
+        if not self.is_connected or not self.robot:
+            return
+        
+        try:
+            logger.info("Disabling torque on follower motors...")
+            if hasattr(self.robot, 'follower_arms'):
+                for arm_name, arm in self.robot.follower_arms.items():
+                    try:
+                        arm.write("Torque_Enable", 0)
+                        logger.info(f"Disabled torque on arm: {arm_name}")
+                    except Exception as e:
+                        logger.warning(f"Could not disable torque on arm {arm_name}: {e}")
+        except Exception as e:
+            logger.error(f"Error disabling torque: {e}")
+    
+    def disconnect(self):
+        """Disconnect from robot."""
+        if not self.is_connected:
+            return
+        
+        try:
+            # Return to safe position first
+            self.return_to_initial_position()
+            
+            # Disable torque
+            self.disable_torque()
+            
+            # Disconnect
+            self.robot.disconnect()
+            self.is_connected = False
+            logger.info("Robot disconnected")
+            
+        except Exception as e:
+            logger.error(f"Error disconnecting robot: {e}")
+    
+    @property
+    def status(self) -> Dict:
+        """Get robot status information."""
+        return {
+            "connected": self.is_connected,
+            "left_arm_angles": self.left_arm_angles.tolist(),
+            "right_arm_angles": self.right_arm_angles.tolist(),
+            "joint_limits_min": self.joint_limits_min_deg.tolist(),
+            "joint_limits_max": self.joint_limits_max_deg.tolist(),
+        } 
