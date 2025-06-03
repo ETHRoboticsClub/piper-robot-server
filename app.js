@@ -16,6 +16,19 @@ AFRAME.registerComponent('controller-updater', {
     this.rightGripDown = false;
     this.leftTriggerDown = false;
     this.rightTriggerDown = false;
+
+    // --- Relative rotation tracking ---
+    this.leftGripInitialRotation = null;
+    this.rightGripInitialRotation = null;
+    this.leftRelativeRotation = { x: 0, y: 0, z: 0 };
+    this.rightRelativeRotation = { x: 0, y: 0, z: 0 };
+
+    // --- Quaternion-based Z-axis rotation tracking ---
+    this.leftGripInitialQuaternion = null;
+    this.rightGripInitialQuaternion = null;
+    this.leftZAxisRotation = 0;
+    this.rightZAxisRotation = 0;
+
     // --- Get hostname dynamically ---
     const serverHostname = window.location.hostname;
     const websocketPort = 8442; // Make sure this matches controller_server.py
@@ -63,6 +76,9 @@ AFRAME.registerComponent('controller-updater', {
     if (this.leftHandInfoText) this.leftHandInfoText.setAttribute('rotation', textRotation);
     if (this.rightHandInfoText) this.rightHandInfoText.setAttribute('rotation', textRotation);
 
+    // --- Create axis indicators ---
+    this.createAxisIndicators();
+
     // --- Helper function to send grip release message ---
     this.sendGripRelease = (hand) => {
       if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
@@ -73,6 +89,58 @@ AFRAME.registerComponent('controller-updater', {
         this.websocket.send(JSON.stringify(releaseMessage));
         console.log(`Sent grip release for ${hand} hand`);
       }
+    };
+
+    // --- Helper function to calculate relative rotation ---
+    this.calculateRelativeRotation = (currentRotation, initialRotation) => {
+      return {
+        x: currentRotation.x - initialRotation.x,
+        y: currentRotation.y - initialRotation.y,
+        z: currentRotation.z - initialRotation.z
+      };
+    };
+
+    // --- Helper function to calculate Z-axis rotation from quaternions ---
+    this.calculateZAxisRotation = (currentQuaternion, initialQuaternion) => {
+      // Calculate relative quaternion (from initial to current)
+      const relativeQuat = new THREE.Quaternion();
+      relativeQuat.multiplyQuaternions(currentQuaternion, initialQuaternion.clone().invert());
+      
+      // Get the controller's current forward direction (local Z-axis in world space)
+      const forwardDirection = new THREE.Vector3(0, 0, 1);
+      forwardDirection.applyQuaternion(currentQuaternion);
+      
+      // Convert relative quaternion to axis-angle representation
+      const angle = 2 * Math.acos(Math.abs(relativeQuat.w));
+      
+      // Handle case where there's no rotation (avoid division by zero)
+      if (angle < 0.0001) {
+        return 0;
+      }
+      
+      // Get the rotation axis
+      const sinHalfAngle = Math.sqrt(1 - relativeQuat.w * relativeQuat.w);
+      const rotationAxis = new THREE.Vector3(
+        relativeQuat.x / sinHalfAngle,
+        relativeQuat.y / sinHalfAngle,
+        relativeQuat.z / sinHalfAngle
+      );
+      
+      // Project the rotation axis onto the forward direction to get the component
+      // of rotation around the forward axis
+      const projectedComponent = rotationAxis.dot(forwardDirection);
+      
+      // The rotation around the forward axis is the angle times the projection
+      const forwardRotation = angle * projectedComponent;
+      
+      // Convert to degrees and handle the sign properly
+      let degrees = THREE.MathUtils.radToDeg(forwardRotation);
+      
+      // Normalize to -180 to +180 range to avoid sudden jumps
+      while (degrees > 180) degrees -= 360;
+      while (degrees < -180) degrees += 360;
+      
+      return degrees;
     };
 
     // --- Modify Event Listeners ---
@@ -87,10 +155,30 @@ AFRAME.registerComponent('controller-updater', {
     this.leftHand.addEventListener('gripdown', (evt) => {
         console.log('Left Grip Pressed');
         this.leftGripDown = true; // Set grip state
+        
+        // Store initial rotation for relative tracking
+        if (this.leftHand.object3D.visible) {
+          const leftRotEuler = this.leftHand.object3D.rotation;
+          this.leftGripInitialRotation = {
+            x: THREE.MathUtils.radToDeg(leftRotEuler.x),
+            y: THREE.MathUtils.radToDeg(leftRotEuler.y),
+            z: THREE.MathUtils.radToDeg(leftRotEuler.z)
+          };
+          
+          // Store initial quaternion for Z-axis rotation tracking
+          this.leftGripInitialQuaternion = this.leftHand.object3D.quaternion.clone();
+          
+          console.log('Left grip initial rotation:', this.leftGripInitialRotation);
+          console.log('Left grip initial quaternion:', this.leftGripInitialQuaternion);
+        }
     });
     this.leftHand.addEventListener('gripup', (evt) => { // Add gripup listener
         console.log('Left Grip Released');
         this.leftGripDown = false; // Reset grip state
+        this.leftGripInitialRotation = null; // Reset initial rotation
+        this.leftGripInitialQuaternion = null; // Reset initial quaternion
+        this.leftRelativeRotation = { x: 0, y: 0, z: 0 }; // Reset relative rotation
+        this.leftZAxisRotation = 0; // Reset Z-axis rotation
         this.sendGripRelease('left'); // Send grip release message
     });
 
@@ -105,14 +193,154 @@ AFRAME.registerComponent('controller-updater', {
     this.rightHand.addEventListener('gripdown', (evt) => {
         console.log('Right Grip Pressed');
         this.rightGripDown = true; // Set grip state
+        
+        // Store initial rotation for relative tracking
+        if (this.rightHand.object3D.visible) {
+          const rightRotEuler = this.rightHand.object3D.rotation;
+          this.rightGripInitialRotation = {
+            x: THREE.MathUtils.radToDeg(rightRotEuler.x),
+            y: THREE.MathUtils.radToDeg(rightRotEuler.y),
+            z: THREE.MathUtils.radToDeg(rightRotEuler.z)
+          };
+          
+          // Store initial quaternion for Z-axis rotation tracking
+          this.rightGripInitialQuaternion = this.rightHand.object3D.quaternion.clone();
+          
+          console.log('Right grip initial rotation:', this.rightGripInitialRotation);
+          console.log('Right grip initial quaternion:', this.rightGripInitialQuaternion);
+        }
     });
     this.rightHand.addEventListener('gripup', (evt) => { // Add gripup listener
         console.log('Right Grip Released');
         this.rightGripDown = false; // Reset grip state
+        this.rightGripInitialRotation = null; // Reset initial rotation
+        this.rightGripInitialQuaternion = null; // Reset initial quaternion
+        this.rightRelativeRotation = { x: 0, y: 0, z: 0 }; // Reset relative rotation
+        this.rightZAxisRotation = 0; // Reset Z-axis rotation
         this.sendGripRelease('right'); // Send grip release message
     });
     // --- End Modify Event Listeners ---
 
+  },
+
+  createAxisIndicators: function() {
+    // Create XYZ axis indicators for both controllers
+    
+    // Left Controller Axes
+    // X-axis (Red)
+    const leftXAxis = document.createElement('a-cylinder');
+    leftXAxis.setAttribute('id', 'leftXAxis');
+    leftXAxis.setAttribute('height', '0.08');
+    leftXAxis.setAttribute('radius', '0.003');
+    leftXAxis.setAttribute('color', '#ff0000'); // Red for X
+    leftXAxis.setAttribute('position', '0.04 0 0');
+    leftXAxis.setAttribute('rotation', '0 0 90'); // Rotate to point along X-axis
+    this.leftHand.appendChild(leftXAxis);
+
+    const leftXTip = document.createElement('a-cone');
+    leftXTip.setAttribute('height', '0.015');
+    leftXTip.setAttribute('radius-bottom', '0.008');
+    leftXTip.setAttribute('radius-top', '0');
+    leftXTip.setAttribute('color', '#ff0000');
+    leftXTip.setAttribute('position', '0.055 0 0');
+    leftXTip.setAttribute('rotation', '0 0 90');
+    this.leftHand.appendChild(leftXTip);
+
+    // Y-axis (Green) - Up
+    const leftYAxis = document.createElement('a-cylinder');
+    leftYAxis.setAttribute('id', 'leftYAxis');
+    leftYAxis.setAttribute('height', '0.08');
+    leftYAxis.setAttribute('radius', '0.003');
+    leftYAxis.setAttribute('color', '#00ff00'); // Green for Y
+    leftYAxis.setAttribute('position', '0 0.04 0');
+    leftYAxis.setAttribute('rotation', '0 0 0'); // Default up orientation
+    this.leftHand.appendChild(leftYAxis);
+
+    const leftYTip = document.createElement('a-cone');
+    leftYTip.setAttribute('height', '0.015');
+    leftYTip.setAttribute('radius-bottom', '0.008');
+    leftYTip.setAttribute('radius-top', '0');
+    leftYTip.setAttribute('color', '#00ff00');
+    leftYTip.setAttribute('position', '0 0.055 0');
+    this.leftHand.appendChild(leftYTip);
+
+    // Z-axis (Blue) - Forward
+    const leftZAxis = document.createElement('a-cylinder');
+    leftZAxis.setAttribute('id', 'leftZAxis');
+    leftZAxis.setAttribute('height', '0.08');
+    leftZAxis.setAttribute('radius', '0.003');
+    leftZAxis.setAttribute('color', '#0000ff'); // Blue for Z
+    leftZAxis.setAttribute('position', '0 0 0.04');
+    leftZAxis.setAttribute('rotation', '90 0 0'); // Rotate to point along Z-axis
+    this.leftHand.appendChild(leftZAxis);
+
+    const leftZTip = document.createElement('a-cone');
+    leftZTip.setAttribute('height', '0.015');
+    leftZTip.setAttribute('radius-bottom', '0.008');
+    leftZTip.setAttribute('radius-top', '0');
+    leftZTip.setAttribute('color', '#0000ff');
+    leftZTip.setAttribute('position', '0 0 0.055');
+    leftZTip.setAttribute('rotation', '90 0 0');
+    this.leftHand.appendChild(leftZTip);
+
+    // Right Controller Axes
+    // X-axis (Red)
+    const rightXAxis = document.createElement('a-cylinder');
+    rightXAxis.setAttribute('id', 'rightXAxis');
+    rightXAxis.setAttribute('height', '0.08');
+    rightXAxis.setAttribute('radius', '0.003');
+    rightXAxis.setAttribute('color', '#ff0000'); // Red for X
+    rightXAxis.setAttribute('position', '0.04 0 0');
+    rightXAxis.setAttribute('rotation', '0 0 90'); // Rotate to point along X-axis
+    this.rightHand.appendChild(rightXAxis);
+
+    const rightXTip = document.createElement('a-cone');
+    rightXTip.setAttribute('height', '0.015');
+    rightXTip.setAttribute('radius-bottom', '0.008');
+    rightXTip.setAttribute('radius-top', '0');
+    rightXTip.setAttribute('color', '#ff0000');
+    rightXTip.setAttribute('position', '0.055 0 0');
+    rightXTip.setAttribute('rotation', '0 0 90');
+    this.rightHand.appendChild(rightXTip);
+
+    // Y-axis (Green) - Up
+    const rightYAxis = document.createElement('a-cylinder');
+    rightYAxis.setAttribute('id', 'rightYAxis');
+    rightYAxis.setAttribute('height', '0.08');
+    rightYAxis.setAttribute('radius', '0.003');
+    rightYAxis.setAttribute('color', '#00ff00'); // Green for Y
+    rightYAxis.setAttribute('position', '0 0.04 0');
+    rightYAxis.setAttribute('rotation', '0 0 0'); // Default up orientation
+    this.rightHand.appendChild(rightYAxis);
+
+    const rightYTip = document.createElement('a-cone');
+    rightYTip.setAttribute('height', '0.015');
+    rightYTip.setAttribute('radius-bottom', '0.008');
+    rightYTip.setAttribute('radius-top', '0');
+    rightYTip.setAttribute('color', '#00ff00');
+    rightYTip.setAttribute('position', '0 0.055 0');
+    this.rightHand.appendChild(rightYTip);
+
+    // Z-axis (Blue) - Forward
+    const rightZAxis = document.createElement('a-cylinder');
+    rightZAxis.setAttribute('id', 'rightZAxis');
+    rightZAxis.setAttribute('height', '0.08');
+    rightZAxis.setAttribute('radius', '0.003');
+    rightZAxis.setAttribute('color', '#0000ff'); // Blue for Z
+    rightZAxis.setAttribute('position', '0 0 0.04');
+    rightZAxis.setAttribute('rotation', '90 0 0'); // Rotate to point along Z-axis
+    this.rightHand.appendChild(rightZAxis);
+
+    const rightZTip = document.createElement('a-cone');
+    rightZTip.setAttribute('height', '0.015');
+    rightZTip.setAttribute('radius-bottom', '0.008');
+    rightZTip.setAttribute('radius-top', '0');
+    rightZTip.setAttribute('color', '#0000ff');
+    rightZTip.setAttribute('position', '0 0 0.055');
+    rightZTip.setAttribute('rotation', '90 0 0');
+    this.rightHand.appendChild(rightZTip);
+
+    console.log('XYZ axis indicators created for both controllers (RGB for XYZ)');
   },
 
   tick: function () {
@@ -153,7 +381,32 @@ AFRAME.registerComponent('controller-updater', {
         const leftRotX = THREE.MathUtils.radToDeg(leftRotEuler.x);
         const leftRotY = THREE.MathUtils.radToDeg(leftRotEuler.y);
         const leftRotZ = THREE.MathUtils.radToDeg(leftRotEuler.z);
-        const combinedLeftText = `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(2)} ${leftPos.z.toFixed(2)}\\nRot: ${leftRotX.toFixed(0)} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`;
+
+        // Calculate relative rotation if grip is held
+        if (this.leftGripDown && this.leftGripInitialRotation) {
+          this.leftRelativeRotation = this.calculateRelativeRotation(
+            { x: leftRotX, y: leftRotY, z: leftRotZ },
+            this.leftGripInitialRotation
+          );
+          
+          // Calculate Z-axis rotation using quaternions
+          if (this.leftGripInitialQuaternion) {
+            this.leftZAxisRotation = this.calculateZAxisRotation(
+              this.leftHand.object3D.quaternion,
+              this.leftGripInitialQuaternion
+            );
+          }
+          
+          console.log('Left relative rotation:', this.leftRelativeRotation);
+          console.log('Left Z-axis rotation:', this.leftZAxisRotation.toFixed(1), 'degrees');
+        }
+
+        // Create display text including relative rotation when grip is held
+        let combinedLeftText = `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(2)} ${leftPos.z.toFixed(2)}\\nRot: ${leftRotX.toFixed(0)} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`;
+        if (this.leftGripDown && this.leftGripInitialRotation) {
+          combinedLeftText += `\\nZ-Rot: ${this.leftZAxisRotation.toFixed(1)}°`;
+        }
+
         if (this.leftHandInfoText) {
             this.leftHandInfoText.setAttribute('value', combinedLeftText);
         }
@@ -173,7 +426,32 @@ AFRAME.registerComponent('controller-updater', {
         const rightRotX = THREE.MathUtils.radToDeg(rightRotEuler.x);
         const rightRotY = THREE.MathUtils.radToDeg(rightRotEuler.y);
         const rightRotZ = THREE.MathUtils.radToDeg(rightRotEuler.z);
-        const combinedRightText = `Pos: ${rightPos.x.toFixed(2)} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(2)}\\nRot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(0)} ${rightRotZ.toFixed(0)}`;
+
+        // Calculate relative rotation if grip is held
+        if (this.rightGripDown && this.rightGripInitialRotation) {
+          this.rightRelativeRotation = this.calculateRelativeRotation(
+            { x: rightRotX, y: rightRotY, z: rightRotZ },
+            this.rightGripInitialRotation
+          );
+          
+          // Calculate Z-axis rotation using quaternions
+          if (this.rightGripInitialQuaternion) {
+            this.rightZAxisRotation = this.calculateZAxisRotation(
+              this.rightHand.object3D.quaternion,
+              this.rightGripInitialQuaternion
+            );
+          }
+          
+          console.log('Right relative rotation:', this.rightRelativeRotation);
+          console.log('Right Z-axis rotation:', this.rightZAxisRotation.toFixed(1), 'degrees');
+        }
+
+        // Create display text including relative rotation when grip is held
+        let combinedRightText = `Pos: ${rightPos.x.toFixed(2)} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(2)}\\nRot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(0)} ${rightRotZ.toFixed(0)}`;
+        if (this.rightGripDown && this.rightGripInitialRotation) {
+          combinedRightText += `\\nZ-Rot: ${this.rightZAxisRotation.toFixed(1)}°`;
+        }
+
         if (this.rightHandInfoText) {
             this.rightHandInfoText.setAttribute('value', combinedRightText);
         }

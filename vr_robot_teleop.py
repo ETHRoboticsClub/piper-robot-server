@@ -34,14 +34,14 @@ SEND_INTERVAL = 0.05     # Send robot commands every 50ms (20Hz)
 POSITION_SMOOTHING = 0.1 # Smoothing factor for position updates (0=no smoothing, 1=full smoothing)
 
 # IK Configuration
-USE_ORIENTATION_CONTROL = True   # Enable/disable orientation control in IK
+USE_ORIENTATION_CONTROL = False  # Enable/disable orientation control in IK
 
 # PyBullet Visualization Markers:
 # - Red sphere: Left arm current end effector position
 # - Blue sphere: Right arm current end effector position  
 # - Green sphere: Left arm goal end effector position (from VR controller)
 # - Yellow sphere: Right arm goal end effector position (from VR controller)
-# Note: IK uses soft orientation constraints via joint damping (preferred, not forced)
+# Note: IK uses position-only control for 4-DOF arm movement
 
 # Joint configuration
 common_motors = {
@@ -55,7 +55,7 @@ common_motors = {
 
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 NUM_JOINTS = len(JOINT_NAMES)
-NUM_IK_JOINTS = 5  # Include wrist_roll for proper orientation control
+NUM_IK_JOINTS = 4  # Use only first 4 joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
@@ -82,18 +82,18 @@ class VRTeleopState:
         self.right_grip_active = False
         self.left_origin_position = None  # VR position when grip was first pressed
         self.right_origin_position = None
-        self.left_origin_rotation = None  # VR rotation when grip was first pressed
+        
+        # VR Controller rotation tracking
+        self.left_origin_rotation = None  # VR rotation quaternion when grip was first pressed
         self.right_origin_rotation = None
+        self.left_z_axis_rotation = 0.0   # Relative rotation around forward axis in degrees
+        self.right_z_axis_rotation = 0.0
+        self.left_origin_wrist_angle = 0.0  # Robot's wrist_roll angle when grip was pressed
+        self.right_origin_wrist_angle = 0.0
         
         # Current goal states for visualization
         self.left_goal_position = None
         self.right_goal_position = None
-        self.left_goal_orientation_quat = None  # Goal orientation as quaternion
-        self.right_goal_orientation_quat = None
-        
-        # Baseline orientations when grip is activated
-        self.left_arm_origin_orientation = None  # Robot orientation when grip was pressed
-        self.right_arm_origin_orientation = None
         
         # Robot arm states (current joint angles) - now both are followers
         self.left_arm_joint_angles = np.zeros(NUM_JOINTS)   # Left follower arm
@@ -277,7 +277,7 @@ def compute_relative_position(current_vr_pos: Dict[str, float], origin_vr_pos: D
 
 # --- Robot Control ---
 def compute_ik(target_position: np.ndarray, target_orientation_quat: Optional[np.ndarray], current_angles: np.ndarray) -> np.ndarray:
-    """Compute inverse kinematics with soft orientation preferences using advanced PyBullet parameters."""
+    """Compute inverse kinematics for position-only control using 4 joints."""
     if state.physics_client is None or state.robot_id is None:
         return current_angles[:NUM_IK_JOINTS]
     
@@ -288,47 +288,40 @@ def compute_ik(target_position: np.ndarray, target_orientation_quat: Optional[np
             p.resetJointState(state.robot_id, state.p_joint_indices[i], current_angles_rad[i])
     
     try:
+        # Use only first 4 joints for IK (exclude wrist_roll and gripper)
         ik_lower = np.deg2rad(state.joint_limits_min_deg[:NUM_IK_JOINTS])
         ik_upper = np.deg2rad(state.joint_limits_max_deg[:NUM_IK_JOINTS])
         ik_ranges = ik_upper - ik_lower
         
-        # Rest poses for natural arm configuration
+        # Rest poses for natural 4-DOF arm configuration
         rest_poses = [0.0] * NUM_IK_JOINTS
         rest_poses[0] = 0.0        # shoulder_pan neutral
         rest_poses[1] = math.pi/2  # shoulder_lift pointing forward
         rest_poses[2] = math.pi/4  # elbow_flex slightly bent
         rest_poses[3] = 0.0        # wrist_flex neutral
-        rest_poses[4] = 0.0        # wrist_roll neutral
         
-        if target_orientation_quat is not None and USE_ORIENTATION_CONTROL:
-            # Use quaternion directly for IK
-            ik_solution = p.calculateInverseKinematics(
-                bodyUniqueId=state.robot_id,
-                endEffectorLinkIndex=state.end_effector_link_index,
-                targetPosition=target_position.tolist(),
-                targetOrientation=target_orientation_quat.tolist(),
-                lowerLimits=ik_lower.tolist(),
-                upperLimits=ik_upper.tolist(),
-                jointRanges=ik_ranges.tolist(),
-                restPoses=rest_poses,
-                solver=0,                                      # 0 = DLS (Damped Least Squares)
-                maxNumIterations=50,                          # Fewer iterations for softer convergence
-                residualThreshold=1e-3                        # Looser threshold allows partial solutions
-            )
-        else:
-            # Position-only IK with even softer constraints
-            ik_solution = p.calculateInverseKinematics(
-                bodyUniqueId=state.robot_id,
-                endEffectorLinkIndex=state.end_effector_link_index,
-                targetPosition=target_position.tolist(),
-                lowerLimits=ik_lower.tolist(),
-                upperLimits=ik_upper.tolist(),
-                jointRanges=ik_ranges.tolist(),
-                restPoses=rest_poses,
-                solver=0,
-                maxNumIterations=100,
-                residualThreshold=1e-4
-            )
+        # Joint damping for the 4 IK joints
+        # joint_damping = [
+        #     0.1,  # shoulder_pan: moderate
+        #     0.1,  # shoulder_lift: moderate  
+        #     0.1,  # elbow_flex: moderate
+        #     0.1,  # wrist_flex: moderate
+        # ]
+        
+        # Position-only IK (no orientation control)
+        ik_solution = p.calculateInverseKinematics(
+            bodyUniqueId=state.robot_id,
+            endEffectorLinkIndex=state.end_effector_link_index,
+            targetPosition=target_position.tolist(),
+            lowerLimits=ik_lower.tolist(),
+            upperLimits=ik_upper.tolist(),
+            jointRanges=ik_ranges.tolist(),
+            restPoses=rest_poses,
+            # jointDamping=joint_damping,
+            solver=0,                                # 0 = DLS (Damped Least Squares)
+            maxNumIterations=100,
+            residualThreshold=1e-4
+        )
         
         return np.rad2deg(ik_solution[:NUM_IK_JOINTS])
         
@@ -423,6 +416,61 @@ def process_controller_data(data: Dict):
     if hand and data.get('position'):
         process_single_controller(hand, data)
 
+def euler_to_quaternion(euler_deg: Dict[str, float]) -> np.ndarray:
+    """Convert Euler angles in degrees to quaternion [x, y, z, w]."""
+    # Convert degrees to radians
+    euler_rad = [math.radians(euler_deg['x']), math.radians(euler_deg['y']), math.radians(euler_deg['z'])]
+    
+    # Create rotation from Euler angles (XYZ order)
+    rotation = R.from_euler('xyz', euler_rad)
+    
+    # Return quaternion as [x, y, z, w]
+    return rotation.as_quat()
+
+def calculate_z_axis_rotation(current_quat: np.ndarray, initial_quat: np.ndarray) -> float:
+    """Calculate rotation around the local Z-axis (forward direction) in degrees."""
+    try:
+        # Create rotation objects
+        current_rot = R.from_quat(current_quat)
+        initial_rot = R.from_quat(initial_quat)
+        
+        # Calculate relative rotation (from initial to current)
+        relative_rot = current_rot * initial_rot.inv()
+        
+        # Get the controller's current forward direction (local Z-axis in world space)
+        forward_direction = current_rot.apply([0, 0, 1])
+        
+        # Convert relative rotation to axis-angle representation
+        angle_rad = relative_rot.magnitude()
+        
+        # Handle case where there's no rotation
+        if angle_rad < 0.0001:
+            return 0.0
+        
+        # Get the rotation axis
+        rotation_axis = relative_rot.as_rotvec() / angle_rad if angle_rad > 0 else np.array([0, 0, 1])
+        
+        # Project the rotation axis onto the forward direction
+        projected_component = np.dot(rotation_axis, forward_direction)
+        
+        # The rotation around the forward axis is the angle times the projection
+        forward_rotation_rad = angle_rad * projected_component
+        
+        # Convert to degrees
+        degrees = math.degrees(forward_rotation_rad)
+        
+        # Normalize to -180 to +180 range to avoid sudden jumps
+        while degrees > 180:
+            degrees -= 360
+        while degrees < -180:
+            degrees += 360
+        
+        return degrees
+        
+    except Exception as e:
+        logger.warning(f"Error calculating Z-axis rotation: {e}")
+        return 0.0
+
 def process_single_controller(hand: str, data: Dict):
     """Process data for a single controller."""
     position = data.get('position', {})
@@ -437,15 +485,31 @@ def process_single_controller(hand: str, data: Dict):
             # Grip just activated - set origin
             state.left_grip_active = True
             state.left_origin_position = position.copy()
+            state.left_origin_rotation = euler_to_quaternion(rotation) if rotation else None
             state.left_arm_origin_position = get_current_ef_position(state.left_arm_joint_angles)
-            state.left_origin_rotation = rotation.copy()
-            state.left_arm_origin_orientation = get_current_ef_orientation(state.left_arm_joint_angles)
-            logger.info(f"🔒 LEFT grip activated - controlling left arm")
+            state.left_z_axis_rotation = 0.0
+            # Store the current wrist_roll angle as baseline
+            state.left_origin_wrist_angle = state.left_arm_joint_angles[WRIST_ROLL_INDEX]
+            logger.info(f"🔒 LEFT grip activated - controlling left arm (wrist baseline: {state.left_origin_wrist_angle:.1f}°)")
         
         # Compute target position for left arm
         if state.left_origin_position and state.left_arm_origin_position is not None:
             relative_delta = compute_relative_position(position, state.left_origin_position)
             target_position = state.left_arm_origin_position + relative_delta
+            
+            # Calculate Z-axis rotation for wrist_roll control
+            if state.left_origin_rotation is not None and rotation:
+                current_quat = euler_to_quaternion(rotation)
+                state.left_z_axis_rotation = calculate_z_axis_rotation(current_quat, state.left_origin_rotation)
+                
+                # Apply relative Z-axis rotation to the original wrist_roll position
+                # This preserves the robot's current wrist position at grip activation
+                wrist_roll_angle = state.left_origin_wrist_angle + state.left_z_axis_rotation
+                state.left_arm_joint_angles[WRIST_ROLL_INDEX] = np.clip(
+                    wrist_roll_angle,
+                    state.joint_limits_min_deg[WRIST_ROLL_INDEX],
+                    state.joint_limits_max_deg[WRIST_ROLL_INDEX]
+                )
             
             # Store goal position for visualization
             state.left_goal_position = target_position.copy()
@@ -458,55 +522,14 @@ def process_single_controller(hand: str, data: Dict):
                     [0, 0, 0, 1]
                 )
             
-            # Compute target orientation from VR controller relative rotation
-            target_orientation = None
-            if USE_ORIENTATION_CONTROL and state.left_origin_rotation is not None and state.left_arm_origin_orientation is not None:
-                # VR script sends absolute rotations, so we calculate relative change
-                x_rotation = rotation.get('x', 0) - state.left_origin_rotation.get('x', 0)  # VR pitch delta
-                y_rotation = rotation.get('y', 0) - state.left_origin_rotation.get('y', 0)  # VR yaw delta  
-                z_rotation = rotation.get('z', 0) - state.left_origin_rotation.get('z', 0)  # VR roll delta
-                
-                # Fix axis mapping: VR controller to robot end effector
-                # VR controller coordinate system may be different from robot end effector
-                # Let's try mapping VR rotations to robot XYZ more intuitively:
-                robot_roll = x_rotation    # VR pitch → robot roll around X axis (reversed back)
-                robot_pitch = -z_rotation  # VR roll → robot pitch around Y axis (reversed)
-                robot_yaw = y_rotation     # VR yaw → robot yaw around Z axis (but we'll ignore this)
-                
-                # Start from current robot orientation and apply VR deltas
-                # To reduce yaw constraint, we'll decompose the baseline and only modify roll/pitch
-                baseline_orientation = R.from_quat(state.left_arm_origin_orientation)
-                baseline_euler = baseline_orientation.as_euler('xyz', degrees=True)
-                
-                # Apply only roll and pitch deltas, keep original yaw
-                target_euler = [
-                    baseline_euler[0] + robot_roll,   # X: baseline roll + delta
-                    baseline_euler[1] + robot_pitch,  # Y: baseline pitch + delta  
-                    baseline_euler[2]                 # Z: keep baseline yaw unchanged
-                ]
-                
-                target_rotation = R.from_euler('xyz', target_euler, degrees=True)
-                
-                # Convert to quaternion and store for visualization
-                state.left_goal_orientation_quat = target_rotation.as_quat()
-                
-                # Also get euler for IK (but we'll use quaternion directly)
-                target_orientation = target_rotation.as_euler('xyz', degrees=True)
-                
-                # Debug logging for axis mapping
-                if should_log_now():
-                    logger.info(f"🎮 LEFT VR Deltas: pitch:{x_rotation:.1f}, roll:{z_rotation:.1f} → Robot(X:{robot_roll:.1f}, Y:{robot_pitch:.1f}) [yaw preserved]")
-            else:
-                state.left_goal_orientation_quat = None
-            
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
             
-            # Compute IK (6DOF with orientation if enabled, position-only otherwise)
-            ik_solution = compute_ik(smoothed_target, state.left_goal_orientation_quat, state.left_arm_joint_angles)
+            # Compute IK for position-only control using 4 joints
+            ik_solution = compute_ik(smoothed_target, None, state.left_arm_joint_angles)
             
-            # Update all 4 joints with IK solution
+            # Update first 4 joints with IK solution (wrist_roll controlled separately, gripper unchanged)
             state.left_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
             
             state.left_arm_joint_angles = np.clip(
@@ -523,15 +546,31 @@ def process_single_controller(hand: str, data: Dict):
             # Grip just activated - set origin
             state.right_grip_active = True
             state.right_origin_position = position.copy()
+            state.right_origin_rotation = euler_to_quaternion(rotation) if rotation else None
             state.right_arm_origin_position = get_current_ef_position(state.right_arm_joint_angles)
-            state.right_origin_rotation = rotation.copy()
-            state.right_arm_origin_orientation = get_current_ef_orientation(state.right_arm_joint_angles)
-            logger.info(f"🔒 RIGHT grip activated - controlling right arm")
+            state.right_z_axis_rotation = 0.0
+            # Store the current wrist_roll angle as baseline
+            state.right_origin_wrist_angle = state.right_arm_joint_angles[WRIST_ROLL_INDEX]
+            logger.info(f"🔒 RIGHT grip activated - controlling right arm (wrist baseline: {state.right_origin_wrist_angle:.1f}°)")
         
         # Compute target position for right arm
         if state.right_origin_position and state.right_arm_origin_position is not None:
             relative_delta = compute_relative_position(position, state.right_origin_position)
             target_position = state.right_arm_origin_position + relative_delta
+            
+            # Calculate Z-axis rotation for wrist_roll control
+            if state.right_origin_rotation is not None and rotation:
+                current_quat = euler_to_quaternion(rotation)
+                state.right_z_axis_rotation = calculate_z_axis_rotation(current_quat, state.right_origin_rotation)
+                
+                # Apply relative Z-axis rotation to the original wrist_roll position
+                # This preserves the robot's current wrist position at grip activation
+                wrist_roll_angle = state.right_origin_wrist_angle + state.right_z_axis_rotation
+                state.right_arm_joint_angles[WRIST_ROLL_INDEX] = np.clip(
+                    wrist_roll_angle,
+                    state.joint_limits_min_deg[WRIST_ROLL_INDEX],
+                    state.joint_limits_max_deg[WRIST_ROLL_INDEX]
+                )
             
             # Store goal position for visualization
             state.right_goal_position = target_position.copy()
@@ -544,55 +583,14 @@ def process_single_controller(hand: str, data: Dict):
                     [0, 0, 0, 1]
                 )
             
-            # Compute target orientation from VR controller relative rotation
-            target_orientation = None
-            if USE_ORIENTATION_CONTROL and state.right_origin_rotation is not None and state.right_arm_origin_orientation is not None:
-                # VR script sends absolute rotations, so we calculate relative change
-                x_rotation = rotation.get('x', 0) - state.right_origin_rotation.get('x', 0)  # VR pitch delta
-                y_rotation = rotation.get('y', 0) - state.right_origin_rotation.get('y', 0)  # VR yaw delta  
-                z_rotation = rotation.get('z', 0) - state.right_origin_rotation.get('z', 0)  # VR roll delta
-                
-                # Fix axis mapping: VR controller to robot end effector
-                # VR controller coordinate system may be different from robot end effector
-                # Let's try mapping VR rotations to robot XYZ more intuitively:
-                robot_roll = x_rotation    # VR pitch → robot roll around X axis (reversed back)
-                robot_pitch = -z_rotation  # VR roll → robot pitch around Y axis (reversed)
-                robot_yaw = y_rotation     # VR yaw → robot yaw around Z axis (but we'll ignore this)
-                
-                # Start from current robot orientation and apply VR deltas
-                # To reduce yaw constraint, we'll decompose the baseline and only modify roll/pitch
-                baseline_orientation = R.from_quat(state.right_arm_origin_orientation)
-                baseline_euler = baseline_orientation.as_euler('xyz', degrees=True)
-                
-                # Apply only roll and pitch deltas, keep original yaw
-                target_euler = [
-                    baseline_euler[0] + robot_roll,   # X: baseline roll + delta
-                    baseline_euler[1] + robot_pitch,  # Y: baseline pitch + delta  
-                    baseline_euler[2]                 # Z: keep baseline yaw unchanged
-                ]
-                
-                target_rotation = R.from_euler('xyz', target_euler, degrees=True)
-                
-                # Convert to quaternion and store for visualization
-                state.right_goal_orientation_quat = target_rotation.as_quat()
-                
-                # Also get euler for IK (but we'll use quaternion directly)
-                target_orientation = target_rotation.as_euler('xyz', degrees=True)
-                
-                # Debug logging for axis mapping
-                if should_log_now():
-                    logger.info(f"🎮 RIGHT VR Deltas: pitch:{x_rotation:.1f}, roll:{z_rotation:.1f} → Robot(X:{robot_roll:.1f}, Y:{robot_pitch:.1f}) [yaw preserved]")
-            else:
-                state.right_goal_orientation_quat = None
-            
             # Smooth the position update
             current_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
             smoothed_target = current_ef_pos + POSITION_SMOOTHING * (target_position - current_ef_pos)
             
-            # Compute IK (6DOF with orientation if enabled, position-only otherwise)
-            ik_solution = compute_ik(smoothed_target, state.right_goal_orientation_quat, state.right_arm_joint_angles)
+            # Compute IK for position-only control using 4 joints
+            ik_solution = compute_ik(smoothed_target, None, state.right_arm_joint_angles)
             
-            # Update all 4 joints with IK solution
+            # Update first 4 joints with IK solution (wrist_roll controlled separately, gripper unchanged)
             state.right_arm_joint_angles[:NUM_IK_JOINTS] = ik_solution
             
             state.right_arm_joint_angles = np.clip(
@@ -607,11 +605,11 @@ def handle_grip_release(hand: str):
         if state.left_grip_active:
             state.left_grip_active = False
             state.left_origin_position = None
-            state.left_arm_origin_position = None
             state.left_origin_rotation = None
-            state.left_arm_origin_orientation = None
+            state.left_z_axis_rotation = 0.0
+            state.left_origin_wrist_angle = 0.0
+            state.left_arm_origin_position = None
             state.left_goal_position = None
-            state.left_goal_orientation_quat = None
             
             # Hide goal marker
             if state.physics_client is not None and 'left_goal' in state.viz_markers:
@@ -627,11 +625,11 @@ def handle_grip_release(hand: str):
         if state.right_grip_active:
             state.right_grip_active = False
             state.right_origin_position = None
-            state.right_arm_origin_position = None
             state.right_origin_rotation = None
-            state.right_arm_origin_orientation = None
+            state.right_z_axis_rotation = 0.0
+            state.right_origin_wrist_angle = 0.0
+            state.right_arm_origin_position = None
             state.right_goal_position = None
-            state.right_goal_orientation_quat = None
             
             # Hide goal marker
             if state.physics_client is not None and 'right_goal' in state.viz_markers:
@@ -694,33 +692,31 @@ async def control_loop():
                 # - Green/Yellow spheres: Goal end effector positions from VR controllers (updated in VR processing)
                 if state.left_grip_active and state.left_origin_position:
                     follower_ef_pos = get_current_ef_position(state.left_arm_joint_angles)
-                    follower_ef_ori = get_current_ef_orientation(state.left_arm_joint_angles)
                     p.resetBasePositionAndOrientation(
                         state.viz_markers['left_target'], 
                         follower_ef_pos, 
                         [0, 0, 0, 1]
                     )
                     # Update coordinate frames
-                    update_coordinate_frame(state.viz_markers['left_target_frame'], follower_ef_pos, follower_ef_ori)
+                    update_coordinate_frame(state.viz_markers['left_target_frame'], follower_ef_pos)
                     
                     if state.left_goal_position is not None:
                         update_coordinate_frame(state.viz_markers['left_goal_frame'], 
-                                              state.left_goal_position, state.left_goal_orientation_quat)
+                                              state.left_goal_position)
                 
                 if state.right_grip_active and state.right_origin_position:
                     leader_ef_pos = get_current_ef_position(state.right_arm_joint_angles)
-                    leader_ef_ori = get_current_ef_orientation(state.right_arm_joint_angles)
                     p.resetBasePositionAndOrientation(
                         state.viz_markers['right_target'],
                         leader_ef_pos,
                         [0, 0, 0, 1]
                     )
                     # Update coordinate frames
-                    update_coordinate_frame(state.viz_markers['right_target_frame'], leader_ef_pos, leader_ef_ori)
+                    update_coordinate_frame(state.viz_markers['right_target_frame'], leader_ef_pos)
                     
                     if state.right_goal_position is not None:
                         update_coordinate_frame(state.viz_markers['right_goal_frame'], 
-                                              state.right_goal_position, state.right_goal_orientation_quat)
+                                              state.right_goal_position)
                 
                 p.stepSimulation()
             
@@ -801,7 +797,7 @@ def shutdown():
             
             # Use the specific initial positions you provided
             initial_left_arm = np.array([1.7578125, 185.09766, 175.3418, 72.1582, 3.6914062, 0.3358522])
-            initial_right_arm = np.array([4.3066406, 193.35938, 181.05469, 74.0918, 177.1875, 0.0])
+            initial_right_arm = np.array([-9.316406, 193.27148, 181.05469, 72.77344, -4.0429688, 0.8780488])
             
             # Create action tensor with initial joint angles for both arms
             initial_action = np.concatenate([initial_left_arm, initial_right_arm])
@@ -874,8 +870,10 @@ async def main():
         
         logger.info("VR Robot Teleoperation System ready!")
         logger.info("Connect your VR headset and use grip buttons to control the robot arms:")
-        logger.info("  - Left controller grip: Controls left follower arm")
-        logger.info("  - Right controller grip: Controls right follower arm")
+        logger.info("  - Left controller grip: Controls left follower arm (4-DOF position-only)")
+        logger.info("  - Right controller grip: Controls right follower arm (4-DOF position-only)")
+        logger.info("  - IK controls: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex")
+        logger.info("  - Target: Fixed_Jaw_tip for precise end-effector positioning")
         
         # Run forever
         await asyncio.gather(
@@ -891,13 +889,14 @@ async def main():
         shutdown()
 
 def update_coordinate_frame(frame_lines: list, position: np.ndarray, orientation_quat: Optional[np.ndarray] = None):
-    """Update coordinate frame visualization lines."""
+    """Update coordinate frame visualization lines for position-only display."""
     if state.physics_client is None or not frame_lines:
         return
     
     axis_length = 0.05
     
-    # Default to identity rotation if no orientation provided
+    # For position-only control, just show a simple coordinate frame aligned with world axes
+    # Default to identity rotation (world-aligned frame)
     if orientation_quat is None:
         orientation_quat = [0, 0, 0, 1]  # Identity quaternion
     
@@ -917,21 +916,6 @@ def update_coordinate_frame(frame_lines: list, position: np.ndarray, orientation
             lineWidth=3,
             replaceItemUniqueId=frame_lines[i]
         )
-
-def get_current_ef_orientation(joint_angles: np.ndarray) -> np.ndarray:
-    """Get current end effector orientation as quaternion."""
-    if state.physics_client is None or state.robot_id is None:
-        return np.array([0, 0, 0, 1])  # Identity quaternion
-    
-    # Set joint positions
-    joint_angles_rad = np.deg2rad(joint_angles)
-    for i in range(NUM_JOINTS):
-        if state.p_joint_indices[i] is not None:
-            p.resetJointState(state.robot_id, state.p_joint_indices[i], joint_angles_rad[i])
-    
-    # Get end effector orientation
-    link_state = p.getLinkState(state.robot_id, state.end_effector_link_index)
-    return np.array(link_state[1])  # Orientation quaternion
 
 if __name__ == "__main__":
     try:
