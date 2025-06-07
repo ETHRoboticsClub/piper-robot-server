@@ -29,6 +29,21 @@ NUM_IK_JOINTS = 3  # Use only first 3 joints for IK (Rotation, Pitch, Elbow)
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
+# --- IK Joint Limit Margins ---
+# Margins in degrees to keep joints away from problematic limits
+# Only prevent elbow hyperextension (lower limit at -11.5°)
+IK_JOINT_LOWER_MARGINS_DEG = [
+    0.0,  # shoulder_pan - no margin needed
+    0.0,  # shoulder_lift - no margin needed  
+    5.0,  # elbow_flex - prevent hyperextension (-11.5° + 5° = -6.5° min)
+]
+
+IK_JOINT_UPPER_MARGINS_DEG = [
+    0.0,  # shoulder_pan - no margin needed
+    0.0,  # shoulder_lift - no margin needed
+    0.0,  # elbow_flex - upper limit (180°) is fine
+]
+
 # Motor configuration for SO100
 COMMON_MOTORS = {
     "shoulder_pan": [1, "sts3215"],

@@ -9,7 +9,7 @@ import pybullet as p
 from typing import Optional, Tuple
 import logging
 
-from ..config import NUM_JOINTS, NUM_IK_JOINTS
+from ..config import NUM_JOINTS, NUM_IK_JOINTS, IK_JOINT_LOWER_MARGINS_DEG, IK_JOINT_UPPER_MARGINS_DEG
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +67,27 @@ class IKSolver:
         self.joint_limits_min_deg = joint_limits_min_deg
         self.joint_limits_max_deg = joint_limits_max_deg
         
-        # Precompute IK limits for first NUM_IK_JOINTS
-        self.ik_lower_limits = np.deg2rad(joint_limits_min_deg[:NUM_IK_JOINTS])
-        self.ik_upper_limits = np.deg2rad(joint_limits_max_deg[:NUM_IK_JOINTS])
+        # Precompute IK limits for first NUM_IK_JOINTS with safety margins
+        raw_lower_limits = np.deg2rad(joint_limits_min_deg[:NUM_IK_JOINTS])
+        raw_upper_limits = np.deg2rad(joint_limits_max_deg[:NUM_IK_JOINTS])
+        
+        # Apply safety margins - only to prevent elbow hyperextension
+        lower_margins_rad = np.deg2rad(IK_JOINT_LOWER_MARGINS_DEG)
+        upper_margins_rad = np.deg2rad(IK_JOINT_UPPER_MARGINS_DEG)
+        
+        self.ik_lower_limits = raw_lower_limits + lower_margins_rad
+        self.ik_upper_limits = raw_upper_limits - upper_margins_rad
+        
+        # Log the constrained limits for debugging
+        for i in range(NUM_IK_JOINTS):
+            joint_name = ["shoulder_pan", "shoulder_lift", "elbow_flex"][i]
+            if IK_JOINT_LOWER_MARGINS_DEG[i] > 0 or IK_JOINT_UPPER_MARGINS_DEG[i] > 0:
+                original_lower = math.degrees(raw_lower_limits[i])
+                original_upper = math.degrees(raw_upper_limits[i])
+                constrained_lower = math.degrees(self.ik_lower_limits[i])
+                constrained_upper = math.degrees(self.ik_upper_limits[i])
+                logger.info(f"IK {joint_name}: {original_lower:.1f}° to {original_upper:.1f}° -> {constrained_lower:.1f}° to {constrained_upper:.1f}°")
+        
         self.ik_ranges = self.ik_upper_limits - self.ik_lower_limits
         
         # Rest poses for natural 3-DOF arm configuration
