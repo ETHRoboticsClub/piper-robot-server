@@ -36,7 +36,7 @@ class ForwardKinematics:
             return np.array([0.2, 0.0, 0.15]), np.array([0, 0, 0, 1])
         
         # Use joint angles but keep gripper at neutral position for FK calculation
-        # to ensure Fixed_Jaw_tip position is independent of gripper state
+        # to ensure Wrist_Pitch_Roll position is independent of gripper state
         fk_state_angles = joint_angles_deg.copy()
         fk_state_angles[5] = 0.0  # Set gripper to neutral (closed) position for FK calculation
         
@@ -72,17 +72,16 @@ class IKSolver:
         self.ik_upper_limits = np.deg2rad(joint_limits_max_deg[:NUM_IK_JOINTS])
         self.ik_ranges = self.ik_upper_limits - self.ik_lower_limits
         
-        # Rest poses for natural 4-DOF arm configuration
+        # Rest poses for natural 3-DOF arm configuration
         self.rest_poses = [0.0] * NUM_IK_JOINTS
         self.rest_poses[0] = 0.0        # shoulder_pan neutral
         self.rest_poses[1] = math.pi/2  # shoulder_lift pointing forward
         self.rest_poses[2] = math.pi/4  # elbow_flex slightly bent
-        self.rest_poses[3] = 0.0        # wrist_flex neutral
     
     def solve(self, target_position: np.ndarray, target_orientation_quat: Optional[np.ndarray], 
               current_angles_deg: np.ndarray) -> np.ndarray:
         """
-        Solve inverse kinematics for position control using first 4 joints.
+        Solve inverse kinematics for position control using first 3 joints.
         
         Args:
             target_position: Target end effector position
@@ -96,7 +95,7 @@ class IKSolver:
             return current_angles_deg[:NUM_IK_JOINTS]
         
         # Use current angles to set PyBullet state, but keep gripper at neutral position
-        # to prevent gripper motion from affecting the Fixed_Jaw_tip IK target
+        # to prevent gripper motion from affecting the Wrist_Pitch_Roll IK target
         ik_state_angles = current_angles_deg.copy()
         ik_state_angles[5] = 0.0  # Set gripper to neutral (closed) position for IK calculation
         

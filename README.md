@@ -225,7 +225,7 @@ class ControlGoal:
 ### Robot Configuration
 
 - **Joint Names**: `["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]`
-- **IK Joints**: First 4 joints used for position control
+- **IK Joints**: First 3 joints used for position control
 - **Direct Control**: Wrist roll and gripper controlled directly
 - **Safety**: Joint limits read from URDF and enforced
 

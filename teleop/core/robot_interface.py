@@ -157,7 +157,7 @@ class RobotInterface:
         if self.ik_solvers[arm]:
             return self.ik_solvers[arm].solve(target_position, target_orientation, current_angles)
         else:
-            return current_angles[:4]  # Return current angles if no IK solver
+            return current_angles[:3]  # Return current angles if no IK solver
     
     def clamp_joint_angles(self, joint_angles: np.ndarray) -> np.ndarray:
         """Clamp joint angles to safe limits."""
@@ -172,8 +172,8 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
         
-        # Update first 4 joints with IK solution
-        target_angles[:4] = ik_angles
+        # Update first 3 joints with IK solution
+        target_angles[:3] = ik_angles
         target_angles[4] = wrist_roll  # wrist_roll
         target_angles[5] = gripper     # gripper
         

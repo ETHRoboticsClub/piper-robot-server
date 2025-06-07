@@ -25,7 +25,7 @@ POSITION_SMOOTHING = 0.1 # Smoothing factor for position updates
 # --- Joint Configuration ---
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 NUM_JOINTS = len(JOINT_NAMES)
-NUM_IK_JOINTS = 4  # Use only first 4 joints for IK
+NUM_IK_JOINTS = 3  # Use only first 3 joints for IK (Rotation, Pitch, Elbow)
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
@@ -55,7 +55,7 @@ GRIPPER_CLOSED_ANGLE = 45.0 # Degrees - gripper closed position
 
 # --- PyBullet Configuration ---
 URDF_PATH = "URDF/SO_5DOF_ARM100_8j/urdf/so100.urdf"
-END_EFFECTOR_LINK_NAME = "Fixed_Jaw_tip"
+END_EFFECTOR_LINK_NAME = "Wrist_Pitch_Roll"
 
 # --- Keyboard Control ---
 POS_STEP = 0.01  # meters
