@@ -135,15 +135,25 @@ python -m teleop --no-viz
 
 ### Keyboard Control
 
-1. **Activation**: Press **Enter** to toggle position control on/off
-2. **Arm Selection**: Press **1** (left arm) or **2** (right arm)
-3. **Position Control**:
-   - **W/S**: Forward/Backward (+/- X)
-   - **A/D**: Left/Right (+/- Y) 
-   - **Q/E**: Down/Up (+/- Z)
-4. **Wrist Control**: **Left/Right arrows** for wrist roll
-5. **Gripper Control**: **Space** to toggle gripper open/closed
-6. **Exit**: **ESC** to stop the system
+1. **Left Arm Control**:
+   - **W/S**: Forward/Backward
+   - **A/D**: Left/Right 
+   - **Q/E**: Down/Up
+   - **Z/X**: Wrist roll
+   - **F**: Toggle gripper open/closed
+   - **Tab**: Manual toggle position control on/off
+
+2. **Right Arm Control**:
+   - **I/K**: Forward/Backward
+   - **J/L**: Left/Right
+   - **U/O**: Up/Down
+   - **N/M**: Wrist roll
+   - **; (semicolon)**: Toggle gripper open/closed
+   - **Enter**: Manual toggle position control on/off
+
+3. **Auto-Activation**: Position control is automatically activated when you press movement keys. Tab/Enter are only needed for manual toggle.
+
+4. **Exit**: **ESC** to stop the system
 
 ## Architecture
 

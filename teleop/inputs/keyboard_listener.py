@@ -95,20 +95,23 @@ class KeyboardListener(BaseInputProvider):
         logger.info("  W/S: Move Forward/Backward")
         logger.info("  A/D: Move Left/Right")
         logger.info("  Q/E: Move Down/Up")
-        logger.info("  Left/Right Arrow: Wrist Roll")
-        logger.info("  Space: Toggle Left Gripper Open/Closed")
-        logger.info("  Tab: Toggle Left Arm Position Control On/Off")
+        logger.info("  Z/X: Wrist Roll")
+        logger.info("  F: Toggle Left Gripper Open/Closed")
+        logger.info("  Tab: Manual Toggle Left Arm Position Control On/Off")
         logger.info("")
         logger.info("RIGHT ARM (UIOJKL):")
         logger.info("  I/K: Move Forward/Backward")
         logger.info("  J/L: Move Left/Right")
         logger.info("  U/O: Move Up/Down")
-        logger.info("  [/]: Wrist Roll")
-        logger.info("  Shift: Toggle Right Gripper Open/Closed")
-        logger.info("  Enter: Toggle Right Arm Position Control On/Off")
+        logger.info("  N/M: Wrist Roll")
+        logger.info("  ; (semicolon): Toggle Right Gripper Open/Closed")
+        logger.info("  Enter: Manual Toggle Right Arm Position Control On/Off")
         logger.info("")
         logger.info("Global:")
         logger.info("  ESC: Exit")
+        logger.info("")
+        logger.info("Note: Position control is automatically activated when you press")
+        logger.info("      movement keys. Tab/Enter are only needed for manual toggle.")
         logger.info("="*60)
         logger.info(f"Left arm position control: {'ACTIVE' if self.left_arm_state['position_control_active'] else 'INACTIVE'}")
         logger.info(f"Right arm position control: {'ACTIVE' if self.right_arm_state['position_control_active'] else 'INACTIVE'}")
@@ -154,51 +157,75 @@ class KeyboardListener(BaseInputProvider):
         try:
             # LEFT ARM CONTROLS (WASD + QE) - Fixed W/S direction
             if key.char == 'w':
+                self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_pos"][1] = -POS_STEP   # Forward (reversed sign)
             elif key.char == 's':
+                self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_pos"][1] = POS_STEP    # Backward (reversed sign)
             elif key.char == 'a':
+                self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_pos"][0] = POS_STEP    # Left (X axis)
             elif key.char == 'd':
+                self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_pos"][0] = -POS_STEP   # Right (X axis)
             elif key.char == 'q':
+                self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_pos"][2] = -POS_STEP   # Down (-Z)
             elif key.char == 'e':
+                self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_pos"][2] = POS_STEP    # Up (+Z)
             
             # RIGHT ARM CONTROLS (UIOJKL) - Fixed direction signs
             elif key.char == 'i':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_pos"][1] = -POS_STEP  # Forward (fixed sign)
             elif key.char == 'k':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_pos"][1] = POS_STEP   # Backward (fixed sign)
             elif key.char == 'j':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_pos"][0] = POS_STEP   # Left (X axis)
             elif key.char == 'l':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_pos"][0] = -POS_STEP  # Right (X axis)
             elif key.char == 'u':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_pos"][2] = -POS_STEP  # Up (fixed sign)
             elif key.char == 'o':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_pos"][2] = POS_STEP   # Down (fixed sign)
             
             # Left gripper control
-            elif key.char == ' ':
+            elif key.char == 'f':
                 self.left_arm_state["gripper_closed"] = not self.left_arm_state["gripper_closed"]
                 logger.info(f"LEFT gripper: {'CLOSED' if self.left_arm_state['gripper_closed'] else 'OPENED'}")
                 self._send_gripper_goal("left")
             
+            # Left wrist roll
+            elif key.char == 'z':
+                self._auto_activate_arm_if_needed("left")
+                self.left_arm_state["delta_wrist_roll"] = -ANGLE_STEP  # CCW
+            elif key.char == 'x':
+                self._auto_activate_arm_if_needed("left")
+                self.left_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
+            
             # Right wrist roll
-            elif key.char == '[':
+            elif key.char == 'n':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_wrist_roll"] = -ANGLE_STEP  # CCW
-            elif key.char == ']':
+            elif key.char == 'm':
+                self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
+            
+            # Right gripper control
+            elif key.char == ';':
+                self.right_arm_state["gripper_closed"] = not self.right_arm_state["gripper_closed"]
+                logger.info(f"RIGHT gripper: {'CLOSED' if self.right_arm_state['gripper_closed'] else 'OPENED'}")
+                self._send_gripper_goal("right")
         
         except AttributeError:
             # Special keys
-            if key == keyboard.Key.left:
-                self.left_arm_state["delta_wrist_roll"] = -ANGLE_STEP  # CCW
-            elif key == keyboard.Key.right:
-                self.left_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
-            elif key == keyboard.Key.tab:
+            if key == keyboard.Key.tab:
                 # Toggle left arm position control
                 self.left_arm_state["position_control_active"] = not self.left_arm_state["position_control_active"]
                 
@@ -224,10 +251,6 @@ class KeyboardListener(BaseInputProvider):
                     logger.info("RIGHT arm position control: DEACTIVATED")
                 
                 self._send_mode_change_goal("right")
-            elif key == keyboard.Key.shift:
-                self.right_arm_state["gripper_closed"] = not self.right_arm_state["gripper_closed"]
-                logger.info(f"RIGHT gripper: {'CLOSED' if self.right_arm_state['gripper_closed'] else 'OPENED'}")
-                self._send_gripper_goal("right")
             elif key == keyboard.Key.esc:
                 logger.info("ESC pressed. Stopping keyboard control.")
                 self.is_running = False
@@ -243,6 +266,8 @@ class KeyboardListener(BaseInputProvider):
                 self.left_arm_state["delta_pos"][0] = 0  # Left/Right (X axis)
             elif key.char in ('q', 'e'):
                 self.left_arm_state["delta_pos"][2] = 0
+            elif key.char in ('z', 'x'):
+                self.left_arm_state["delta_wrist_roll"] = 0
             
             # RIGHT ARM - Reset deltas on key release (swapped I/K and J/L axes)
             elif key.char in ('i', 'k'):
@@ -251,11 +276,11 @@ class KeyboardListener(BaseInputProvider):
                 self.right_arm_state["delta_pos"][0] = 0  # Left/Right (X axis)
             elif key.char in ('u', 'o'):
                 self.right_arm_state["delta_pos"][2] = 0  # Up/Down
-            elif key.char in ('[', ']'):
+            elif key.char in ('n', 'm'):
                 self.right_arm_state["delta_wrist_roll"] = 0
         except AttributeError:
-            if key in (keyboard.Key.left, keyboard.Key.right):
-                self.left_arm_state["delta_wrist_roll"] = 0
+            # Handle special keys if needed (currently none for the new layout)
+            pass
     
     def _send_gripper_goal(self, arm: str):
         """Send gripper control goal to queue."""
@@ -321,4 +346,16 @@ class KeyboardListener(BaseInputProvider):
                 logger.error(f"Error in keyboard control loop: {e}")
                 await asyncio.sleep(0.1)
         
-        logger.info("Dual-arm keyboard control loop stopped") 
+        logger.info("Dual-arm keyboard control loop stopped")
+
+    def _auto_activate_arm_if_needed(self, arm: str):
+        """Automatically activate position control for an arm if it's not already active."""
+        arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
+        
+        if not arm_state["position_control_active"]:
+            # Activate position control
+            arm_state["position_control_active"] = True
+            arm_state["target_position"] = self._initialize_arm_position(arm)
+            arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll(arm)
+            logger.info(f"{arm.upper()} arm position control: AUTO-ACTIVATED")
+            self._send_mode_change_goal(arm) 
