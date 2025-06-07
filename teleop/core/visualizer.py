@@ -94,6 +94,9 @@ class PyBulletVisualizer:
         # Create visualization markers
         self._create_markers()
         
+        # Setup camera position behind the robot (negative Y)
+        self._setup_camera()
+        
         self.is_connected = True
         logger.info("PyBullet visualization setup complete")
         return True
@@ -188,6 +191,23 @@ class PyBulletVisualizer:
                 line_id = p.addUserDebugLine([0, 0, -1], [0, 0, -1], lineColorRGB=axis_colors[i], lineWidth=3)
                 frame_lines.append(line_id)
             self.viz_markers[marker_name] = frame_lines
+    
+    def _setup_camera(self):
+        """Setup camera position behind the robot (negative Y direction)."""
+        # Position camera behind the robot in negative Y direction
+        camera_distance = 1.5  # Distance from target
+        camera_yaw = 200       # Look from negative Y toward positive Y (toward robot)
+        camera_pitch = -20    # Slight downward angle
+        camera_target = [0.3, 0.0, 0.2]  # Look at robot workspace center
+        
+        p.resetDebugVisualizerCamera(
+            cameraDistance=camera_distance,
+            cameraYaw=camera_yaw, 
+            cameraPitch=camera_pitch,
+            cameraTargetPosition=camera_target
+        )
+        
+        logger.info(f"Camera positioned behind robot at distance={camera_distance}, yaw={camera_yaw}°, pitch={camera_pitch}°")
     
     def update_robot_pose(self, joint_angles_deg: np.ndarray):
         """Update robot joint positions in visualization."""
