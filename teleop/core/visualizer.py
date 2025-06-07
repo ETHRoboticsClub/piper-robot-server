@@ -195,10 +195,10 @@ class PyBulletVisualizer:
     def _setup_camera(self):
         """Setup camera position behind the robot (negative Y direction)."""
         # Position camera behind the robot in negative Y direction
-        camera_distance = 1.5  # Distance from target
-        camera_yaw = 200       # Look from negative Y toward positive Y (toward robot)
-        camera_pitch = -20    # Slight downward angle
-        camera_target = [0.3, 0.0, 0.2]  # Look at robot workspace center
+        camera_distance = 0.5  # Distance from target
+        camera_yaw = 160       # Look from negative Y toward positive Y (toward robot)
+        camera_pitch = -30    # Slight downward angle
+        camera_target = [0.0, 0.0, 0.2]  # Look at robot workspace center
         
         p.resetDebugVisualizerCamera(
             cameraDistance=camera_distance,
