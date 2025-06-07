@@ -75,14 +75,14 @@ class PyBulletVisualizer:
             return False
         
         try:
-            self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
         except p.error as e:
             logger.error(f"Failed to load URDF: {e}")
             return False
         
         # Load right robot 40cm away in X direction
         try:
-            self.robot_ids['right'] = p.loadURDF(self.urdf_path, [0.4, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            self.robot_ids['right'] = p.loadURDF(self.urdf_path, [-0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
         except p.error as e:
             logger.error(f"Failed to load right robot URDF: {e}")
             return False
