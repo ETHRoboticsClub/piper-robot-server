@@ -47,8 +47,8 @@ class RobotInterface:
         self.last_send_time = 0
         
         # Initial positions for safe shutdown
-        self.initial_left_arm = np.array([1.7578125, 185.09766, 175.3418, 72.1582, 3.6914062, 0.3358522])
-        self.initial_right_arm = np.array([-9.316406, 193.27148, 181.05469, 72.77344, -4.0429688, 0.8780488])
+        self.initial_left_arm = np.array([2, 185, 175, 72, 4, 0])
+        self.initial_right_arm = np.array([2, 185, 175, 72, -4, 0])
     
     def setup_robot_config(self) -> So100RobotConfig:
         """Create robot configuration based on current settings."""
