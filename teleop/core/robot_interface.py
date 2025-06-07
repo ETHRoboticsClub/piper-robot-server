@@ -16,8 +16,8 @@ from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
 
 from ..config import (
     TeleopConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
-    GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, DIRECT_JOINT_MARGINS_DEG,
-    WRIST_FLEX_INDEX, IK_JOINT_LOWER_MARGINS_DEG, IK_JOINT_UPPER_MARGINS_DEG, NUM_IK_JOINTS
+    GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, 
+    WRIST_FLEX_INDEX, ELBOW_LOWER_MARGIN_DEG, WRIST_FLEX_MARGINS_DEG
 )
 from .kinematics import ForwardKinematics, IKSolver
 
@@ -167,13 +167,13 @@ class RobotInterface:
         
         # Apply elbow margin to prevent hyperextension (joint index 2 = elbow_flex)
         elbow_idx = 2  # elbow_flex index
-        elbow_lower_margin = IK_JOINT_LOWER_MARGINS_DEG[elbow_idx]  # Should be 5.0 from config
+        elbow_lower_margin = ELBOW_LOWER_MARGIN_DEG  # 5.0 from config
         if elbow_lower_margin > 0:
             elbow_min_with_margin = self.joint_limits_min_deg[elbow_idx] + elbow_lower_margin
             clamped[elbow_idx] = np.clip(joint_angles[elbow_idx], elbow_min_with_margin, self.joint_limits_max_deg[elbow_idx])
         
         # Apply special margins to wrist_flex to prevent getting stuck at limits
-        wrist_flex_margin = DIRECT_JOINT_MARGINS_DEG["wrist_flex"]
+        wrist_flex_margin = WRIST_FLEX_MARGINS_DEG
         wrist_flex_min = self.joint_limits_min_deg[WRIST_FLEX_INDEX] + wrist_flex_margin["lower"]
         wrist_flex_max = self.joint_limits_max_deg[WRIST_FLEX_INDEX] - wrist_flex_margin["upper"]
         
@@ -189,7 +189,7 @@ class RobotInterface:
         """Clamp a single wrist angle with margins to prevent getting stuck at limits."""
         if joint_name == "wrist_flex":
             joint_idx = WRIST_FLEX_INDEX
-            margin = DIRECT_JOINT_MARGINS_DEG["wrist_flex"]
+            margin = WRIST_FLEX_MARGINS_DEG
             min_limit = self.joint_limits_min_deg[joint_idx] + margin["lower"]
             max_limit = self.joint_limits_max_deg[joint_idx] - margin["upper"]
             return np.clip(angle, min_limit, max_limit)

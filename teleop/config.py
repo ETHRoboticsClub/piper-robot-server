@@ -30,28 +30,14 @@ WRIST_FLEX_INDEX = 3
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
-# --- IK Joint Limit Margins ---
-# Margins in degrees to keep joints away from problematic limits
-# Only prevent elbow hyperextension (lower limit at -11.5°)
-IK_JOINT_LOWER_MARGINS_DEG = [
-    0.0,  # shoulder_pan - no margin needed
-    0.0,  # shoulder_lift - no margin needed  
-    15.0,  # elbow_flex - prevent hyperextension (-11.5° + 5° = -6.5° min)
-]
+# --- Joint Limit Margins ---
+# Only define margins for joints that have specific problems and need constraints
 
-IK_JOINT_UPPER_MARGINS_DEG = [
-    0.0,  # shoulder_pan - no margin needed
-    0.0,  # shoulder_lift - no margin needed
-    2.0,  # elbow_flex - upper limit (180°) is fine
-]
+# Elbow joint margin - prevent hyperextension at -11.5°
+ELBOW_LOWER_MARGIN_DEG = 5.0  # Keep elbow above -6.5° instead of -11.5°
 
-# --- Direct Control Joint Margins ---
-# Margins for directly controlled joints (wrist_flex, wrist_roll, gripper)
-DIRECT_JOINT_MARGINS_DEG = {
-    "wrist_flex": {"lower": 3.0, "upper": 3.0},   # Keep away from ±103.1° limits
-    "wrist_roll": {"lower": 0.0, "upper": 0.0},   # No margin needed for wrist_roll
-    "gripper": {"lower": 0.0, "upper": 0.0},      # No margin needed for gripper
-}
+# Wrist flex margins - prevent getting stuck at ±103.1° limits  
+WRIST_FLEX_MARGINS_DEG = {"lower": 3.0, "upper": 3.0}  # Keep within ±100.1°
 
 # Motor configuration for SO100
 COMMON_MOTORS = {

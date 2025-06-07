@@ -9,7 +9,7 @@ import pybullet as p
 from typing import Optional, Tuple
 import logging
 
-from ..config import NUM_JOINTS, NUM_IK_JOINTS, IK_JOINT_LOWER_MARGINS_DEG, IK_JOINT_UPPER_MARGINS_DEG
+from ..config import NUM_JOINTS, NUM_IK_JOINTS, ELBOW_LOWER_MARGIN_DEG
 
 logger = logging.getLogger(__name__)
 
@@ -71,22 +71,18 @@ class IKSolver:
         raw_lower_limits = np.deg2rad(joint_limits_min_deg[:NUM_IK_JOINTS])
         raw_upper_limits = np.deg2rad(joint_limits_max_deg[:NUM_IK_JOINTS])
         
-        # Apply safety margins - only to prevent elbow hyperextension
-        lower_margins_rad = np.deg2rad(IK_JOINT_LOWER_MARGINS_DEG)
-        upper_margins_rad = np.deg2rad(IK_JOINT_UPPER_MARGINS_DEG)
+        # Apply elbow margin to prevent hyperextension (joint index 2 only)
+        self.ik_lower_limits = raw_lower_limits.copy()
+        self.ik_upper_limits = raw_upper_limits.copy()
         
-        self.ik_lower_limits = raw_lower_limits + lower_margins_rad
-        self.ik_upper_limits = raw_upper_limits - upper_margins_rad
+        # Apply elbow lower margin only
+        elbow_idx = 2  # elbow_flex index
+        self.ik_lower_limits[elbow_idx] = raw_lower_limits[elbow_idx] + math.radians(ELBOW_LOWER_MARGIN_DEG)
         
-        # Log the constrained limits for debugging
-        for i in range(NUM_IK_JOINTS):
-            joint_name = ["shoulder_pan", "shoulder_lift", "elbow_flex"][i]
-            if IK_JOINT_LOWER_MARGINS_DEG[i] > 0 or IK_JOINT_UPPER_MARGINS_DEG[i] > 0:
-                original_lower = math.degrees(raw_lower_limits[i])
-                original_upper = math.degrees(raw_upper_limits[i])
-                constrained_lower = math.degrees(self.ik_lower_limits[i])
-                constrained_upper = math.degrees(self.ik_upper_limits[i])
-                logger.info(f"IK {joint_name}: {original_lower:.1f}° to {original_upper:.1f}° -> {constrained_lower:.1f}° to {constrained_upper:.1f}°")
+        # Log the elbow constraint
+        original_lower = math.degrees(raw_lower_limits[elbow_idx])
+        constrained_lower = math.degrees(self.ik_lower_limits[elbow_idx])
+        logger.info(f"IK elbow_flex: lower limit {original_lower:.1f}° -> {constrained_lower:.1f}° (margin: +{ELBOW_LOWER_MARGIN_DEG}°)")
         
         self.ik_ranges = self.ik_upper_limits - self.ik_lower_limits
         
