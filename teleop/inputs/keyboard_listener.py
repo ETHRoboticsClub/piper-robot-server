@@ -34,8 +34,10 @@ class KeyboardListener(BaseInputProvider):
         self.left_arm_state = {
             "target_position": None,  # Will be initialized from current robot position
             "target_wrist_roll": 0.0,
+            "target_wrist_flex": 0.0,
             "delta_pos": np.zeros(3),
             "delta_wrist_roll": 0.0,
+            "delta_wrist_flex": 0.0,
             "position_control_active": False,
             "gripper_closed": False
         }
@@ -43,8 +45,10 @@ class KeyboardListener(BaseInputProvider):
         self.right_arm_state = {
             "target_position": None,  # Will be initialized from current robot position
             "target_wrist_roll": 0.0,
+            "target_wrist_flex": 0.0,
             "delta_pos": np.zeros(3),
             "delta_wrist_roll": 0.0,
+            "delta_wrist_flex": 0.0,
             "position_control_active": False,
             "gripper_closed": False
         }
@@ -96,6 +100,7 @@ class KeyboardListener(BaseInputProvider):
         logger.info("  A/D: Move Left/Right")
         logger.info("  Q/E: Move Down/Up")
         logger.info("  Z/X: Wrist Roll")
+        logger.info("  R/T: Wrist Flex (Pitch)")
         logger.info("  F: Toggle Left Gripper Open/Closed")
         logger.info("  Tab: Manual Toggle Left Arm Position Control On/Off")
         logger.info("")
@@ -104,6 +109,7 @@ class KeyboardListener(BaseInputProvider):
         logger.info("  J/L: Move Left/Right")
         logger.info("  U/O: Move Up/Down")
         logger.info("  N/M: Wrist Roll")
+        logger.info("  H/Y: Wrist Flex (Pitch)")
         logger.info("  ; (semicolon): Toggle Right Gripper Open/Closed")
         logger.info("  Enter: Manual Toggle Right Arm Position Control On/Off")
         logger.info("")
@@ -150,6 +156,23 @@ class KeyboardListener(BaseInputProvider):
             return current_wrist_roll
         except Exception as e:
             logger.warning(f"Failed to get current {arm} arm wrist roll: {e}. Using default: 0.0°")
+            return 0.0
+    
+    def _initialize_arm_wrist_flex(self, arm: str):
+        """Initialize target wrist flex from current robot angle when activating control."""
+        if not self.robot_interface:
+            logger.warning(f"No robot interface available, using default wrist flex for {arm} arm: 0.0°")
+            return 0.0
+        
+        try:
+            # Get current wrist flex angle
+            current_angles = self.robot_interface.get_arm_angles(arm)
+            from ..config import WRIST_FLEX_INDEX
+            current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
+            logger.info(f"Initialized {arm} arm wrist flex at current angle: {current_wrist_flex:.1f}°")
+            return current_wrist_flex
+        except Exception as e:
+            logger.warning(f"Failed to get current {arm} arm wrist flex: {e}. Using default: 0.0°")
             return 0.0
     
     def on_press(self, key):
@@ -209,6 +232,14 @@ class KeyboardListener(BaseInputProvider):
                 self._auto_activate_arm_if_needed("left")
                 self.left_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
             
+            # Left wrist flex (pitch)
+            elif key.char == 'r':
+                self._auto_activate_arm_if_needed("left")
+                self.left_arm_state["delta_wrist_flex"] = -ANGLE_STEP  # Flex down
+            elif key.char == 't':
+                self._auto_activate_arm_if_needed("left")
+                self.left_arm_state["delta_wrist_flex"] = ANGLE_STEP   # Flex up
+            
             # Right wrist roll
             elif key.char == 'n':
                 self._auto_activate_arm_if_needed("right")
@@ -216,6 +247,14 @@ class KeyboardListener(BaseInputProvider):
             elif key.char == 'm':
                 self._auto_activate_arm_if_needed("right")
                 self.right_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
+            
+            # Right wrist flex (pitch)
+            elif key.char == 'h':
+                self._auto_activate_arm_if_needed("right")
+                self.right_arm_state["delta_wrist_flex"] = -ANGLE_STEP  # Flex down
+            elif key.char == 'y':
+                self._auto_activate_arm_if_needed("right")
+                self.right_arm_state["delta_wrist_flex"] = ANGLE_STEP   # Flex up
             
             # Right gripper control
             elif key.char == ';':
@@ -233,6 +272,7 @@ class KeyboardListener(BaseInputProvider):
                     # Initialize target position from current robot position
                     self.left_arm_state["target_position"] = self._initialize_arm_position("left")
                     self.left_arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll("left")
+                    self.left_arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex("left")
                     logger.info("LEFT arm position control: ACTIVATED")
                 else:
                     logger.info("LEFT arm position control: DEACTIVATED")
@@ -246,6 +286,7 @@ class KeyboardListener(BaseInputProvider):
                     # Initialize target position from current robot position
                     self.right_arm_state["target_position"] = self._initialize_arm_position("right")
                     self.right_arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll("right")
+                    self.right_arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex("right")
                     logger.info("RIGHT arm position control: ACTIVATED")
                 else:
                     logger.info("RIGHT arm position control: DEACTIVATED")
@@ -268,6 +309,8 @@ class KeyboardListener(BaseInputProvider):
                 self.left_arm_state["delta_pos"][2] = 0
             elif key.char in ('z', 'x'):
                 self.left_arm_state["delta_wrist_roll"] = 0
+            elif key.char in ('r', 't'):
+                self.left_arm_state["delta_wrist_flex"] = 0
             
             # RIGHT ARM - Reset deltas on key release (swapped I/K and J/L axes)
             elif key.char in ('i', 'k'):
@@ -278,6 +321,8 @@ class KeyboardListener(BaseInputProvider):
                 self.right_arm_state["delta_pos"][2] = 0  # Up/Down
             elif key.char in ('n', 'm'):
                 self.right_arm_state["delta_wrist_roll"] = 0
+            elif key.char in ('h', 'y'):
+                self.right_arm_state["delta_wrist_flex"] = 0
         except AttributeError:
             # Handle special keys if needed (currently none for the new layout)
             pass
@@ -324,14 +369,18 @@ class KeyboardListener(BaseInputProvider):
                         # Update target state based on deltas
                         arm_state["target_position"] += arm_state["delta_pos"]
                         arm_state["target_wrist_roll"] += arm_state["delta_wrist_roll"]
+                        arm_state["target_wrist_flex"] += arm_state["delta_wrist_flex"]
                         
                         # Send position control goal if there's movement or wrist rotation
-                        if np.any(arm_state["delta_pos"] != 0) or arm_state["delta_wrist_roll"] != 0:
+                        if (np.any(arm_state["delta_pos"] != 0) or 
+                            arm_state["delta_wrist_roll"] != 0 or 
+                            arm_state["delta_wrist_flex"] != 0):
                             goal = ControlGoal(
                                 arm=arm,
                                 mode=ControlMode.POSITION_CONTROL,
                                 target_position=arm_state["target_position"].copy(),
                                 wrist_roll_deg=arm_state["target_wrist_roll"],
+                                wrist_flex_deg=arm_state["target_wrist_flex"],
                                 metadata={
                                     "source": f"keyboard_{arm}",
                                     "relative_position": False
@@ -357,5 +406,6 @@ class KeyboardListener(BaseInputProvider):
             arm_state["position_control_active"] = True
             arm_state["target_position"] = self._initialize_arm_position(arm)
             arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll(arm)
+            arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex(arm)
             logger.info(f"{arm.upper()} arm position control: AUTO-ACTIVATED")
             self._send_mode_change_goal(arm) 

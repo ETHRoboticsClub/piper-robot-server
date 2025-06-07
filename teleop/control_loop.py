@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Dict, Optional
 
-from .config import TeleopConfig, NUM_JOINTS, WRIST_ROLL_INDEX, GRIPPER_INDEX
+from .config import TeleopConfig, NUM_JOINTS, WRIST_FLEX_INDEX, WRIST_ROLL_INDEX, GRIPPER_INDEX
 from .core.robot_interface import RobotInterface
 from .core.visualizer import PyBulletVisualizer
 from .inputs.base import ControlGoal, ControlMode
@@ -26,8 +26,10 @@ class ArmState:
         self.target_position = None
         self.goal_position = None  # For visualization
         self.origin_position = None  # Robot position when grip was activated
-        self.origin_wrist_angle = 0.0
+        self.origin_wrist_roll_angle = 0.0
+        self.origin_wrist_flex_angle = 0.0
         self.current_wrist_roll = 0.0
+        self.current_wrist_flex = 0.0
         
     def reset(self):
         """Reset arm state to idle."""
@@ -35,7 +37,8 @@ class ArmState:
         self.target_position = None
         self.goal_position = None
         self.origin_position = None
-        self.origin_wrist_angle = 0.0
+        self.origin_wrist_roll_angle = 0.0
+        self.origin_wrist_flex_angle = 0.0
 
 
 class ControlLoop:
@@ -179,6 +182,9 @@ class ControlLoop:
             self.left_arm.current_wrist_roll = left_angles[WRIST_ROLL_INDEX]
             self.right_arm.current_wrist_roll = right_angles[WRIST_ROLL_INDEX]
             
+            self.left_arm.current_wrist_flex = left_angles[WRIST_FLEX_INDEX]
+            self.right_arm.current_wrist_flex = right_angles[WRIST_FLEX_INDEX]
+            
             logger.info(f"Initialized left arm at position: {left_pos.round(3)}")
             logger.info(f"Initialized right arm at position: {right_pos.round(3)}")
     
@@ -209,7 +215,8 @@ class ControlLoop:
                 if self.robot_interface:
                     arm_state.origin_position = self.robot_interface.get_current_end_effector_position(goal.arm)
                     current_angles = self.robot_interface.get_arm_angles(goal.arm)
-                    arm_state.origin_wrist_angle = current_angles[WRIST_ROLL_INDEX]
+                    arm_state.origin_wrist_roll_angle = current_angles[WRIST_ROLL_INDEX]
+                    arm_state.origin_wrist_flex_angle = current_angles[WRIST_FLEX_INDEX]
                 
                 logger.info(f"🔒 {goal.arm.upper()} arm: Position control ACTIVATED")
                 
@@ -240,10 +247,19 @@ class ControlLoop:
             if goal.wrist_roll_deg is not None:
                 if goal.metadata and goal.metadata.get("relative_position", False):
                     # Relative wrist roll from VR
-                    arm_state.current_wrist_roll = arm_state.origin_wrist_angle + goal.wrist_roll_deg
+                    arm_state.current_wrist_roll = arm_state.origin_wrist_roll_angle + goal.wrist_roll_deg
                 else:
                     # Absolute wrist roll from keyboard
                     arm_state.current_wrist_roll = goal.wrist_roll_deg
+            
+            # Handle wrist flex
+            if goal.wrist_flex_deg is not None:
+                if goal.metadata and goal.metadata.get("relative_position", False):
+                    # Relative wrist flex from VR
+                    arm_state.current_wrist_flex = arm_state.origin_wrist_flex_angle + goal.wrist_flex_deg
+                else:
+                    # Absolute wrist flex from keyboard
+                    arm_state.current_wrist_flex = goal.wrist_flex_deg
         
         # Handle gripper control (independent of mode)
         if goal.gripper_closed is not None and self.robot_interface:
@@ -264,6 +280,7 @@ class ControlLoop:
             self.robot_interface.update_arm_angles(
                 "left", 
                 ik_solution, 
+                self.left_arm.current_wrist_flex,
                 self.left_arm.current_wrist_roll,
                 current_gripper
             )
@@ -278,6 +295,7 @@ class ControlLoop:
             self.robot_interface.update_arm_angles(
                 "right", 
                 ik_solution, 
+                self.right_arm.current_wrist_flex,
                 self.right_arm.current_wrist_roll,
                 current_gripper
             )

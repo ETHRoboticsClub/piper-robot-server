@@ -26,6 +26,7 @@ POSITION_SMOOTHING = 0.1 # Smoothing factor for position updates
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 NUM_JOINTS = len(JOINT_NAMES)
 NUM_IK_JOINTS = 3  # Use only first 3 joints for IK (Rotation, Pitch, Elbow)
+WRIST_FLEX_INDEX = 3
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
 
@@ -41,8 +42,16 @@ IK_JOINT_LOWER_MARGINS_DEG = [
 IK_JOINT_UPPER_MARGINS_DEG = [
     0.0,  # shoulder_pan - no margin needed
     0.0,  # shoulder_lift - no margin needed
-    0.0,  # elbow_flex - upper limit (180°) is fine
+    2.0,  # elbow_flex - upper limit (180°) is fine
 ]
+
+# --- Direct Control Joint Margins ---
+# Margins for directly controlled joints (wrist_flex, wrist_roll, gripper)
+DIRECT_JOINT_MARGINS_DEG = {
+    "wrist_flex": {"lower": 3.0, "upper": 3.0},   # Keep away from ±103.1° limits
+    "wrist_roll": {"lower": 0.0, "upper": 0.0},   # No margin needed for wrist_roll
+    "gripper": {"lower": 0.0, "upper": 0.0},      # No margin needed for gripper
+}
 
 # Motor configuration for SO100
 COMMON_MOTORS = {

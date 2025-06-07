@@ -21,29 +21,34 @@ logger = logging.getLogger(__name__)
 
 
 class VRControllerState:
-    """State tracking for a single VR controller."""
+    """State tracking for a VR controller."""
     
     def __init__(self, hand: str):
         self.hand = hand
         self.grip_active = False
         self.trigger_active = False
         
-        # Position tracking
+        # Position tracking for relative movement
         self.origin_position = None
+        self.origin_rotation = None
+        
+        # Rotation tracking for wrist control
+        self.z_axis_rotation = 0.0  # For wrist_roll
+        self.x_axis_rotation = 0.0  # For wrist_flex (pitch)
+        
+        # Position tracking
         self.current_position = None
         
         # Rotation tracking
-        self.origin_rotation = None
-        self.z_axis_rotation = 0.0
         self.origin_wrist_angle = 0.0
-        
+    
     def reset_grip(self):
-        """Reset grip-related state."""
+        """Reset grip state but preserve trigger state."""
         self.grip_active = False
         self.origin_position = None
         self.origin_rotation = None
         self.z_axis_rotation = 0.0
-        self.origin_wrist_angle = 0.0
+        self.x_axis_rotation = 0.0
 
 
 class VRWebSocketServer(BaseInputProvider):
@@ -215,6 +220,7 @@ class VRWebSocketServer(BaseInputProvider):
                 controller.origin_position = position.copy()
                 controller.origin_rotation = self.euler_to_quaternion(rotation) if rotation else None
                 controller.z_axis_rotation = 0.0
+                controller.x_axis_rotation = 0.0
                 
                 # TODO: Get current robot end effector position for origin
                 # This would require communication with the robot interface
@@ -229,9 +235,13 @@ class VRWebSocketServer(BaseInputProvider):
                 )
                 
                 # Calculate Z-axis rotation for wrist_roll control
+                # Calculate X-axis rotation for wrist_flex control
                 if controller.origin_rotation is not None and rotation:
                     current_quat = self.euler_to_quaternion(rotation)
                     controller.z_axis_rotation = self.calculate_z_axis_rotation(
+                        current_quat, controller.origin_rotation
+                    )
+                    controller.x_axis_rotation = self.calculate_pitch_rotation(
                         current_quat, controller.origin_rotation
                     )
                 
@@ -243,6 +253,7 @@ class VRWebSocketServer(BaseInputProvider):
                     mode=ControlMode.POSITION_CONTROL,
                     target_position=relative_delta,  # Relative position delta
                     wrist_roll_deg=-controller.z_axis_rotation,
+                    wrist_flex_deg=-controller.x_axis_rotation,
                     metadata={
                         "source": "vr_grip",
                         "relative_position": True,
@@ -325,4 +336,35 @@ class VRWebSocketServer(BaseInputProvider):
             
         except Exception as e:
             logger.warning(f"Error calculating Z-axis rotation: {e}")
+            return 0.0
+    
+    def calculate_pitch_rotation(self, current_quat: np.ndarray, initial_quat: np.ndarray) -> float:
+        """Calculate rotation around the local X-axis (side direction) for pitch control in degrees."""
+        try:
+            current_rot = R.from_quat(current_quat)
+            initial_rot = R.from_quat(initial_quat)
+            
+            relative_rot = current_rot * initial_rot.inv()
+            side_direction = current_rot.apply([1, 0, 0])  # X-axis = side direction
+            
+            angle_rad = relative_rot.magnitude()
+            if angle_rad < 0.0001:
+                return 0.0
+            
+            rotation_axis = relative_rot.as_rotvec() / angle_rad if angle_rad > 0 else np.array([1, 0, 0])
+            projected_component = np.dot(rotation_axis, side_direction)
+            side_rotation_rad = angle_rad * projected_component
+            
+            degrees = math.degrees(side_rotation_rad)
+            
+            # Normalize to -180 to +180 range
+            while degrees > 180:
+                degrees -= 360
+            while degrees < -180:
+                degrees += 360
+            
+            return degrees
+            
+        except Exception as e:
+            logger.warning(f"Error calculating X-axis rotation: {e}")
             return 0.0 

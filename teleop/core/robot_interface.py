@@ -16,7 +16,8 @@ from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
 
 from ..config import (
     TeleopConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
-    GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE
+    GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, DIRECT_JOINT_MARGINS_DEG,
+    WRIST_FLEX_INDEX
 )
 from .kinematics import ForwardKinematics, IKSolver
 
@@ -160,10 +161,43 @@ class RobotInterface:
             return current_angles[:3]  # Return current angles if no IK solver
     
     def clamp_joint_angles(self, joint_angles: np.ndarray) -> np.ndarray:
-        """Clamp joint angles to safe limits."""
-        return np.clip(joint_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
+        """Clamp joint angles to safe limits with margins for problem joints."""
+        # Start with standard clamping
+        clamped = np.clip(joint_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
+        
+        # Apply special margins to wrist_flex to prevent getting stuck at limits
+        wrist_flex_margin = DIRECT_JOINT_MARGINS_DEG["wrist_flex"]
+        wrist_flex_min = self.joint_limits_min_deg[WRIST_FLEX_INDEX] + wrist_flex_margin["lower"]
+        wrist_flex_max = self.joint_limits_max_deg[WRIST_FLEX_INDEX] - wrist_flex_margin["upper"]
+        
+        clamped[WRIST_FLEX_INDEX] = np.clip(
+            joint_angles[WRIST_FLEX_INDEX], 
+            wrist_flex_min, 
+            wrist_flex_max
+        )
+        
+        return clamped
     
-    def update_arm_angles(self, arm: str, ik_angles: np.ndarray, wrist_roll: float, gripper: float):
+    def clamp_wrist_angle(self, angle: float, joint_name: str) -> float:
+        """Clamp a single wrist angle with margins to prevent getting stuck at limits."""
+        if joint_name == "wrist_flex":
+            joint_idx = WRIST_FLEX_INDEX
+            margin = DIRECT_JOINT_MARGINS_DEG["wrist_flex"]
+            min_limit = self.joint_limits_min_deg[joint_idx] + margin["lower"]
+            max_limit = self.joint_limits_max_deg[joint_idx] - margin["upper"]
+            return np.clip(angle, min_limit, max_limit)
+        else:
+            # For other joints, use standard limits
+            if joint_name == "wrist_roll":
+                joint_idx = 4  # WRIST_ROLL_INDEX
+            elif joint_name == "gripper":
+                joint_idx = 5  # GRIPPER_INDEX
+            else:
+                return angle
+            
+            return np.clip(angle, self.joint_limits_min_deg[joint_idx], self.joint_limits_max_deg[joint_idx])
+    
+    def update_arm_angles(self, arm: str, ik_angles: np.ndarray, wrist_flex: float, wrist_roll: float, gripper: float):
         """Update joint angles for specified arm with IK solution and direct wrist/gripper control."""
         if arm == "left":
             target_angles = self.left_arm_angles
@@ -174,10 +208,13 @@ class RobotInterface:
         
         # Update first 3 joints with IK solution
         target_angles[:3] = ik_angles
-        target_angles[4] = wrist_roll  # wrist_roll
-        target_angles[5] = gripper     # gripper
         
-        # Clamp to limits
+        # Apply margins to wrist angles before setting them
+        target_angles[3] = self.clamp_wrist_angle(wrist_flex, "wrist_flex")
+        target_angles[4] = self.clamp_wrist_angle(wrist_roll, "wrist_roll")
+        target_angles[5] = self.clamp_wrist_angle(gripper, "gripper")
+        
+        # Apply final clamping (this will also handle the IK joints)
         clamped_angles = self.clamp_joint_angles(target_angles)
         
         # Preserve gripper control (don't clamp gripper if it was set intentionally)
