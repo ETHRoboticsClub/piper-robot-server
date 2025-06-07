@@ -29,9 +29,9 @@ class PyBulletVisualizer:
         
         # PyBullet state
         self.physics_client = None
-        self.robot_id = None
-        self.joint_indices = [None] * NUM_JOINTS
-        self.end_effector_link_index = -1
+        self.robot_ids = {'left': None, 'right': None}  # Two robot instances
+        self.joint_indices = {'left': [None] * NUM_JOINTS, 'right': [None] * NUM_JOINTS}  # Joint indices for both arms
+        self.end_effector_link_indices = {'left': -1, 'right': -1}  # End effector links for both arms
         
         # Visualization markers
         self.viz_markers = {}
@@ -75,9 +75,16 @@ class PyBulletVisualizer:
             return False
         
         try:
-            self.robot_id = p.loadURDF(self.urdf_path, [0, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0, 0, 0], [0, 0, 0, 1], useFixedBase=1)
         except p.error as e:
             logger.error(f"Failed to load URDF: {e}")
+            return False
+        
+        # Load right robot 40cm away in X direction
+        try:
+            self.robot_ids['right'] = p.loadURDF(self.urdf_path, [0.4, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+        except p.error as e:
+            logger.error(f"Failed to load right robot URDF: {e}")
             return False
         
         # Map joint names to PyBullet indices
@@ -102,58 +109,69 @@ class PyBulletVisualizer:
         return True
     
     def _map_joints(self) -> bool:
-        """Map joint names to PyBullet indices."""
-        num_joints = p.getNumJoints(self.robot_id)
-        p_name_to_index = {}
+        """Map joint names to PyBullet indices for both robots."""
+        success = True
         
-        logger.info("Available PyBullet joints:")
-        for i in range(num_joints):
-            info = p.getJointInfo(self.robot_id, i)
-            joint_name = info[1].decode('UTF-8')
-            joint_type = info[2]
-            logger.info(f"  Index: {i}, Name: '{joint_name}', Type: {joint_type}")
-            p_name_to_index[joint_name] = i
-            if joint_type != p.JOINT_FIXED:
-                p.setJointMotorControl2(self.robot_id, i, p.VELOCITY_CONTROL, force=0)
+        for arm_name, robot_id in self.robot_ids.items():
+            logger.info(f"Mapping joints for {arm_name} robot:")
+            num_joints = p.getNumJoints(robot_id)
+            p_name_to_index = {}
+            
+            for i in range(num_joints):
+                info = p.getJointInfo(robot_id, i)
+                joint_name = info[1].decode('UTF-8')
+                joint_type = info[2]
+                logger.info(f"  Index: {i}, Name: '{joint_name}', Type: {joint_type}")
+                p_name_to_index[joint_name] = i
+                if joint_type != p.JOINT_FIXED:
+                    p.setJointMotorControl2(robot_id, i, p.VELOCITY_CONTROL, force=0)
+            
+            # Map to our joint indices
+            mapped_count = 0
+            for urdf_name, internal_name in URDF_TO_INTERNAL_NAME_MAP.items():
+                if internal_name in JOINT_NAMES and urdf_name in p_name_to_index:
+                    target_idx = JOINT_NAMES.index(internal_name)
+                    self.joint_indices[arm_name][target_idx] = p_name_to_index[urdf_name]
+                    mapped_count += 1
+                    logger.info(f"  Mapped: '{internal_name}' -> '{urdf_name}' (Index {p_name_to_index[urdf_name]})")
+            
+            if mapped_count < NUM_JOINTS:
+                missing = [name for i, name in enumerate(JOINT_NAMES) if self.joint_indices[arm_name][i] is None]
+                logger.error(f"Could not map all joints for {arm_name} robot. Missing: {missing}")
+                success = False
         
-        # Map to our joint indices
-        mapped_count = 0
-        for urdf_name, internal_name in URDF_TO_INTERNAL_NAME_MAP.items():
-            if internal_name in JOINT_NAMES and urdf_name in p_name_to_index:
-                target_idx = JOINT_NAMES.index(internal_name)
-                self.joint_indices[target_idx] = p_name_to_index[urdf_name]
-                mapped_count += 1
-                logger.info(f"Mapped: '{internal_name}' -> '{urdf_name}' (Index {p_name_to_index[urdf_name]})")
-        
-        if mapped_count < NUM_JOINTS:
-            missing = [name for i, name in enumerate(JOINT_NAMES) if self.joint_indices[i] is None]
-            logger.error(f"Could not map all joints. Missing: {missing}")
-            return False
-        
-        return True
+        return success
     
     def _find_end_effector(self) -> bool:
-        """Find the end effector link index."""
-        num_joints = p.getNumJoints(self.robot_id)
-        for i in range(num_joints):
-            info = p.getJointInfo(self.robot_id, i)
-            link_name = info[12].decode('UTF-8')
-            if link_name == END_EFFECTOR_LINK_NAME:
-                self.end_effector_link_index = i
-                logger.info(f"Found end effector link '{END_EFFECTOR_LINK_NAME}' at index {i}")
-                return True
+        """Find the end effector link index for both robots."""
+        success = True
         
-        logger.error(f"Could not find end effector link '{END_EFFECTOR_LINK_NAME}'")
-        return False
+        for arm_name, robot_id in self.robot_ids.items():
+            num_joints = p.getNumJoints(robot_id)
+            found = False
+            for i in range(num_joints):
+                info = p.getJointInfo(robot_id, i)
+                link_name = info[12].decode('UTF-8')
+                if link_name == END_EFFECTOR_LINK_NAME:
+                    self.end_effector_link_indices[arm_name] = i
+                    logger.info(f"Found end effector link '{END_EFFECTOR_LINK_NAME}' for {arm_name} robot at index {i}")
+                    found = True
+                    break
+            
+            if not found:
+                logger.error(f"Could not find end effector link '{END_EFFECTOR_LINK_NAME}' for {arm_name} robot")
+                success = False
+        
+        return success
     
     def _read_joint_limits(self):
-        """Read joint limits from URDF."""
+        """Read joint limits from URDF (using left robot as reference)."""
         logger.info("Reading URDF joint limits:")
         for i in range(NUM_JOINTS):
-            pb_index = self.joint_indices[i]
+            pb_index = self.joint_indices['left'][i]
             joint_name = JOINT_NAMES[i]
             if pb_index is not None:
-                joint_info = p.getJointInfo(self.robot_id, pb_index)
+                joint_info = p.getJointInfo(self.robot_ids['left'], pb_index)
                 lower, upper = joint_info[8], joint_info[9]
                 if lower < upper:
                     self.joint_limits_min_deg[i] = math.degrees(lower)
@@ -209,15 +227,15 @@ class PyBulletVisualizer:
         
         logger.info(f"Camera positioned behind robot at distance={camera_distance}, yaw={camera_yaw}°, pitch={camera_pitch}°")
     
-    def update_robot_pose(self, joint_angles_deg: np.ndarray):
-        """Update robot joint positions in visualization."""
-        if not self.is_connected:
+    def update_robot_pose(self, joint_angles_deg: np.ndarray, arm: str = 'left'):
+        """Update robot joint positions in visualization for specified arm."""
+        if not self.is_connected or arm not in self.robot_ids:
             return
         
         joint_angles_rad = np.deg2rad(joint_angles_deg)
         for i in range(NUM_JOINTS):
-            if self.joint_indices[i] is not None:
-                p.resetJointState(self.robot_id, self.joint_indices[i], joint_angles_rad[i])
+            if self.joint_indices[arm][i] is not None:
+                p.resetJointState(self.robot_ids[arm], self.joint_indices[arm][i], joint_angles_rad[i])
     
     def update_marker_position(self, marker_name: str, position: np.ndarray, 
                               orientation: Optional[np.ndarray] = None):

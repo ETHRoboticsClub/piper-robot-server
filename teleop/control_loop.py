@@ -97,9 +97,9 @@ class ControlLoop:
                     joint_limits_min, joint_limits_max = self.visualizer.get_joint_limits
                     self.robot_interface.setup_kinematics(
                         self.visualizer.physics_client,
-                        self.visualizer.robot_id,
-                        self.visualizer.joint_indices,
-                        self.visualizer.end_effector_link_index,
+                        self.visualizer.robot_ids,  # Pass both robot instances
+                        self.visualizer.joint_indices,  # Pass both joint index mappings
+                        self.visualizer.end_effector_link_indices,  # Pass both end effector indices
                         joint_limits_min,
                         joint_limits_max
                     )
@@ -290,9 +290,12 @@ class ControlLoop:
         if not self.visualizer:
             return
         
-        # Update robot pose with left arm angles (assuming single robot visualization)
+        # Update robot poses for both arms
         left_angles = self.robot_interface.get_arm_angles("left")
-        self.visualizer.update_robot_pose(left_angles)
+        right_angles = self.robot_interface.get_arm_angles("right")
+        
+        self.visualizer.update_robot_pose(left_angles, 'left')
+        self.visualizer.update_robot_pose(right_angles, 'right')
         
         # Update visualization markers
         if self.left_arm.mode == ControlMode.POSITION_CONTROL:

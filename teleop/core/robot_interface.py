@@ -40,8 +40,8 @@ class RobotInterface:
         self.joint_limits_max_deg = np.full(NUM_JOINTS, 180.0)
         
         # Kinematics solvers (will be set after PyBullet setup)
-        self.fk_solver = None
-        self.ik_solver = None
+        self.fk_solvers = {'left': None, 'right': None}
+        self.ik_solvers = {'left': None, 'right': None}
         
         # Control timing
         self.last_send_time = 0
@@ -109,23 +109,25 @@ class RobotInterface:
         except Exception as e:
             logger.warning(f"Could not read initial robot state: {e}")
     
-    def setup_kinematics(self, physics_client, robot_id: int, joint_indices: list, 
-                        end_effector_link_index: int, joint_limits_min_deg: np.ndarray, 
+    def setup_kinematics(self, physics_client, robot_ids: Dict, joint_indices: Dict, 
+                        end_effector_link_indices: Dict, joint_limits_min_deg: np.ndarray, 
                         joint_limits_max_deg: np.ndarray):
-        """Setup kinematics solvers using PyBullet components."""
+        """Setup kinematics solvers using PyBullet components for both arms."""
         self.joint_limits_min_deg = joint_limits_min_deg.copy()
         self.joint_limits_max_deg = joint_limits_max_deg.copy()
         
-        self.fk_solver = ForwardKinematics(
-            physics_client, robot_id, joint_indices, end_effector_link_index
-        )
+        # Setup solvers for both arms
+        for arm in ['left', 'right']:
+            self.fk_solvers[arm] = ForwardKinematics(
+                physics_client, robot_ids[arm], joint_indices[arm], end_effector_link_indices[arm]
+            )
+            
+            self.ik_solvers[arm] = IKSolver(
+                physics_client, robot_ids[arm], joint_indices[arm], end_effector_link_indices[arm],
+                joint_limits_min_deg, joint_limits_max_deg
+            )
         
-        self.ik_solver = IKSolver(
-            physics_client, robot_id, joint_indices, end_effector_link_index,
-            joint_limits_min_deg, joint_limits_max_deg
-        )
-        
-        logger.info("Kinematics solvers initialized")
+        logger.info("Kinematics solvers initialized for both arms")
     
     def get_current_end_effector_position(self, arm: str) -> np.ndarray:
         """Get current end effector position for specified arm."""
@@ -136,8 +138,8 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
         
-        if self.fk_solver:
-            position, _ = self.fk_solver.compute(angles)
+        if self.fk_solvers[arm]:
+            position, _ = self.fk_solvers[arm].compute(angles)
             return position
         else:
             return np.array([0.2, 0.0, 0.15])  # Default position
@@ -152,8 +154,8 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
         
-        if self.ik_solver:
-            return self.ik_solver.solve(target_position, target_orientation, current_angles)
+        if self.ik_solvers[arm]:
+            return self.ik_solvers[arm].solve(target_position, target_orientation, current_angles)
         else:
             return current_angles[:4]  # Return current angles if no IK solver
     
