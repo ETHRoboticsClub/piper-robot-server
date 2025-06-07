@@ -36,7 +36,7 @@ GRIPPER_INDEX = 5
 IK_JOINT_LOWER_MARGINS_DEG = [
     0.0,  # shoulder_pan - no margin needed
     0.0,  # shoulder_lift - no margin needed  
-    5.0,  # elbow_flex - prevent hyperextension (-11.5° + 5° = -6.5° min)
+    15.0,  # elbow_flex - prevent hyperextension (-11.5° + 5° = -6.5° min)
 ]
 
 IK_JOINT_UPPER_MARGINS_DEG = [

@@ -17,7 +17,7 @@ from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
 from ..config import (
     TeleopConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
     GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, DIRECT_JOINT_MARGINS_DEG,
-    WRIST_FLEX_INDEX
+    WRIST_FLEX_INDEX, IK_JOINT_LOWER_MARGINS_DEG, IK_JOINT_UPPER_MARGINS_DEG, NUM_IK_JOINTS
 )
 from .kinematics import ForwardKinematics, IKSolver
 
@@ -164,6 +164,13 @@ class RobotInterface:
         """Clamp joint angles to safe limits with margins for problem joints."""
         # Start with standard clamping
         clamped = np.clip(joint_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
+        
+        # Apply elbow margin to prevent hyperextension (joint index 2 = elbow_flex)
+        elbow_idx = 2  # elbow_flex index
+        elbow_lower_margin = IK_JOINT_LOWER_MARGINS_DEG[elbow_idx]  # Should be 5.0 from config
+        if elbow_lower_margin > 0:
+            elbow_min_with_margin = self.joint_limits_min_deg[elbow_idx] + elbow_lower_margin
+            clamped[elbow_idx] = np.clip(joint_angles[elbow_idx], elbow_min_with_margin, self.joint_limits_max_deg[elbow_idx])
         
         # Apply special margins to wrist_flex to prevent getting stuck at limits
         wrist_flex_margin = DIRECT_JOINT_MARGINS_DEG["wrist_flex"]
