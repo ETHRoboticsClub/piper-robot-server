@@ -308,23 +308,19 @@ class VRWebSocketServer(BaseInputProvider):
         return rotation.as_quat()
     
     def calculate_z_axis_rotation(self, current_quat: np.ndarray, initial_quat: np.ndarray) -> float:
-        """Calculate rotation around the local Z-axis (forward direction) in degrees."""
+        """Calculate roll rotation (twisting around forward axis) in degrees."""
         try:
             current_rot = R.from_quat(current_quat)
             initial_rot = R.from_quat(initial_quat)
             
+            # Calculate relative rotation
             relative_rot = current_rot * initial_rot.inv()
-            forward_direction = current_rot.apply([0, 0, 1])
             
-            angle_rad = relative_rot.magnitude()
-            if angle_rad < 0.0001:
-                return 0.0
+            # Extract Euler angles (XYZ order) - Z is roll (twist around forward axis)
+            euler_rad = relative_rot.as_euler('xyz')
+            roll_rad = euler_rad[2]  # Z-axis rotation = roll
             
-            rotation_axis = relative_rot.as_rotvec() / angle_rad if angle_rad > 0 else np.array([0, 0, 1])
-            projected_component = np.dot(rotation_axis, forward_direction)
-            forward_rotation_rad = angle_rad * projected_component
-            
-            degrees = math.degrees(forward_rotation_rad)
+            degrees = math.degrees(roll_rad)
             
             # Normalize to -180 to +180 range
             while degrees > 180:
@@ -335,27 +331,23 @@ class VRWebSocketServer(BaseInputProvider):
             return degrees
             
         except Exception as e:
-            logger.warning(f"Error calculating Z-axis rotation: {e}")
+            logger.warning(f"Error calculating roll rotation: {e}")
             return 0.0
     
     def calculate_pitch_rotation(self, current_quat: np.ndarray, initial_quat: np.ndarray) -> float:
-        """Calculate rotation around the local X-axis (side direction) for pitch control in degrees."""
+        """Calculate pitch rotation (forward/backward tilt) in degrees."""
         try:
             current_rot = R.from_quat(current_quat)
             initial_rot = R.from_quat(initial_quat)
             
+            # Calculate relative rotation
             relative_rot = current_rot * initial_rot.inv()
-            side_direction = current_rot.apply([1, 0, 0])  # X-axis = side direction
             
-            angle_rad = relative_rot.magnitude()
-            if angle_rad < 0.0001:
-                return 0.0
+            # Extract Euler angles (XYZ order) - X is pitch (forward/backward tilt)
+            euler_rad = relative_rot.as_euler('xyz')
+            pitch_rad = euler_rad[0]  # X-axis rotation = pitch
             
-            rotation_axis = relative_rot.as_rotvec() / angle_rad if angle_rad > 0 else np.array([1, 0, 0])
-            projected_component = np.dot(rotation_axis, side_direction)
-            side_rotation_rad = angle_rad * projected_component
-            
-            degrees = math.degrees(side_rotation_rad)
+            degrees = math.degrees(pitch_rad)
             
             # Normalize to -180 to +180 range
             while degrees > 180:
@@ -366,5 +358,5 @@ class VRWebSocketServer(BaseInputProvider):
             return degrees
             
         except Exception as e:
-            logger.warning(f"Error calculating X-axis rotation: {e}")
+            logger.warning(f"Error calculating pitch rotation: {e}")
             return 0.0 
