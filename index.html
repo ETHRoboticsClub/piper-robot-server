@@ -33,21 +33,23 @@
 
       .desktop-header {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
         margin-bottom: 20px;
+        max-width: 800px;
       }
 
       .desktop-title {
         font-size: 24px;
         font-weight: bold;
         color: #2c3e50;
+        margin-bottom: 10px;
       }
 
       .desktop-subtitle {
         font-size: 14px;
         color: #7f8c8d;
-        margin-top: 5px;
+        margin-bottom: 20px;
       }
 
       /* Status indicators */
@@ -142,6 +144,34 @@
 
       .keyboard-help.active .help-title {
         color: #2E7D32;
+      }
+
+      .keyboard-help-header {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+      }
+
+      .keyboard-help-expanded {
+        display: none;
+      }
+
+      .keyboard-help.active .keyboard-help-expanded {
+        display: block;
+      }
+
+      .keyboard-help-collapsed {
+        display: block;
+      }
+
+      .keyboard-help-collapsed .control-toggle {
+        display: inline-flex;
+        width: auto;
+      }
+
+      .keyboard-help.active .keyboard-help-collapsed {
+        display: none;
       }
 
       .help-title {
@@ -303,10 +333,8 @@
     <!-- Desktop Interface -->
     <div class="desktop-interface" id="desktopInterface">
       <div class="desktop-header">
-        <div>
-          <div class="desktop-title">VR Teleoperation System</div>
-          <div class="desktop-subtitle">Dual-arm robot control via VR controllers</div>
-        </div>
+        <div class="desktop-title">VR Teleoperation System</div>
+        <div class="desktop-subtitle">Dual-arm robot control via VR controllers</div>
         
         <div class="status-section">
           <h2>🤖 Robot Status</h2>
@@ -334,87 +362,97 @@
               <span id="engagementStatusText">Motors Disengaged</span>
             </div>
           </div>
-          
-          <!-- Keyboard Control Toggle -->
-          <div class="control-section">
-            <div class="control-toggle" id="keyboardToggle" onclick="toggleKeyboardControl()">
-              <span>🎮</span>
-              <span id="keyboardToggleText">Enable Keyboard Control</span>
-            </div>
-          </div>
         </div>
       </div>
 
       <div class="keyboard-help">
-        <div class="help-title">
-          <span>⌨️</span>
-          Keyboard Controls
+        <!-- Collapsed state: just the enable button -->
+        <div class="keyboard-help-collapsed">
+          <div class="control-toggle" id="keyboardToggle" onclick="toggleKeyboardControl()">
+            <span>🎮</span>
+            <span id="keyboardToggleText">Enable Keyboard Control</span>
+          </div>
         </div>
-        <div class="help-columns">
-          <div class="help-column">
-            <h4>Left Arm</h4>
-            <div class="key-group">
-              <div class="key-row">
-                <span><kbd class="key">W</kbd> / <kbd class="key">S</kbd></span>
-                <span class="key-desc">Forward / Backward</span>
+        
+        <!-- Expanded state: title, disable button, and content -->
+        <div class="keyboard-help-expanded">
+          <div class="keyboard-help-header">
+            <div class="control-toggle active" onclick="toggleKeyboardControl()">
+              <span>🎮</span>
+              <span>Disable Keyboard Control</span>
+            </div>
+            <div class="help-title">
+              <span>⌨️</span>
+              Keyboard Controls
+            </div>
+          </div>
+          
+          <div class="help-columns">
+            <div class="help-column">
+              <h4>Left Arm</h4>
+              <div class="key-group">
+                <div class="key-row">
+                  <span><kbd class="key">W</kbd> / <kbd class="key">S</kbd></span>
+                  <span class="key-desc">Forward / Backward</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">A</kbd> / <kbd class="key">D</kbd></span>
+                  <span class="key-desc">Left / Right</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">Q</kbd> / <kbd class="key">E</kbd></span>
+                  <span class="key-desc">Down / Up</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">Z</kbd> / <kbd class="key">X</kbd></span>
+                  <span class="key-desc">Wrist Roll</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">F</kbd></span>
+                  <span class="key-desc">Toggle Gripper</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">Tab</kbd></span>
+                  <span class="key-desc">Activate Control</span>
+                </div>
               </div>
-              <div class="key-row">
-                <span><kbd class="key">A</kbd> / <kbd class="key">D</kbd></span>
-                <span class="key-desc">Left / Right</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">Q</kbd> / <kbd class="key">E</kbd></span>
-                <span class="key-desc">Down / Up</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">Z</kbd> / <kbd class="key">X</kbd></span>
-                <span class="key-desc">Wrist Roll</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">F</kbd></span>
-                <span class="key-desc">Toggle Gripper</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">Tab</kbd></span>
-                <span class="key-desc">Activate Control</span>
+            </div>
+            
+            <div class="help-column">
+              <h4>Right Arm</h4>
+              <div class="key-group">
+                <div class="key-row">
+                  <span><kbd class="key">I</kbd> / <kbd class="key">K</kbd></span>
+                  <span class="key-desc">Forward / Backward</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">J</kbd> / <kbd class="key">L</kbd></span>
+                  <span class="key-desc">Left / Right</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">U</kbd> / <kbd class="key">O</kbd></span>
+                  <span class="key-desc">Up / Down</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">N</kbd> / <kbd class="key">M</kbd></span>
+                  <span class="key-desc">Wrist Roll</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">;</kbd></span>
+                  <span class="key-desc">Toggle Gripper</span>
+                </div>
+                <div class="key-row">
+                  <span><kbd class="key">Enter</kbd></span>
+                  <span class="key-desc">Activate Control</span>
+                </div>
               </div>
             </div>
           </div>
           
-          <div class="help-column">
-            <h4>Right Arm</h4>
-            <div class="key-group">
-              <div class="key-row">
-                <span><kbd class="key">I</kbd> / <kbd class="key">K</kbd></span>
-                <span class="key-desc">Forward / Backward</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">J</kbd> / <kbd class="key">L</kbd></span>
-                <span class="key-desc">Left / Right</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">U</kbd> / <kbd class="key">O</kbd></span>
-                <span class="key-desc">Up / Down</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">N</kbd> / <kbd class="key">M</kbd></span>
-                <span class="key-desc">Wrist Roll</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">;</kbd></span>
-                <span class="key-desc">Toggle Gripper</span>
-              </div>
-              <div class="key-row">
-                <span><kbd class="key">Enter</kbd></span>
-                <span class="key-desc">Activate Control</span>
-              </div>
-            </div>
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #bdc3c7; color: #7f8c8d; font-size: 13px;">
+            <strong>Tips:</strong> Position control activates automatically when you press movement keys. 
+            Use <kbd class="key">ESC</kbd> to stop the system.
           </div>
-        </div>
-        
-        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #bdc3c7; color: #7f8c8d; font-size: 13px;">
-          <strong>Tips:</strong> Position control activates automatically when you press movement keys. 
-          Use <kbd class="key">ESC</kbd> to stop the system.
         </div>
       </div>
     </div>
@@ -459,17 +497,11 @@
             
             // Update keyboard control status
             isKeyboardEnabled = data.keyboardEnabled;
-            const keyboardToggle = document.getElementById('keyboardToggle');
-            const keyboardText = document.getElementById('keyboardToggleText');
             const keyboardHelp = document.querySelector('.keyboard-help');
             
             if (isKeyboardEnabled) {
-              keyboardToggle.classList.add('active');
-              keyboardText.textContent = 'Disable Keyboard Control';
               if (keyboardHelp) keyboardHelp.classList.add('active');
             } else {
-              keyboardToggle.classList.remove('active');
-              keyboardText.textContent = 'Enable Keyboard Control';
               if (keyboardHelp) keyboardHelp.classList.remove('active');
             }
             
@@ -542,17 +574,11 @@
         .then(data => {
           if (data.success) {
             isKeyboardEnabled = !isKeyboardEnabled;
-            const keyboardToggle = document.getElementById('keyboardToggle');
-            const keyboardText = document.getElementById('keyboardToggleText');
             const keyboardHelp = document.querySelector('.keyboard-help');
             
             if (isKeyboardEnabled) {
-              keyboardToggle.classList.add('active');
-              keyboardText.textContent = 'Disable Keyboard Control';
               if (keyboardHelp) keyboardHelp.classList.add('active');
             } else {
-              keyboardToggle.classList.remove('active');
-              keyboardText.textContent = 'Enable Keyboard Control';
               if (keyboardHelp) keyboardHelp.classList.remove('active');
             }
           } else {
