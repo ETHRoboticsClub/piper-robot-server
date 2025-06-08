@@ -244,25 +244,10 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, str(e))
     
     def serve_file(self, filename, content_type):
-        """Serve a static file."""
+        """Serve a static file from the current directory."""
         try:
-            # Try to find the file in current directory or webapp directory
-            file_paths = [filename, f'webapp/{filename}', f'./{filename}']
-            file_content = None
-            file_path = None
-            
-            for path in file_paths:
-                try:
-                    with open(path, 'rb') as f:
-                        file_content = f.read()
-                        file_path = path
-                        break
-                except FileNotFoundError:
-                    continue
-            
-            if file_content is None:
-                self.send_error(404, f"File {filename} not found")
-                return
+            with open(filename, 'rb') as f:
+                file_content = f.read()
             
             self.send_response(200)
             self.send_header('Content-Type', content_type)
@@ -270,6 +255,8 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(file_content)
             
+        except FileNotFoundError:
+            self.send_error(404, f"File {filename} not found")
         except Exception as e:
             logger.error(f"Error serving file {filename}: {e}")
             self.send_error(500, "Internal server error")
