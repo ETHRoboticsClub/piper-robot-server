@@ -429,14 +429,11 @@ class ControlLoop:
             
             # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("left")[GRIPPER_INDEX]
-            self.robot_interface.update_arm_angles(
-                "left", 
-                ik_solution, 
-                self.left_arm.current_wrist_flex,
-                self.left_arm.current_wrist_roll,
-                current_gripper
-            )
-        
+            self.robot_interface.update_arm_angles("left", ik_solution, 
+                                                 self.left_arm.current_wrist_flex, 
+                                                 self.left_arm.current_wrist_roll, 
+                                                 current_gripper)
+
         # Update right arm (only if connected)
         if (self.right_arm.mode == ControlMode.POSITION_CONTROL and 
             self.right_arm.target_position is not None and
@@ -447,16 +444,14 @@ class ControlLoop:
             
             # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("right")[GRIPPER_INDEX]
-            self.robot_interface.update_arm_angles(
-                "right", 
-                ik_solution, 
-                self.right_arm.current_wrist_flex,
-                self.right_arm.current_wrist_roll,
-                current_gripper
-            )
-        
-        # Send commands to robot (will handle errors gracefully)
-        self.robot_interface.send_command()
+            self.robot_interface.update_arm_angles("right", ik_solution, 
+                                                  self.right_arm.current_wrist_flex, 
+                                                  self.right_arm.current_wrist_roll, 
+                                                  current_gripper)
+
+        # Send commands to robot
+        if self.robot_interface.is_connected and self.robot_interface.is_engaged:
+            self.robot_interface.send_command()
     
     def _update_visualization(self):
         """Update PyBullet visualization."""

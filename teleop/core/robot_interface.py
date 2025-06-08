@@ -18,7 +18,7 @@ from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
 from ..config import (
     TeleopConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
     GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, 
-    WRIST_FLEX_INDEX, ELBOW_LOWER_MARGIN_DEG, WRIST_FLEX_MARGINS_DEG
+    WRIST_FLEX_INDEX, URDF_TO_INTERNAL_NAME_MAP
 )
 from .kinematics import ForwardKinematics, IKSolver
 
@@ -149,7 +149,7 @@ class RobotInterface:
             
             self.ik_solvers[arm] = IKSolver(
                 physics_client, robot_ids[arm], joint_indices[arm], end_effector_link_indices[arm],
-                joint_limits_min_deg, joint_limits_max_deg
+                joint_limits_min_deg, joint_limits_max_deg, arm_name=arm
             )
         
         logger.info("Kinematics solvers initialized for both arms")
@@ -187,47 +187,45 @@ class RobotInterface:
     
     def clamp_joint_angles(self, joint_angles: np.ndarray) -> np.ndarray:
         """Clamp joint angles to safe limits with margins for problem joints."""
-        # Start with standard clamping
-        clamped = np.clip(joint_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
+        # Create a copy to avoid modifying the original
+        processed_angles = joint_angles.copy()
         
-        # Apply elbow margin to prevent hyperextension (joint index 2 = elbow_flex)
-        elbow_idx = 2  # elbow_flex index
-        elbow_lower_margin = ELBOW_LOWER_MARGIN_DEG  # 5.0 from config
-        if elbow_lower_margin > 0:
-            elbow_min_with_margin = self.joint_limits_min_deg[elbow_idx] + elbow_lower_margin
-            clamped[elbow_idx] = np.clip(joint_angles[elbow_idx], elbow_min_with_margin, self.joint_limits_max_deg[elbow_idx])
+        # First, normalize angles that can wrap around (like shoulder_pan)
+        # Check if first joint (shoulder_pan) is outside limits but can be wrapped
+        shoulder_pan_idx = 0
+        shoulder_pan_angle = processed_angles[shoulder_pan_idx]
+        min_limit = self.joint_limits_min_deg[shoulder_pan_idx]  # -120.3°
+        max_limit = self.joint_limits_max_deg[shoulder_pan_idx]  # +120.3°
         
-        # Apply special margins to wrist_flex to prevent getting stuck at limits
-        wrist_flex_margin = WRIST_FLEX_MARGINS_DEG
-        wrist_flex_min = self.joint_limits_min_deg[WRIST_FLEX_INDEX] + wrist_flex_margin["lower"]
-        wrist_flex_max = self.joint_limits_max_deg[WRIST_FLEX_INDEX] - wrist_flex_margin["upper"]
+        # Try to wrap the angle to an equivalent angle within limits
+        if shoulder_pan_angle < min_limit or shoulder_pan_angle > max_limit:
+            # Try wrapping by ±360°
+            for offset in [-360.0, 360.0]:
+                wrapped_angle = shoulder_pan_angle + offset
+                if min_limit <= wrapped_angle <= max_limit:
+                    logger.debug(f"Wrapped shoulder_pan from {shoulder_pan_angle:.1f}° to {wrapped_angle:.1f}°")
+                    processed_angles[shoulder_pan_idx] = wrapped_angle
+                    break
         
-        clamped[WRIST_FLEX_INDEX] = np.clip(
-            joint_angles[WRIST_FLEX_INDEX], 
-            wrist_flex_min, 
-            wrist_flex_max
-        )
-        
-        return clamped
+        # Apply standard joint limits to all joints
+        return np.clip(processed_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
     
     def clamp_wrist_angle(self, angle: float, joint_name: str) -> float:
-        """Clamp a single wrist angle with margins to prevent getting stuck at limits."""
+        """Clamp wrist angle to safe limits with margins."""
         if joint_name == "wrist_flex":
             joint_idx = WRIST_FLEX_INDEX
-            margin = WRIST_FLEX_MARGINS_DEG
+            margin = {"lower": 0.0, "upper": 0.0}
             min_limit = self.joint_limits_min_deg[joint_idx] + margin["lower"]
             max_limit = self.joint_limits_max_deg[joint_idx] - margin["upper"]
-            return np.clip(angle, min_limit, max_limit)
+        elif joint_name == "wrist_roll":
+            joint_idx = 4  # wrist_roll index
+            min_limit = self.joint_limits_min_deg[joint_idx]
+            max_limit = self.joint_limits_max_deg[joint_idx]
         else:
-            # For other joints, use standard limits
-            if joint_name == "wrist_roll":
-                joint_idx = 4  # WRIST_ROLL_INDEX
-            elif joint_name == "gripper":
-                joint_idx = 5  # GRIPPER_INDEX
-            else:
-                return angle
-            
-            return np.clip(angle, self.joint_limits_min_deg[joint_idx], self.joint_limits_max_deg[joint_idx])
+            logger.warning(f"Unknown wrist joint: {joint_name}")
+            return angle
+        
+        return np.clip(angle, min_limit, max_limit)
     
     def update_arm_angles(self, arm: str, ik_angles: np.ndarray, wrist_flex: float, wrist_roll: float, gripper: float):
         """Update joint angles for specified arm with IK solution and direct wrist/gripper control."""
@@ -341,9 +339,6 @@ class RobotInterface:
                 # General error - couldn't determine which arm
                 self.general_errors += 1
                 logger.warning(f"⚠️  General robot communication error (count: {self.general_errors})")
-            
-            # Don't mark robot as disconnected due to communication errors
-            # Status should only depend on device file existence
             
             return False
     

@@ -8,6 +8,7 @@ import argparse
 import logging
 import signal
 import sys
+import os
 import http.server
 import ssl
 import socket
@@ -85,6 +86,8 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.handle_keypress_request()
         elif self.path == '/api/config':
             self.handle_config_post_request()
+        elif self.path == '/api/restart':
+            self.handle_restart_request()
         else:
             self.send_error(404, "Not found")
     
@@ -293,6 +296,23 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             logger.error(f"Error handling config post request: {e}")
             self.send_error(500, str(e))
     
+    def handle_restart_request(self):
+        """Handle restart requests."""
+        try:
+            if hasattr(self.server, 'api_handler') and self.server.api_handler:
+                logger.info("Restarting teleoperation system...")
+                self.server.api_handler.restart()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "message": "Teleoperation system restarted"}).encode('utf-8'))
+            else:
+                self.send_error(500, "System not available")
+                
+        except Exception as e:
+            logger.error(f"Error handling restart request: {e}")
+            self.send_error(500, str(e))
+    
     def serve_file(self, filename, content_type):
         """Serve a static file from the current directory."""
         try:
@@ -430,6 +450,42 @@ class TeleopSystem:
                     
         except Exception as e:
             logger.error(f"Error processing control commands: {e}")
+    
+    def restart(self):
+        """Restart the teleoperation system."""
+        def do_restart():
+            try:
+                logger.info("Initiating system restart...")
+                # Schedule stop and restart
+                asyncio.create_task(self._restart_sequence())
+            except Exception as e:
+                logger.error(f"Error during restart: {e}")
+        
+        # Run restart in a separate thread to avoid blocking the HTTP response
+        restart_thread = threading.Thread(target=do_restart, daemon=True)
+        restart_thread.start()
+    
+    async def _restart_sequence(self):
+        """Perform the actual restart sequence."""
+        try:
+            # Wait a moment to let the HTTP response be sent
+            await asyncio.sleep(1)
+            
+            # Stop all components gracefully
+            await self.stop()
+            
+            # Wait a bit more to ensure clean shutdown
+            await asyncio.sleep(2)
+            
+            # Restart the process
+            logger.info("Restarting process...")
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
+            
+        except Exception as e:
+            logger.error(f"Error during restart sequence: {e}")
+            # If execl fails, exit and let external process manager restart
+            sys.exit(1)
     
     async def start(self):
         """Start all system components."""

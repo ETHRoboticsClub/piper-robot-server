@@ -34,7 +34,6 @@ DEFAULT_CONFIG = {
         },
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
-        "position_smoothing": 0.1
     },
     "control": {
         "keyboard": {
@@ -56,6 +55,13 @@ DEFAULT_CONFIG = {
     "gripper": {
         "open_angle": 0.0,
         "closed_angle": 45.0
+    },
+    "ik": {
+        "use_reference_poses": True,
+        "reference_poses_file": ".cache/reference_poses.json",
+        "position_error_threshold": 0.001,
+        "hysteresis_threshold": 0.01,
+        "movement_penalty_weight": 0.01
     }
 }
 
@@ -109,7 +115,6 @@ KEYFILE = _config_data["ssl"]["keyfile"]
 
 VR_TO_ROBOT_SCALE = _config_data["robot"]["vr_to_robot_scale"]
 SEND_INTERVAL = _config_data["robot"]["send_interval"]
-POSITION_SMOOTHING = _config_data["robot"]["position_smoothing"]
 
 POS_STEP = _config_data["control"]["keyboard"]["pos_step"]
 ANGLE_STEP = _config_data["control"]["keyboard"]["angle_step"]
@@ -119,6 +124,13 @@ URDF_PATH = _config_data["paths"]["urdf_path"]
 
 GRIPPER_OPEN_ANGLE = _config_data["gripper"]["open_angle"]
 GRIPPER_CLOSED_ANGLE = _config_data["gripper"]["closed_angle"]
+
+# IK Configuration
+USE_REFERENCE_POSES = _config_data["ik"]["use_reference_poses"]
+REFERENCE_POSES_FILE = _config_data["ik"]["reference_poses_file"]
+IK_POSITION_ERROR_THRESHOLD = _config_data["ik"]["position_error_threshold"]
+IK_HYSTERESIS_THRESHOLD = _config_data["ik"]["hysteresis_threshold"]
+IK_MOVEMENT_PENALTY_WEIGHT = _config_data["ik"]["movement_penalty_weight"]
 
 DEFAULT_FOLLOWER_PORTS = {
     "left": _config_data["robot"]["left_arm"]["port"],
@@ -132,15 +144,6 @@ NUM_IK_JOINTS = 3  # Use only first 3 joints for IK (Rotation, Pitch, Elbow)
 WRIST_FLEX_INDEX = 3
 WRIST_ROLL_INDEX = 4
 GRIPPER_INDEX = 5
-
-# --- Joint Limit Margins ---
-# Only define margins for joints that have specific problems and need constraints
-
-# Elbow joint margin - prevent hyperextension at -11.5°
-ELBOW_LOWER_MARGIN_DEG = 25.0  # Keep elbow above -6.5° instead of -11.5°
-
-# Wrist flex margins - prevent getting stuck at ±103.1° limits  
-WRIST_FLEX_MARGINS_DEG = {"lower": 3.0, "upper": 3.0}  # Keep within ±100.1°
 
 # Motor configuration for SO100
 COMMON_MOTORS = {
@@ -161,10 +164,6 @@ URDF_TO_INTERNAL_NAME_MAP = {
     "Wrist_Roll": "wrist_roll",
     "Jaw": "gripper",
 }
-
-# --- Gripper Control ---
-GRIPPER_OPEN_ANGLE = 0.0    # Degrees - gripper open position
-GRIPPER_CLOSED_ANGLE = 45.0 # Degrees - gripper closed position
 
 # --- PyBullet Configuration ---
 END_EFFECTOR_LINK_NAME = "Wrist_Pitch_Roll"
@@ -196,7 +195,6 @@ class TeleopConfig:
     # Robot settings
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
-    position_smoothing: float = POSITION_SMOOTHING
     
     # Device ports
     follower_ports: Dict[str, str] = None

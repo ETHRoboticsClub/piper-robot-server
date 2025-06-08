@@ -11,6 +11,12 @@ control:
 gripper:
   closed_angle: 45.0
   open_angle: 0.0
+ik:
+  use_reference_poses: true
+  reference_poses_file: .cache/reference_poses.json
+  position_error_threshold: 0.001
+  hysteresis_threshold: 0.05
+  movement_penalty_weight: 0.01
 network:
   host_ip: 0.0.0.0
   https_port: 8443
@@ -22,7 +28,6 @@ robot:
     enabled: true
     name: Left Arm
     port: /dev/ttySO100red
-  position_smoothing: 0.1
   right_arm:
     enabled: true
     name: Right Arm
