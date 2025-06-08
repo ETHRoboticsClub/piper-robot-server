@@ -167,7 +167,8 @@ class RobotInterface:
             position, _ = self.fk_solvers[arm].compute(angles)
             return position
         else:
-            return np.array([0.2, 0.0, 0.15])  # Default position
+            default_position = np.array([0.2, 0.0, 0.15])
+            return default_position
     
     def solve_ik(self, arm: str, target_position: np.ndarray, 
                  target_orientation: Optional[np.ndarray] = None) -> np.ndarray:
@@ -360,11 +361,13 @@ class RobotInterface:
     def get_arm_angles(self, arm: str) -> np.ndarray:
         """Get current joint angles for specified arm."""
         if arm == "left":
-            return self.left_arm_angles.copy()
+            angles = self.left_arm_angles.copy()
         elif arm == "right":
-            return self.right_arm_angles.copy()
+            angles = self.right_arm_angles.copy()
         else:
             raise ValueError(f"Invalid arm: {arm}")
+        
+        return angles
     
     def return_to_initial_position(self):
         """Move robot arms back to initial positions."""

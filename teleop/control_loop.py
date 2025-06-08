@@ -125,6 +125,11 @@ class ControlLoop:
             for i, error in enumerate(setup_errors, 1):
                 logger.error(f"  {i}. {error}")
         
+        # Set robot interface on keyboard listener so it can get current positions
+        if self.keyboard_listener and self.robot_interface:
+            self.keyboard_listener.set_robot_interface(self.robot_interface)
+            logger.info("Set robot interface on keyboard listener")
+        
         return success
     
     async def start(self):
@@ -182,6 +187,12 @@ class ControlLoop:
             left_pos = self.robot_interface.get_current_end_effector_position("left")
             right_pos = self.robot_interface.get_current_end_effector_position("right")
             
+            # Initialize target positions to current positions (ensure deep copies)
+            self.left_arm.target_position = left_pos.copy()
+            self.left_arm.goal_position = left_pos.copy()
+            self.right_arm.target_position = right_pos.copy()
+            self.right_arm.goal_position = right_pos.copy()
+            
             # Get current wrist roll angles
             left_angles = self.robot_interface.get_arm_angles("left")
             right_angles = self.robot_interface.get_arm_angles("right")
@@ -214,11 +225,11 @@ class ControlLoop:
         
         if action == 'enable_keyboard':
             if self.keyboard_listener:
-                self.keyboard_listener.enable()
+                await self.keyboard_listener.start()
                 logger.info("🎮 Keyboard control ENABLED via API")
         elif action == 'disable_keyboard':
             if self.keyboard_listener:
-                self.keyboard_listener.disable()
+                await self.keyboard_listener.stop()
                 logger.info("🎮 Keyboard control DISABLED via API")
         elif action == 'robot_connect':
             logger.info("🔌 Processing robot_connect command")
@@ -257,10 +268,18 @@ class ControlLoop:
                 
                 # Set origin position for relative movement
                 if self.robot_interface:
-                    arm_state.origin_position = self.robot_interface.get_current_end_effector_position(goal.arm)
+                    current_position = self.robot_interface.get_current_end_effector_position(goal.arm)
+                    arm_state.origin_position = current_position
                     current_angles = self.robot_interface.get_arm_angles(goal.arm)
                     arm_state.origin_wrist_roll_angle = current_angles[WRIST_ROLL_INDEX]
                     arm_state.origin_wrist_flex_angle = current_angles[WRIST_FLEX_INDEX]
+                    
+                    # Initialize target position to current position if not already set
+                    if arm_state.target_position is None:
+                        arm_state.target_position = current_position.copy()
+                        arm_state.goal_position = current_position.copy()
+                        arm_state.current_wrist_roll = current_angles[WRIST_ROLL_INDEX]
+                        arm_state.current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
                 
                 logger.info(f"🔒 {goal.arm.upper()} arm: Position control ACTIVATED")
                 
