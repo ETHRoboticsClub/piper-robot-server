@@ -177,6 +177,13 @@ class PoseRecorder:
             logger.error(f"Error disconnecting robot: {e}")
 
 def main():
+    """Main function to read and save robot poses."""
+    print("🤖 SO100 Reference Pose Recorder")
+    print("=" * 40)
+    
+    # Cache file for reference poses
+    cache_file = Path("reference_poses.json")
+    
     recorder = PoseRecorder()
     
     try:

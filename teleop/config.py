@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
     },
     "ik": {
         "use_reference_poses": True,
-        "reference_poses_file": ".cache/reference_poses.json",
+        "reference_poses_file": "reference_poses.json",
         "position_error_threshold": 0.001,
         "hysteresis_threshold": 0.01,
         "movement_penalty_weight": 0.01
