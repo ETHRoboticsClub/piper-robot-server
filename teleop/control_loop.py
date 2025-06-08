@@ -138,8 +138,8 @@ class ControlLoop:
                 # Process command queue
                 await self._process_commands()
                 
-                # Update robot
-                self._update_robot()
+                # Update robot (with error resilience)
+                self._update_robot_safely()
                 
                 # Update visualization
                 if self.visualizer:
@@ -265,13 +265,27 @@ class ControlLoop:
         if goal.gripper_closed is not None and self.robot_interface:
             self.robot_interface.set_gripper(goal.arm, goal.gripper_closed)
     
+    def _update_robot_safely(self):
+        """Update robot with current control goals (with error handling)."""
+        if not self.robot_interface:
+            return
+        
+        try:
+            self._update_robot()
+        except Exception as e:
+            logger.error(f"Error updating robot: {e}")
+            # Don't shutdown, just continue - robot interface will handle connection issues
+    
     def _update_robot(self):
         """Update robot with current control goals."""
         if not self.robot_interface:
             return
         
-        # Update left arm
-        if self.left_arm.mode == ControlMode.POSITION_CONTROL and self.left_arm.target_position is not None:
+        # Update left arm (only if connected)
+        if (self.left_arm.mode == ControlMode.POSITION_CONTROL and 
+            self.left_arm.target_position is not None and
+            self.robot_interface.get_arm_connection_status("left")):
+            
             # Solve IK
             ik_solution = self.robot_interface.solve_ik("left", self.left_arm.target_position)
             
@@ -285,8 +299,11 @@ class ControlLoop:
                 current_gripper
             )
         
-        # Update right arm
-        if self.right_arm.mode == ControlMode.POSITION_CONTROL and self.right_arm.target_position is not None:
+        # Update right arm (only if connected)
+        if (self.right_arm.mode == ControlMode.POSITION_CONTROL and 
+            self.right_arm.target_position is not None and
+            self.robot_interface.get_arm_connection_status("right")):
+            
             # Solve IK
             ik_solution = self.robot_interface.solve_ik("right", self.right_arm.target_position)
             
@@ -300,7 +317,7 @@ class ControlLoop:
                 current_gripper
             )
         
-        # Send commands to robot
+        # Send commands to robot (will handle errors gracefully)
         self.robot_interface.send_command()
     
     def _update_visualization(self):
@@ -380,5 +397,7 @@ class ControlLoop:
             "left_arm_mode": self.left_arm.mode.value,
             "right_arm_mode": self.right_arm.mode.value,
             "robot_connected": self.robot_interface.is_connected if self.robot_interface else False,
+            "left_arm_connected": self.robot_interface.get_arm_connection_status("left") if self.robot_interface else False,
+            "right_arm_connected": self.robot_interface.get_arm_connection_status("right") if self.robot_interface else False,
             "visualizer_connected": self.visualizer.is_connected if self.visualizer else False,
         } 

@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import time
 import logging
+import os
 from typing import Optional, Dict, Tuple
 
 from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
@@ -32,6 +33,10 @@ class RobotInterface:
         self.robot = None
         self.is_connected = False
         
+        # Individual arm connection status
+        self.left_arm_connected = False
+        self.right_arm_connected = False
+        
         # Joint state
         self.left_arm_angles = np.zeros(NUM_JOINTS)
         self.right_arm_angles = np.zeros(NUM_JOINTS)
@@ -46,6 +51,13 @@ class RobotInterface:
         
         # Control timing
         self.last_send_time = 0
+        
+        # Error tracking - separate for each arm
+        self.left_arm_errors = 0
+        self.right_arm_errors = 0
+        self.general_errors = 0
+        self.max_arm_errors = 3  # Allow fewer errors per arm before marking as disconnected
+        self.max_general_errors = 8  # Allow more general errors before full disconnection
         
         # Initial positions for safe shutdown
         self.initial_left_arm = np.array([2, 185, 175, 72, 4, 0])
@@ -75,6 +87,10 @@ class RobotInterface:
             self.robot = ManipulatorRobot(robot_config)
             self.robot.connect()
             self.is_connected = True
+            
+            # Initially assume both arms are connected
+            self.left_arm_connected = True
+            self.right_arm_connected = True
             logger.info("✅ Robot connected successfully")
             
             # Read initial state
@@ -84,6 +100,8 @@ class RobotInterface:
         except Exception as e:
             logger.error(f"❌ Failed to connect to robot: {e}")
             self.is_connected = False
+            self.left_arm_connected = False
+            self.right_arm_connected = False
             return False
     
     def _read_initial_state(self):
@@ -246,6 +264,9 @@ class RobotInterface:
         if current_time - self.last_send_time < self.config.send_interval:
             return False
         
+        # Update arm connection status based on device file existence
+        self.update_arm_connection_status()
+        
         try:
             # Create concatenated command for dual arm robot
             concatenated_angles = np.concatenate([self.left_arm_angles, self.right_arm_angles])
@@ -253,10 +274,40 @@ class RobotInterface:
             
             self.robot.send_action(action_tensor)
             self.last_send_time = current_time
+            
+            # Reset ALL error counters on successful send
+            self.left_arm_errors = 0
+            self.right_arm_errors = 0
+            self.general_errors = 0
+            
             return True
             
         except Exception as e:
+            error_str = str(e).lower()
             logger.error(f"Error sending robot command: {e}")
+            
+            # Try to detect which specific arm failed
+            left_arm_error = ("ttySO100red" in error_str or "ttys100red" in error_str or 
+                            "left" in error_str.lower())
+            right_arm_error = ("ttySO100blue" in error_str or "ttys100blue" in error_str or 
+                             "right" in error_str.lower())
+            
+            if left_arm_error:
+                self.left_arm_errors += 1
+                logger.warning(f"⚠️  LEFT ARM communication error (count: {self.left_arm_errors})")
+                    
+            elif right_arm_error:
+                self.right_arm_errors += 1
+                logger.warning(f"⚠️  RIGHT ARM communication error (count: {self.right_arm_errors})")
+                    
+            else:
+                # General error - couldn't determine which arm
+                self.general_errors += 1
+                logger.warning(f"⚠️  General robot communication error (count: {self.general_errors})")
+            
+            # Don't mark robot as disconnected due to communication errors
+            # Status should only depend on device file existence
+            
             return False
     
     def set_gripper(self, arm: str, closed: bool):
@@ -338,11 +389,31 @@ class RobotInterface:
         except Exception as e:
             logger.error(f"Error disconnecting robot: {e}")
     
+    def get_arm_connection_status(self, arm: str) -> bool:
+        """Get connection status for specific arm based on device file existence."""
+        # Only check device file existence - ignore overall robot connection status
+        if arm == "left":
+            device_path = self.config.follower_ports["left"]
+            return os.path.exists(device_path)
+        elif arm == "right":
+            device_path = self.config.follower_ports["right"] 
+            return os.path.exists(device_path)
+        else:
+            return False
+
+    def update_arm_connection_status(self):
+        """Update individual arm connection status based on device file existence."""
+        if self.is_connected:
+            self.left_arm_connected = os.path.exists(self.config.follower_ports["left"])
+            self.right_arm_connected = os.path.exists(self.config.follower_ports["right"])
+    
     @property
     def status(self) -> Dict:
         """Get robot status information."""
         return {
             "connected": self.is_connected,
+            "left_arm_connected": self.left_arm_connected,
+            "right_arm_connected": self.right_arm_connected,
             "left_arm_angles": self.left_arm_angles.tolist(),
             "right_arm_angles": self.right_arm_angles.tolist(),
             "joint_limits_min": self.joint_limits_min_deg.tolist(),

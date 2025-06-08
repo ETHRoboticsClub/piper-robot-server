@@ -17,6 +17,10 @@ AFRAME.registerComponent('controller-updater', {
     this.leftTriggerDown = false;
     this.rightTriggerDown = false;
 
+    // --- Status reporting ---
+    this.lastStatusUpdate = 0;
+    this.statusUpdateInterval = 5000; // 5 seconds
+
     // --- Relative rotation tracking ---
     this.leftGripInitialRotation = null;
     this.rightGripInitialRotation = null;
@@ -40,10 +44,12 @@ AFRAME.registerComponent('controller-updater', {
       this.websocket = new WebSocket(websocketUrl);
       this.websocket.onopen = (event) => {
         console.log(`WebSocket connected to ${websocketUrl}`);
+        this.reportVRStatus(true);
       };
       this.websocket.onerror = (event) => {
         // More detailed error logging
         console.error(`WebSocket Error: Event type: ${event.type}`, event);
+        this.reportVRStatus(false);
       };
       this.websocket.onclose = (event) => {
         console.log(`WebSocket disconnected from ${websocketUrl}. Clean close: ${event.wasClean}, Code: ${event.code}, Reason: '${event.reason}'`);
@@ -52,14 +58,36 @@ AFRAME.registerComponent('controller-updater', {
           console.error('WebSocket closed unexpectedly.');
         }
         this.websocket = null; // Clear the reference
+        this.reportVRStatus(false);
       };
       this.websocket.onmessage = (event) => {
         console.log(`WebSocket message received: ${event.data}`); // Log any messages from server
       };
     } catch (error) {
         console.error(`Failed to create WebSocket connection to ${websocketUrl}:`, error);
+        this.reportVRStatus(false);
     }
     // --- End WebSocket Setup ---
+
+    // --- VR Status Reporting Function ---
+    this.reportVRStatus = (connected) => {
+      // Update global status if available (for desktop interface)
+      if (typeof updateStatus === 'function') {
+        updateStatus({ vrConnected: connected });
+      }
+      
+      // Also try to notify parent window if in iframe
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            type: 'vr_status',
+            connected: connected
+          }, '*');
+        }
+      } catch (e) {
+        // Ignore cross-origin errors
+      }
+    };
 
     if (!this.leftHand || !this.rightHand || !this.leftHandInfoText || !this.rightHandInfoText) {
       console.error("Controller or text entities not found!");
