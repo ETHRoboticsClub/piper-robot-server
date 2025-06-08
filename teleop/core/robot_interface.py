@@ -109,6 +109,11 @@ class RobotInterface:
                     
         except Exception as e:
             logger.warning(f"Could not read initial robot state: {e}")
+        
+        # Ensure grippers start in open position regardless of robot's current state
+        self.left_arm_angles[5] = GRIPPER_OPEN_ANGLE
+        self.right_arm_angles[5] = GRIPPER_OPEN_ANGLE
+        logger.info(f"Set grippers to open position ({GRIPPER_OPEN_ANGLE}°)")
     
     def setup_kinematics(self, physics_client, robot_ids: Dict, joint_indices: Dict, 
                         end_effector_link_indices: Dict, joint_limits_min_deg: np.ndarray, 

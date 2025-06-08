@@ -34,7 +34,7 @@ GRIPPER_INDEX = 5
 # Only define margins for joints that have specific problems and need constraints
 
 # Elbow joint margin - prevent hyperextension at -11.5°
-ELBOW_LOWER_MARGIN_DEG = 5.0  # Keep elbow above -6.5° instead of -11.5°
+ELBOW_LOWER_MARGIN_DEG = 25.0  # Keep elbow above -6.5° instead of -11.5°
 
 # Wrist flex margins - prevent getting stuck at ±103.1° limits  
 WRIST_FLEX_MARGINS_DEG = {"lower": 3.0, "upper": 3.0}  # Keep within ±100.1°

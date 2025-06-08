@@ -32,6 +32,11 @@ class VRControllerState:
         self.origin_position = None
         self.origin_rotation = None
         
+        # Frame-to-frame rotation tracking
+        self.previous_euler = None  # Previous frame's Euler angles
+        self.accumulated_pitch = 0.0  # Accumulated pitch change since grip press
+        self.accumulated_roll = 0.0   # Accumulated roll change since grip press
+        
         # Rotation tracking for wrist control
         self.z_axis_rotation = 0.0  # For wrist_roll
         self.x_axis_rotation = 0.0  # For wrist_flex (pitch)
@@ -47,6 +52,9 @@ class VRControllerState:
         self.grip_active = False
         self.origin_position = None
         self.origin_rotation = None
+        self.previous_euler = None
+        self.accumulated_pitch = 0.0
+        self.accumulated_roll = 0.0
         self.z_axis_rotation = 0.0
         self.x_axis_rotation = 0.0
 
@@ -219,6 +227,7 @@ class VRWebSocketServer(BaseInputProvider):
                 controller.grip_active = True
                 controller.origin_position = position.copy()
                 controller.origin_rotation = self.euler_to_quaternion(rotation) if rotation else None
+                controller.previous_euler = rotation.copy() if rotation else None
                 controller.z_axis_rotation = 0.0
                 controller.x_axis_rotation = 0.0
                 
@@ -237,13 +246,12 @@ class VRWebSocketServer(BaseInputProvider):
                 # Calculate Z-axis rotation for wrist_roll control
                 # Calculate X-axis rotation for wrist_flex control
                 if controller.origin_rotation is not None and rotation:
-                    current_quat = self.euler_to_quaternion(rotation)
-                    controller.z_axis_rotation = self.calculate_z_axis_rotation(
-                        current_quat, controller.origin_rotation
-                    )
-                    controller.x_axis_rotation = self.calculate_pitch_rotation(
-                        current_quat, controller.origin_rotation
-                    )
+                    # Update frame-to-frame rotation accumulation
+                    self.update_frame_rotation(controller, rotation)
+                    
+                    # Get accumulated rotations
+                    controller.z_axis_rotation = controller.accumulated_roll
+                    controller.x_axis_rotation = controller.accumulated_pitch
                 
                 # Create position control goal
                 # Note: We send relative position here, the control loop will handle
@@ -307,56 +315,36 @@ class VRWebSocketServer(BaseInputProvider):
         rotation = R.from_euler('xyz', euler_rad)
         return rotation.as_quat()
     
-    def calculate_z_axis_rotation(self, current_quat: np.ndarray, initial_quat: np.ndarray) -> float:
-        """Calculate roll rotation (twisting around forward axis) in degrees."""
-        try:
-            current_rot = R.from_quat(current_quat)
-            initial_rot = R.from_quat(initial_quat)
-            
-            # Calculate relative rotation
-            relative_rot = current_rot * initial_rot.inv()
-            
-            # Extract Euler angles (XYZ order) - Z is roll (twist around forward axis)
-            euler_rad = relative_rot.as_euler('xyz')
-            roll_rad = euler_rad[2]  # Z-axis rotation = roll
-            
-            degrees = math.degrees(roll_rad)
-            
-            # Normalize to -180 to +180 range
-            while degrees > 180:
-                degrees -= 360
-            while degrees < -180:
-                degrees += 360
-            
-            return degrees
-            
-        except Exception as e:
-            logger.warning(f"Error calculating roll rotation: {e}")
-            return 0.0
+    def calculate_euler_roll(self, current_euler: dict, previous_euler: dict) -> float:
+        """Calculate accumulated roll rotation using frame-to-frame differences."""
+        return self.accumulated_roll
     
-    def calculate_pitch_rotation(self, current_quat: np.ndarray, initial_quat: np.ndarray) -> float:
-        """Calculate pitch rotation (forward/backward tilt) in degrees."""
-        try:
-            current_rot = R.from_quat(current_quat)
-            initial_rot = R.from_quat(initial_quat)
+    def calculate_euler_pitch(self, current_euler: dict, previous_euler: dict) -> float:
+        """Calculate accumulated pitch rotation using frame-to-frame differences."""
+        return self.accumulated_pitch
+    
+    def update_frame_rotation(self, controller: VRControllerState, current_euler: dict):
+        """Update accumulated rotations based on frame-to-frame differences."""
+        if not current_euler:
+            return
             
-            # Calculate relative rotation
-            relative_rot = current_rot * initial_rot.inv()
+        if controller.previous_euler is not None:
+            # Calculate frame-to-frame differences
+            pitch_diff = self.angle_difference(current_euler.get('x', 0.0), controller.previous_euler.get('x', 0.0))
+            roll_diff = self.angle_difference(current_euler.get('z', 0.0), controller.previous_euler.get('z', 0.0))
             
-            # Extract Euler angles (XYZ order) - X is pitch (forward/backward tilt)
-            euler_rad = relative_rot.as_euler('xyz')
-            pitch_rad = euler_rad[0]  # X-axis rotation = pitch
-            
-            degrees = math.degrees(pitch_rad)
-            
-            # Normalize to -180 to +180 range
-            while degrees > 180:
-                degrees -= 360
-            while degrees < -180:
-                degrees += 360
-            
-            return degrees
-            
-        except Exception as e:
-            logger.warning(f"Error calculating pitch rotation: {e}")
-            return 0.0 
+            # Accumulate the differences
+            controller.accumulated_pitch += pitch_diff
+            controller.accumulated_roll += roll_diff
+        
+        # Update previous frame for next iteration
+        controller.previous_euler = current_euler.copy()
+    
+    def angle_difference(self, current: float, previous: float) -> float:
+        """Calculate the smallest angle difference between two angles, handling wrapping."""
+        diff = current - previous
+        while diff > 180:
+            diff -= 360
+        while diff < -180:
+            diff += 360
+        return diff 
