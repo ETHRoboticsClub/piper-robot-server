@@ -57,6 +57,11 @@ class KeyboardListener(BaseInputProvider):
         """Set reference to robot interface for getting current positions."""
         self.robot_interface = robot_interface
     
+    @property
+    def is_enabled(self) -> bool:
+        """Check if keyboard control is enabled."""
+        return self.is_running
+    
     async def start(self):
         """Start the keyboard listener."""
         if not self.config.enable_keyboard:

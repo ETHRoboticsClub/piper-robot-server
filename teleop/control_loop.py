@@ -7,6 +7,7 @@ import asyncio
 import numpy as np
 import logging
 import time
+import queue  # Add import for thread-safe queue
 from typing import Dict, Optional
 
 from .config import TeleopConfig, NUM_JOINTS, WRIST_FLEX_INDEX, WRIST_ROLL_INDEX, GRIPPER_INDEX
@@ -44,13 +45,15 @@ class ArmState:
 class ControlLoop:
     """Main control loop that processes command queue and controls robot."""
     
-    def __init__(self, command_queue: asyncio.Queue, config: TeleopConfig):
+    def __init__(self, command_queue: asyncio.Queue, config: TeleopConfig, control_commands_queue: Optional[queue.Queue] = None):
         self.command_queue = command_queue
+        self.control_commands_queue = control_commands_queue
         self.config = config
         
         # Components
         self.robot_interface = None
         self.visualizer = None
+        self.keyboard_listener = None  # Reference to keyboard listener for commands
         
         # Arm states
         self.left_arm = ArmState("left")
@@ -59,6 +62,10 @@ class ControlLoop:
         # Control timing
         self.last_log_time = 0
         self.log_interval = 1.0  # Log status every second
+        
+        # Debug flags
+        self._queue_debug_logged = False
+        self._process_debug_logged = False
         
         self.is_running = False
     
@@ -191,15 +198,52 @@ class ControlLoop:
     async def _process_commands(self):
         """Process commands from the command queue."""
         try:
-            # Process all available commands
-            while True:
-                try:
-                    goal = self.command_queue.get_nowait()
-                    await self._execute_goal(goal)
-                except asyncio.QueueEmpty:
-                    break
+            # Process regular control goals
+            while not self.command_queue.empty():
+                goal = self.command_queue.get_nowait()
+                await self._execute_goal(goal)
         except Exception as e:
             logger.error(f"Error processing commands: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    async def _handle_command(self, command):
+        """Handle individual commands."""
+        action = command.get('action', '')
+        logger.info(f"🔌 Processing control command: {action}")
+        
+        if action == 'enable_keyboard':
+            if self.keyboard_listener:
+                self.keyboard_listener.enable()
+                logger.info("🎮 Keyboard control ENABLED via API")
+        elif action == 'disable_keyboard':
+            if self.keyboard_listener:
+                self.keyboard_listener.disable()
+                logger.info("🎮 Keyboard control DISABLED via API")
+        elif action == 'robot_connect':
+            logger.info("🔌 Processing robot_connect command")
+            if self.robot_interface and self.robot_interface.is_connected:
+                logger.info(f"🔌 Robot interface available and connected: {self.robot_interface.is_connected}")
+                success = self.robot_interface.engage()
+                if success:
+                    logger.info("🔌 Robot motors ENGAGED via API")
+                else:
+                    logger.error("❌ Failed to engage robot motors")
+            else:
+                logger.warning(f"Cannot engage robot: interface={self.robot_interface is not None}, connected={self.robot_interface.is_connected if self.robot_interface else False}")
+        elif action == 'robot_disconnect':
+            logger.info("🔌 Processing robot_disconnect command")
+            if self.robot_interface:
+                logger.info(f"🔌 Robot interface available")
+                success = self.robot_interface.disengage()
+                if success:
+                    logger.info("🔌 Robot motors DISENGAGED via API")
+                else:
+                    logger.error("❌ Failed to disengage robot motors")
+            else:
+                logger.warning("Cannot disengage robot: no robot interface")
+        else:
+            logger.warning(f"Unknown command: {action}")
     
     async def _execute_goal(self, goal: ControlGoal):
         """Execute a control goal."""

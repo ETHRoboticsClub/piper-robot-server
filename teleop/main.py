@@ -15,6 +15,10 @@ import json
 import urllib.parse
 import time
 from typing import Optional
+import queue  # Add regular queue for thread-safe communication
+import threading
+from pathlib import Path
+import weakref
 
 from .config import TeleopConfig
 from .control_loop import ControlLoop
@@ -30,43 +34,96 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class APIRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Custom HTTP request handler with API support."""
+class APIHandler(http.server.BaseHTTPRequestHandler):
+    """HTTP request handler for the teleoperation API."""
     
-    def __init__(self, *args, system_ref=None, **kwargs):
-        self.system_ref = system_ref
+    def __init__(self, *args, **kwargs):
+        # Set CORS headers for all requests
         super().__init__(*args, **kwargs)
+    
+    def end_headers(self):
+        """Add CORS headers to all responses."""
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        super().end_headers()
+    
+    def do_OPTIONS(self):
+        """Handle preflight CORS requests."""
+        self.send_response(200)
+        self.end_headers()
+    
+    def log_message(self, format, *args):
+        """Override to reduce HTTP request logging noise."""
+        pass  # Disable default HTTP logging
     
     def do_GET(self):
         """Handle GET requests."""
-        parsed_path = urllib.parse.urlparse(self.path)
-        
-        if parsed_path.path == '/api/status':
+        if self.path == '/api/status':
             self.handle_status_request()
+        elif self.path == '/' or self.path == '/index.html':
+            # Serve main page
+            self.serve_file('index.html', 'text/html')
+        elif self.path.endswith('.css'):
+            self.serve_file(self.path[1:], 'text/css')
+        elif self.path.endswith('.js'):
+            self.serve_file(self.path[1:], 'application/javascript')
+        elif self.path.endswith('.ico'):
+            self.serve_file(self.path[1:], 'image/x-icon')
         else:
-            # Serve static files
-            super().do_GET()
+            self.send_error(404, "Not found")
     
     def do_POST(self):
         """Handle POST requests."""
-        parsed_path = urllib.parse.urlparse(self.path)
-        
-        if parsed_path.path == '/api/control':
-            self.handle_control_request()
+        if self.path == '/api/keyboard':
+            self.handle_keyboard_request()
+        elif self.path == '/api/robot':
+            self.handle_robot_request()
         else:
-            self.send_error(404, "API endpoint not found")
+            self.send_error(404, "Not found")
     
     def handle_status_request(self):
-        """Handle system status requests."""
+        """Handle status requests."""
         try:
-            status = self.get_system_status()
-            self.send_json_response(status)
+            # Get system reference
+            if hasattr(self.server, 'api_handler') and self.server.api_handler:
+                system = self.server.api_handler
+                
+                # Get status from control loop
+                control_status = system.control_loop.status if system.control_loop else {}
+                
+                # Get keyboard status
+                keyboard_enabled = False
+                if system.keyboard_listener and hasattr(system.keyboard_listener, 'is_enabled'):
+                    keyboard_enabled = system.keyboard_listener.is_enabled
+                
+                # Get robot engagement status
+                robot_engaged = False
+                if system.control_loop and system.control_loop.robot_interface:
+                    robot_engaged = system.control_loop.robot_interface.is_engaged
+                
+                status = {
+                    **control_status,
+                    "keyboardEnabled": keyboard_enabled,
+                    "robotEngaged": robot_engaged
+                }
+                
+                # Send JSON response
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                
+                response = json.dumps(status)
+                self.wfile.write(response.encode('utf-8'))
+            else:
+                self.send_error(500, "System not available")
+                
         except Exception as e:
             logger.error(f"Error handling status request: {e}")
-            self.send_error(500, "Internal server error")
+            self.send_error(500, str(e))
     
-    def handle_control_request(self):
-        """Handle control requests (keyboard toggle, etc.)."""
+    def handle_keyboard_request(self):
+        """Handle keyboard control requests."""
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length == 0:
@@ -76,363 +133,277 @@ class APIRequestHandler(http.server.SimpleHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
             
-            result = self.process_control_command(data)
-            self.send_json_response(result)
+            action = data.get('action')
             
+            if action in ['enable', 'disable']:
+                # Add keyboard command to queue for processing by main thread
+                if hasattr(self.server, 'api_handler') and self.server.api_handler:
+                    command_name = f"{action}_keyboard"
+                    logger.info(f"🎮 Adding command to queue: {command_name}")
+                    self.server.api_handler.add_control_command(command_name)
+                    
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "action": action}).encode('utf-8'))
+                else:
+                    self.send_error(500, "System not available")
+            else:
+                self.send_error(400, f"Invalid action: {action}")
+                
         except json.JSONDecodeError:
             self.send_error(400, "Invalid JSON")
         except Exception as e:
-            logger.error(f"Error handling control request: {e}")
-            self.send_error(500, "Internal server error")
+            logger.error(f"Error handling keyboard request: {e}")
+            self.send_error(500, str(e))
     
-    def get_system_status(self):
-        """Get current system status."""
-        if not self.system_ref:
-            return {
-                "leftArm": False,
-                "rightArm": False,
-                "vrConnected": False,
-                "keyboardEnabled": False,
-                "error": "System reference not available"
-            }
-        
-        system = self.system_ref()
-        if not system:
-            return {
-                "leftArm": False,
-                "rightArm": False,
-                "vrConnected": False,
-                "keyboardEnabled": False,
-                "error": "System not available"
-            }
-        
-        # Get robot status
-        robot_status = {"leftArm": False, "rightArm": False}
-        if system.control_loop and system.control_loop.robot_interface:
-            robot_interface = system.control_loop.robot_interface
-            # Use individual arm connection status instead of overall connection
-            robot_status["leftArm"] = robot_interface.get_arm_connection_status("left")
-            robot_status["rightArm"] = robot_interface.get_arm_connection_status("right")
-        
-        # Get VR status
-        vr_connected = False
-        if system.vr_server and hasattr(system.vr_server, 'clients'):
-            vr_connected = len(system.vr_server.clients) > 0
-        
-        # Get keyboard status
-        keyboard_enabled = False
-        if system.keyboard_listener:
-            keyboard_enabled = system.keyboard_listener.is_running
-        
-        return {
-            "leftArm": robot_status["leftArm"],
-            "rightArm": robot_status["rightArm"],
-            "vrConnected": vr_connected,
-            "keyboardEnabled": keyboard_enabled,
-            "timestamp": time.time()
-        }
-    
-    def process_control_command(self, data):
-        """Process control commands."""
-        action = data.get('action')
-        
-        if action == 'enable_keyboard':
-            return self.toggle_keyboard(True)
-        elif action == 'disable_keyboard':
-            return self.toggle_keyboard(False)
-        elif action == 'get_status':
-            return self.get_system_status()
-        else:
-            return {"success": False, "error": f"Unknown action: {action}"}
-    
-    def toggle_keyboard(self, enabled):
-        """Toggle keyboard control."""
-        if not self.system_ref:
-            return {"success": False, "error": "System reference not available"}
-        
-        system = self.system_ref()
-        if not system or not system.keyboard_listener:
-            return {"success": False, "error": "Keyboard listener not available"}
-        
+    def handle_robot_request(self):
+        """Handle robot control requests."""
         try:
-            # Put command in queue for async processing
-            action = 'enable_keyboard' if enabled else 'disable_keyboard'
-            command = {'action': action}
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error(400, "No request body")
+                return
             
-            # Use put_nowait since we're in a sync context
-            try:
-                system.control_commands_queue.put_nowait(command)
-            except asyncio.QueueFull:
-                return {"success": False, "error": "Control commands queue is full"}
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
             
-            return {
-                "success": True, 
-                "enabled": enabled,
-                "message": f"Keyboard control {'enable' if enabled else 'disable'} requested"
-            }
+            action = data.get('action')
+            logger.info(f"🔌 Received robot action: {action}")
+            
+            if action in ['connect', 'disconnect']:
+                # Add robot command to queue for processing by main thread
+                if hasattr(self.server, 'api_handler') and self.server.api_handler:
+                    command_name = f"robot_{action}"
+                    logger.info(f"🔌 Adding command to queue: {command_name}")
+                    self.server.api_handler.add_control_command(command_name)
+                    
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "action": action}).encode('utf-8'))
+                else:
+                    logger.error("🔌 Server api_handler not available")
+                    self.send_error(500, "System not available")
+            else:
+                self.send_error(400, f"Invalid action: {action}")
+                
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
         except Exception as e:
-            logger.error(f"Error toggling keyboard: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Error handling robot request: {e}")
+            self.send_error(500, str(e))
     
-    def send_json_response(self, data):
-        """Send JSON response."""
-        response = json.dumps(data).encode('utf-8')
-        
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', len(response))
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
-        
-        self.wfile.write(response)
-    
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests."""
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
+    def serve_file(self, filename, content_type):
+        """Serve a static file."""
+        try:
+            # Try to find the file in current directory or webapp directory
+            file_paths = [filename, f'webapp/{filename}', f'./{filename}']
+            file_content = None
+            file_path = None
+            
+            for path in file_paths:
+                try:
+                    with open(path, 'rb') as f:
+                        file_content = f.read()
+                        file_path = path
+                        break
+                except FileNotFoundError:
+                    continue
+            
+            if file_content is None:
+                self.send_error(404, f"File {filename} not found")
+                return
+            
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', len(file_content))
+            self.end_headers()
+            self.wfile.write(file_content)
+            
+        except Exception as e:
+            logger.error(f"Error serving file {filename}: {e}")
+            self.send_error(500, "Internal server error")
 
 
 class HTTPSServer:
-    """HTTPS server for serving the web application."""
+    """HTTPS server for the teleoperation API."""
     
     def __init__(self, config: TeleopConfig):
         self.config = config
         self.httpd = None
-        self.server_task = None
-        self.system_ref = None  # Weak reference to main system
+        self.server_thread = None
+        self.system_ref = None  # Weak reference to the main system
     
     def set_system_ref(self, system_ref):
-        """Set reference to main system for API calls."""
+        """Set reference to the main teleoperation system."""
         self.system_ref = system_ref
-    
-    def get_lan_ip(self) -> Optional[str]:
-        """Get the LAN IP address."""
-        s = None
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0.1)
-            s.connect(('10.255.255.255', 1))
-            return s.getsockname()[0]
-        except Exception:
-            try:
-                return socket.gethostbyname(socket.gethostname())
-            except socket.gaierror:
-                return None
-        finally:
-            if s:
-                s.close()
     
     async def start(self):
         """Start the HTTPS server."""
-        # Automatically generate SSL certificates if they don't exist
-        if not self.config.ssl_files_exist:
-            logger.info("SSL certificates not found, attempting to generate them...")
-            if not self.config.ensure_ssl_certificates():
-                logger.error("Failed to generate SSL certificates")
-                logger.error("Manual generation may be required:")
-                logger.error("openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes -subj \"/C=US/ST=Test/L=Test/O=Test/OU=Test/CN=localhost\"")
-                return False
-        
-        if not self.config.webapp_exists:
-            logger.error(f"Webapp directory '{self.config.webapp_dir}' not found")
-            return False
-        
         try:
-            # Change to webapp directory for serving files
-            import os
-            original_cwd = os.getcwd()
-            os.chdir(self.config.webapp_dir)
+            # Create server - directly use APIHandler class
+            self.httpd = http.server.HTTPServer((self.config.host_ip, self.config.https_port), APIHandler)
             
-            # Create handler class with system reference
-            def handler_factory(*args, **kwargs):
-                return APIRequestHandler(*args, system_ref=self.system_ref, **kwargs)
-            
-            # Create server
-            self.httpd = http.server.HTTPServer((self.config.host_ip, self.config.https_port), handler_factory)
+            # Set API handler reference for command queuing
+            self.httpd.api_handler = self.system_ref() if self.system_ref else None
             
             # Setup SSL
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.load_cert_chain(certfile=f"../{self.config.certfile}", keyfile=f"../{self.config.keyfile}")
+            context.load_cert_chain('cert.pem', 'key.pem')
             self.httpd.socket = context.wrap_socket(self.httpd.socket, server_side=True)
             
-            # Start server in background
-            loop = asyncio.get_event_loop()
-            self.server_task = loop.run_in_executor(None, self.httpd.serve_forever)
+            # Start server in a separate thread
+            self.server_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+            self.server_thread.start()
             
-            # Log access information
-            lan_ip = self.get_lan_ip()
-            logger.info(f"HTTPS server started on port {self.config.https_port}")
-            if lan_ip and not lan_ip.startswith('127.'):
-                logger.info(f"Access webapp at: https://{lan_ip}:{self.config.https_port}/")
-                logger.info(f"API available at: https://{lan_ip}:{self.config.https_port}/api/")
-            else:
-                logger.info(f"Access webapp at: https://localhost:{self.config.https_port}/")
-                logger.info(f"API available at: https://localhost:{self.config.https_port}/api/")
-            
-            # Restore original directory
-            os.chdir(original_cwd)
-            return True
+            logger.info(f"HTTPS server started on {self.config.host_ip}:{self.config.https_port}")
             
         except Exception as e:
             logger.error(f"Failed to start HTTPS server: {e}")
-            return False
+            raise
     
     async def stop(self):
         """Stop the HTTPS server."""
         if self.httpd:
             self.httpd.shutdown()
-            if self.server_task:
-                self.server_task.cancel()
+            if self.server_thread:
+                self.server_thread.join(timeout=5)
             logger.info("HTTPS server stopped")
 
 
 class TeleopSystem:
-    """Main teleoperation system coordinator."""
+    """Main teleoperation system that coordinates all components."""
     
     def __init__(self, config: TeleopConfig):
         self.config = config
         
-        # Command queue for communication between input providers and control loop
-        self.command_queue = asyncio.Queue(maxsize=100)
-        
-        # Control commands queue for web interface
-        self.control_commands_queue = asyncio.Queue(maxsize=10)
+        # Command queues
+        self.command_queue = asyncio.Queue()
+        self.control_commands_queue = queue.Queue(maxsize=10)  # Thread-safe queue
         
         # Components
         self.https_server = HTTPSServer(config)
         self.vr_server = VRWebSocketServer(self.command_queue, config)
         self.keyboard_listener = KeyboardListener(self.command_queue, config)
-        self.control_loop = ControlLoop(self.command_queue, config)
+        self.control_loop = ControlLoop(self.command_queue, config, self.control_commands_queue)
         
         # Set system reference for API calls
         import weakref
         self.https_server.set_system_ref(weakref.ref(self))
         
+        # Set up cross-references
+        self.control_loop.keyboard_listener = self.keyboard_listener
+        
+        # Set API handler reference for HTTPSServer
+        self.https_server.httpd = None  # Will be set during start
+        
         # Tasks
         self.tasks = []
         self.is_running = False
     
+    def add_control_command(self, action: str):
+        """Add a control command to the queue for processing."""
+        try:
+            command = {"action": action}
+            logger.info(f"🔌 Queueing control command: {command}")
+            self.control_commands_queue.put_nowait(command)
+            logger.info(f"🔌 Command queued successfully")
+        except queue.Full:
+            logger.warning(f"Control commands queue is full, dropping command: {action}")
+        except Exception as e:
+            logger.error(f"🔌 Error queuing command: {e}")
+    
     async def process_control_commands(self):
-        """Process control commands from the web interface."""
-        while self.is_running:
-            try:
-                command = await asyncio.wait_for(self.control_commands_queue.get(), timeout=1.0)
-                action = command.get('action')
-                
-                if action == 'enable_keyboard':
-                    if not self.keyboard_listener.is_running:
-                        await self.keyboard_listener.start()
-                        logger.info("Keyboard control enabled via web interface")
-                elif action == 'disable_keyboard':
-                    if self.keyboard_listener.is_running:
-                        await self.keyboard_listener.stop()
-                        logger.info("Keyboard control disabled via web interface")
-                        
-                # Mark command as done
-                self.control_commands_queue.task_done()
-                
-            except asyncio.TimeoutError:
-                continue
-            except Exception as e:
-                logger.error(f"Error processing control command: {e}")
+        """Process control commands from the thread-safe queue."""
+        try:
+            # Get all available commands from the thread-safe queue
+            commands_to_process = []
+            while True:
+                try:
+                    command = self.control_commands_queue.get_nowait()
+                    commands_to_process.append(command)
+                except queue.Empty:
+                    break
+            
+            # Process each command
+            for command in commands_to_process:
+                if self.control_loop:
+                    await self.control_loop._handle_command(command)
+                    
+        except Exception as e:
+            logger.error(f"Error processing control commands: {e}")
     
     async def start(self):
         """Start all system components."""
-        logger.info("Starting Unified Teleoperation System...")
-        logger.info("="*60)
-        
-        self.is_running = True
-        
-        # Start HTTPS server
-        if not await self.https_server.start():
-            logger.warning("HTTPS server failed to start")
-        
-        # Start control loop first (includes robot setup)
-        control_task = asyncio.create_task(self.control_loop.start())
-        self.tasks.append(control_task)
-        
-        # Start control commands processor
-        control_commands_task = asyncio.create_task(self.process_control_commands())
-        self.tasks.append(control_commands_task)
-        
-        # Wait a moment for control loop to setup
-        await asyncio.sleep(0.5)
-        
-        # Connect keyboard listener to robot interface after control loop setup
-        if self.control_loop.robot_interface:
-            self.keyboard_listener.set_robot_interface(self.control_loop.robot_interface)
-            logger.info("Connected keyboard listener to robot interface")
-        else:
-            logger.warning("Robot interface not available for keyboard listener")
-        
-        # Start input providers
-        await self.vr_server.start()
-        # Note: keyboard listener will be started on-demand via web interface
-        
-        logger.info("="*60)
-        logger.info("🎉 Teleoperation system ready!")
-        logger.info("VR Controllers: Connect your Quest and use grip buttons to control arms")
-        logger.info("Web Interface: Use the web interface to enable keyboard control")
-        logger.info("Press Ctrl+C to shutdown")
-        logger.info("="*60)
+        try:
+            self.is_running = True
+            
+            # Start HTTPS server
+            await self.https_server.start()
+            
+            # Start VR WebSocket server
+            await self.vr_server.start()
+            
+            # Start keyboard listener
+            await self.keyboard_listener.start()
+            
+            # Start control loop
+            control_task = asyncio.create_task(self.control_loop.start())
+            self.tasks.append(control_task)
+            
+            # Start control command processor
+            command_processor_task = asyncio.create_task(self._run_command_processor())
+            self.tasks.append(command_processor_task)
+            
+            logger.info("All system components started successfully")
+            
+            # Wait for tasks to complete
+            await asyncio.gather(*self.tasks)
+            
+        except Exception as e:
+            logger.error(f"Error starting teleoperation system: {e}")
+            await self.stop()
+            raise
+    
+    async def _run_command_processor(self):
+        """Run the control command processor loop."""
+        while self.is_running:
+            await self.process_control_commands()
+            await asyncio.sleep(0.05)  # Check for commands every 50ms
     
     async def stop(self):
         """Stop all system components."""
         logger.info("Shutting down teleoperation system...")
         self.is_running = False
         
-        # Stop input providers
-        await self.vr_server.stop()
-        await self.keyboard_listener.stop()
-        
-        # Stop control loop
-        await self.control_loop.stop()
-        
-        # Stop HTTPS server
-        await self.https_server.stop()
-        
         # Cancel all tasks
         for task in self.tasks:
-            if not task.done():
-                task.cancel()
+            task.cancel()
         
-        # Wait for tasks to complete
+        # Wait for tasks to complete with timeout
         if self.tasks:
-            await asyncio.gather(*self.tasks, return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self.tasks, return_exceptions=True), 
+                    timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Some tasks did not complete within timeout")
+        
+        # Stop components in reverse order
+        await self.control_loop.stop()
+        await self.keyboard_listener.stop()
+        await self.vr_server.stop()
+        await self.https_server.stop()
         
         logger.info("Teleoperation system shutdown complete")
-    
-    async def run(self):
-        """Run the teleoperation system."""
-        try:
-            await self.start()
-            
-            # Run until interrupted
-            while self.is_running:
-                await asyncio.sleep(1)
-                
-        except KeyboardInterrupt:
-            logger.info("Ctrl+C detected, shutting down...")
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-        finally:
-            await self.stop()
 
 
-def setup_signal_handlers():
-    """Setup signal handlers for graceful shutdown."""
-    def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}")
-        # The main loop will catch KeyboardInterrupt
-        raise KeyboardInterrupt()
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+def signal_handler(signum, frame):
+    """Handle shutdown signals."""
+    logger.info(f"Received signal {signum}")
+    raise KeyboardInterrupt()
 
 
 def parse_arguments():
@@ -493,8 +464,15 @@ def create_config_from_args(args) -> TeleopConfig:
 
 async def main():
     """Main entry point."""
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
     # Setup signal handlers
-    setup_signal_handlers()
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     # Parse arguments
     args = parse_arguments()
@@ -510,9 +488,17 @@ async def main():
     logger.info(f"  WebSocket Port: {config.websocket_port}")
     logger.info(f"  Robot Ports: {config.follower_ports}")
     
-    # Create and run system
+    # Create and start teleoperation system
     system = TeleopSystem(config)
-    await system.run()
+    
+    try:
+        await system.start()
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal")
+    except Exception as e:
+        logger.error(f"System error: {e}")
+    finally:
+        await system.stop()
 
 
 def main_cli():

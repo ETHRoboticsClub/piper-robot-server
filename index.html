@@ -52,40 +52,44 @@
 
       /* Status indicators */
       .status-section {
+        margin-bottom: 2rem;
+      }
+
+      .status-section h2 {
+        color: #333;
+        margin-bottom: 1rem;
+        font-size: 1.2rem;
+      }
+
+      .status-grid {
         display: flex;
-        gap: 30px;
-        align-items: center;
+        gap: 1.5rem;
+        justify-content: center;
         flex-wrap: wrap;
+        margin-bottom: 1.5rem;
       }
 
-      .status-group {
+      .status-item {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 15px;
-      }
-
-      .arm-status {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        background: rgba(255, 255, 255, 0.8);
-        border-radius: 25px;
-        border: 1px solid rgba(0, 0, 0, 0.1);
+        gap: 0.5rem;
       }
 
       .status-indicator {
-        width: 12px;
-        height: 12px;
+        width: 20px;
+        height: 20px;
         border-radius: 50%;
-        background: #e74c3c;
-        transition: all 0.3s ease;
-        box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        background-color: #ff4444;
+        transition: background-color 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
       }
 
       .status-indicator.connected {
-        background: #27ae60;
-        box-shadow: 0 0 10px rgba(39, 174, 96, 0.4);
+        background-color: #44ff44;
       }
 
       .status-label {
@@ -245,6 +249,43 @@
         height: 100vh;
         z-index: 1;
       }
+
+      .robot-controls {
+        text-align: center;
+        margin-bottom: 1.5rem;
+      }
+
+      .engage-btn {
+        background: linear-gradient(45deg, #4CAF50, #45a049);
+        border: none;
+        color: white;
+        padding: 12px 24px;
+        font-size: 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: 0.5rem;
+        min-width: 160px;
+      }
+
+      .engage-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      }
+
+      .engage-btn.disconnect {
+        background: linear-gradient(45deg, #f44336, #d32f2f);
+      }
+
+      .engagement-status {
+        font-size: 14px;
+        color: #666;
+        font-style: italic;
+      }
+
+      .control-section {
+        margin-top: 1rem;
+      }
     </style>
   </head>
   <body>
@@ -257,24 +298,38 @@
         </div>
         
         <div class="status-section">
-          <div class="status-group">
-            <div class="arm-status">
-              <div class="status-indicator" id="leftArmStatus"></div>
-              <span class="status-label">Left Arm</span>
+          <h2>🤖 Robot Status</h2>
+          <div class="status-grid">
+            <div class="status-item">
+              <div class="status-indicator" id="leftArmStatus">⚫</div>
+              <span>Left Arm</span>
             </div>
-            <div class="arm-status">
-              <div class="status-indicator" id="rightArmStatus"></div>
-              <span class="status-label">Right Arm</span>
+            <div class="status-item">
+              <div class="status-indicator" id="rightArmStatus">⚫</div>
+              <span>Right Arm</span>
             </div>
-            <div class="arm-status">
-              <div class="status-indicator" id="vrStatus"></div>
-              <span class="status-label">VR Connection</span>
+            <div class="status-item">
+              <div class="status-indicator" id="vrStatus">⚫</div>
+              <span>VR Connected</span>
             </div>
           </div>
           
-          <div class="control-toggle" id="keyboardToggle" onclick="toggleKeyboardControl()">
-            <span>🎮</span>
-            <span id="keyboardToggleText">Enable Keyboard Control</span>
+          <!-- Robot Engagement Controls -->
+          <div class="robot-controls">
+            <button id="robotEngageBtn" class="engage-btn" onclick="toggleRobotEngagement()">
+              <span id="engageBtnText">🔌 Connect Robot</span>
+            </button>
+            <div class="engagement-status">
+              <span id="engagementStatusText">Motors Disengaged</span>
+            </div>
+          </div>
+          
+          <!-- Keyboard Control Toggle -->
+          <div class="control-section">
+            <div class="control-toggle" id="keyboardToggle" onclick="toggleKeyboardControl()">
+              <span>🎮</span>
+              <span id="keyboardToggleText">Enable Keyboard Control</span>
+            </div>
           </div>
         </div>
       </div>
@@ -375,12 +430,124 @@
 
     <script>
       // Global state
-      let keyboardControlEnabled = false;
-      let systemStatus = {
-        leftArm: false,
-        rightArm: false,
-        vrConnected: false
-      };
+      let isKeyboardEnabled = false;
+      let isRobotEngaged = false;
+
+      // Update status indicators
+      function updateStatus() {
+        fetch('/api/status')
+          .then(response => response.json())
+          .then(data => {
+            // Update arm connection indicators (based on device files)
+            const leftIndicator = document.getElementById('leftArmStatus');
+            const rightIndicator = document.getElementById('rightArmStatus');
+            const vrIndicator = document.getElementById('vrStatus');
+            
+            leftIndicator.className = 'status-indicator' + (data.leftArm ? ' connected' : '');
+            rightIndicator.className = 'status-indicator' + (data.rightArm ? ' connected' : '');
+            vrIndicator.className = 'status-indicator' + (data.vrConnected ? ' connected' : '');
+            
+            // Update keyboard control status
+            isKeyboardEnabled = data.keyboardEnabled;
+            const keyboardToggle = document.getElementById('keyboardToggle');
+            const keyboardText = document.getElementById('keyboardToggleText');
+            
+            if (isKeyboardEnabled) {
+              keyboardToggle.classList.add('active');
+              keyboardText.textContent = 'Disable Keyboard Control';
+            } else {
+              keyboardToggle.classList.remove('active');
+              keyboardText.textContent = 'Enable Keyboard Control';
+            }
+            
+            // Update robot engagement status
+            if (data.robotEngaged !== undefined) {
+              isRobotEngaged = data.robotEngaged;
+              updateEngagementUI();
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching status:', error);
+          });
+      }
+
+      function updateEngagementUI() {
+        const engageBtn = document.getElementById('robotEngageBtn');
+        const engageBtnText = document.getElementById('engageBtnText');
+        const engagementStatusText = document.getElementById('engagementStatusText');
+        
+        if (isRobotEngaged) {
+          engageBtn.classList.add('disconnect');
+          engageBtnText.textContent = '🔌 Disconnect Robot';
+          engagementStatusText.textContent = 'Motors Engaged';
+          engagementStatusText.style.color = '#4CAF50';
+        } else {
+          engageBtn.classList.remove('disconnect');
+          engageBtnText.textContent = '🔌 Connect Robot';
+          engagementStatusText.textContent = 'Motors Disengaged';
+          engagementStatusText.style.color = '#666';
+        }
+      }
+
+      function toggleRobotEngagement() {
+        const action = isRobotEngaged ? 'disconnect' : 'connect';
+        
+        fetch('/api/robot', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: action })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            isRobotEngaged = !isRobotEngaged;
+            updateEngagementUI();
+          } else {
+            alert('Failed to ' + action + ' robot: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(error => {
+          console.error('Error toggling robot engagement:', error);
+          alert('Error communicating with server');
+        });
+      }
+
+      // Toggle keyboard control
+      function toggleKeyboardControl() {
+        const action = isKeyboardEnabled ? 'disable' : 'enable';
+        
+        fetch('/api/keyboard', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: action })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            isKeyboardEnabled = !isKeyboardEnabled;
+            const keyboardToggle = document.getElementById('keyboardToggle');
+            const keyboardText = document.getElementById('keyboardToggleText');
+            
+            if (isKeyboardEnabled) {
+              keyboardToggle.classList.add('active');
+              keyboardText.textContent = 'Disable Keyboard Control';
+            } else {
+              keyboardToggle.classList.remove('active');
+              keyboardText.textContent = 'Enable Keyboard Control';
+            }
+          } else {
+            alert('Failed to toggle keyboard control: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(error => {
+          console.error('Error toggling keyboard control:', error);
+          alert('Error communicating with server');
+        });
+      }
 
       // Check if running in VR/AR mode
       function isVRMode() {
@@ -408,84 +575,13 @@
         }
       }
 
-      // Toggle keyboard control
-      function toggleKeyboardControl() {
-        keyboardControlEnabled = !keyboardControlEnabled;
-        const toggle = document.getElementById('keyboardToggle');
-        const text = document.getElementById('keyboardToggleText');
-        
-        if (keyboardControlEnabled) {
-          toggle.classList.add('active');
-          text.textContent = 'Keyboard Control Active';
-          // Send enable message to backend
-          sendControlMessage({ action: 'enable_keyboard' });
-        } else {
-          toggle.classList.remove('active');
-          text.textContent = 'Enable Keyboard Control';
-          // Send disable message to backend
-          sendControlMessage({ action: 'disable_keyboard' });
-        }
-      }
-
-      // Send control messages to backend
-      async function sendControlMessage(message) {
-        try {
-          const response = await fetch('/api/control', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(message)
-          });
-          
-          const result = await response.json();
-          if (!result.success) {
-            console.error('Control command failed:', result.error);
-          }
-          return result;
-        } catch (error) {
-          console.error('Failed to send control message:', error);
-          return { success: false, error: error.message };
-        }
-      }
-
-      // Update status indicators
-      function updateStatus(status) {
-        systemStatus = { ...systemStatus, ...status };
-        
-        const leftIndicator = document.getElementById('leftArmStatus');
-        const rightIndicator = document.getElementById('rightArmStatus');
-        const vrIndicator = document.getElementById('vrStatus');
-        
-        if (leftIndicator) {
-          leftIndicator.classList.toggle('connected', systemStatus.leftArm);
-        }
-        if (rightIndicator) {
-          rightIndicator.classList.toggle('connected', systemStatus.rightArm);
-        }
-        if (vrIndicator) {
-          vrIndicator.classList.toggle('connected', systemStatus.vrConnected);
-        }
-      }
-
-      // Fetch system status from backend
-      async function fetchSystemStatus() {
-        try {
-          const response = await fetch('/api/status');
-          const status = await response.json();
-          updateStatus(status);
-        } catch (error) {
-          console.warn('Failed to fetch system status:', error);
-        }
-      }
-
       // Initialize
       document.addEventListener('DOMContentLoaded', () => {
         updateUIForDevice();
         
         // Start status monitoring
-        fetchSystemStatus();
-        setInterval(fetchSystemStatus, 2000); // Update every 2 seconds
+        updateStatus();
+        setInterval(updateStatus, 2000); // Update every 2 seconds
         
         // Handle VR mode changes
         document.addEventListener('fullscreenchange', updateUIForDevice);
@@ -493,12 +589,12 @@
         // VR session detection
         if (navigator.xr) {
           navigator.xr.addEventListener('sessionstart', () => {
-            updateStatus({ vrConnected: true });
+            updateStatus();
             updateUIForDevice();
           });
           
           navigator.xr.addEventListener('sessionend', () => {
-            updateStatus({ vrConnected: false });
+            updateStatus();
             updateUIForDevice();
           });
         }

@@ -32,6 +32,7 @@ class RobotInterface:
         self.config = config
         self.robot = None
         self.is_connected = False
+        self.is_engaged = False  # New state for motor engagement
         
         # Individual arm connection status
         self.left_arm_connected = False
@@ -255,9 +256,44 @@ class RobotInterface:
         else:
             self.right_arm_angles = clamped_angles
     
+    def engage(self) -> bool:
+        """Engage robot motors (start sending commands)."""
+        if not self.is_connected:
+            logger.warning("Cannot engage robot: not connected")
+            return False
+        
+        self.is_engaged = True
+        logger.info("🔌 Robot motors ENGAGED - commands will be sent")
+        return True
+    
+    def disengage(self) -> bool:
+        """Disengage robot motors (stop sending commands)."""
+        if not self.is_connected:
+            logger.info("Robot already disconnected")
+            return True
+        
+        try:
+            # Return to safe position before disengaging
+            self.return_to_initial_position()
+            
+            # Disable torque
+            self.disable_torque()
+            
+            self.is_engaged = False
+            logger.info("🔌 Robot motors DISENGAGED - commands stopped")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error disengaging robot: {e}")
+            return False
+    
     def send_command(self) -> bool:
         """Send current joint angles to robot."""
         if not self.is_connected or not self.robot:
+            return False
+        
+        # Only send commands if robot is engaged
+        if not self.is_engaged:
             return False
         
         current_time = time.time()
