@@ -381,12 +381,17 @@ class RobotInterface:
             self.left_arm_angles = self.initial_left_arm.copy()
             self.right_arm_angles = self.initial_right_arm.copy()
             
-            # Send command
-            self.send_command()
-            logger.info("🏠 Commanded return to initial positions")
-            
-            # Wait for movement
-            time.sleep(1.0)
+            # Force send command immediately, bypassing engagement and timing checks
+            if self.robot:
+                concatenated_angles = np.concatenate([self.left_arm_angles, self.right_arm_angles])
+                action_tensor = torch.from_numpy(concatenated_angles).float()
+                self.robot.send_action(action_tensor)
+                logger.info("🏠 Commanded return to initial positions")
+                
+                # Wait for movement - give arms time to reach home position
+                time.sleep(1.5)
+            else:
+                logger.warning("🏠 No robot interface available for home positioning")
             
         except Exception as e:
             logger.error(f"Error moving to initial position: {e}")

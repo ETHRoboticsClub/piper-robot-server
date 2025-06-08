@@ -131,6 +131,17 @@
         padding: 20px;
         margin-top: 20px;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+      }
+
+      .keyboard-help.active {
+        background: rgba(76, 175, 80, 0.1);
+        border: 2px solid #4CAF50;
+        box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
+      }
+
+      .keyboard-help.active .help-title {
+        color: #2E7D32;
       }
 
       .help-title {
@@ -301,15 +312,15 @@
           <h2>🤖 Robot Status</h2>
           <div class="status-grid">
             <div class="status-item">
-              <div class="status-indicator" id="leftArmStatus">⚫</div>
+              <div class="status-indicator" id="leftArmStatus"></div>
               <span>Left Arm</span>
             </div>
             <div class="status-item">
-              <div class="status-indicator" id="rightArmStatus">⚫</div>
+              <div class="status-indicator" id="rightArmStatus"></div>
               <span>Right Arm</span>
             </div>
             <div class="status-item">
-              <div class="status-indicator" id="vrStatus">⚫</div>
+              <div class="status-indicator" id="vrStatus"></div>
               <span>VR Connected</span>
             </div>
           </div>
@@ -451,13 +462,16 @@
             isKeyboardEnabled = data.keyboardEnabled;
             const keyboardToggle = document.getElementById('keyboardToggle');
             const keyboardText = document.getElementById('keyboardToggleText');
+            const keyboardHelp = document.querySelector('.keyboard-help');
             
             if (isKeyboardEnabled) {
               keyboardToggle.classList.add('active');
               keyboardText.textContent = 'Disable Keyboard Control';
+              if (keyboardHelp) keyboardHelp.classList.add('active');
             } else {
               keyboardToggle.classList.remove('active');
               keyboardText.textContent = 'Enable Keyboard Control';
+              if (keyboardHelp) keyboardHelp.classList.remove('active');
             }
             
             // Update robot engagement status
@@ -531,13 +545,16 @@
             isKeyboardEnabled = !isKeyboardEnabled;
             const keyboardToggle = document.getElementById('keyboardToggle');
             const keyboardText = document.getElementById('keyboardToggleText');
+            const keyboardHelp = document.querySelector('.keyboard-help');
             
             if (isKeyboardEnabled) {
               keyboardToggle.classList.add('active');
               keyboardText.textContent = 'Disable Keyboard Control';
+              if (keyboardHelp) keyboardHelp.classList.add('active');
             } else {
               keyboardToggle.classList.remove('active');
               keyboardText.textContent = 'Enable Keyboard Control';
+              if (keyboardHelp) keyboardHelp.classList.remove('active');
             }
           } else {
             alert('Failed to toggle keyboard control: ' + (data.error || 'Unknown error'));
@@ -602,6 +619,84 @@
 
       // Handle window resize
       window.addEventListener('resize', updateUIForDevice);
+
+      // Web-based keyboard control
+      let pressedKeys = new Set();
+
+      // Add keyboard event listeners for web-based control
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('keyup', handleKeyUp);
+
+      function handleKeyDown(event) {
+        // Only handle keys if keyboard control is enabled and we're focused on the page
+        if (!isKeyboardEnabled || pressedKeys.has(event.code)) return;
+        
+        // Prevent default browser behavior for our control keys
+        if (isControlKey(event.code)) {
+          event.preventDefault();
+          pressedKeys.add(event.code);
+          sendKeyCommand(event.code, 'press');
+        }
+      }
+
+      function handleKeyUp(event) {
+        // Only handle keys if keyboard control is enabled
+        if (!isKeyboardEnabled || !pressedKeys.has(event.code)) return;
+        
+        if (isControlKey(event.code)) {
+          event.preventDefault();
+          pressedKeys.delete(event.code);
+          sendKeyCommand(event.code, 'release');
+        }
+      }
+
+      function isControlKey(code) {
+        // Check if this is one of our robot control keys
+        const controlKeys = [
+          // Left arm
+          'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 
+          'KeyZ', 'KeyX', 'KeyF', 'Tab',
+          // Right arm
+          'KeyI', 'KeyK', 'KeyJ', 'KeyL', 'KeyU', 'KeyO',
+          'KeyN', 'KeyM', 'Semicolon', 'Enter',
+          // Global
+          'Escape'
+        ];
+        return controlKeys.includes(code);
+      }
+
+      function sendKeyCommand(keyCode, action) {
+        // Convert browser keyCode to our key mapping
+        const keyMap = {
+          // Left arm
+          'KeyW': 'w', 'KeyS': 's', 'KeyA': 'a', 'KeyD': 'd',
+          'KeyQ': 'q', 'KeyE': 'e', 'KeyZ': 'z', 'KeyX': 'x',
+          'KeyF': 'f', 'Tab': 'tab',
+          // Right arm  
+          'KeyI': 'i', 'KeyK': 'k', 'KeyJ': 'j', 'KeyL': 'l',
+          'KeyU': 'u', 'KeyO': 'o', 'KeyN': 'n', 'KeyM': 'm',
+          'Semicolon': ';', 'Enter': 'enter',
+          // Global
+          'Escape': 'esc'
+        };
+
+        const key = keyMap[keyCode];
+        if (!key) return;
+
+        fetch('/api/keypress', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            key: key, 
+            action: action 
+          })
+        })
+        .catch(error => {
+          console.error('Error sending key command:', error);
+        });
+      }
     </script>
   </body>
 </html> 

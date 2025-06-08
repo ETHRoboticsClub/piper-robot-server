@@ -231,6 +231,15 @@ class ControlLoop:
             if self.keyboard_listener:
                 await self.keyboard_listener.stop()
                 logger.info("🎮 Keyboard control DISABLED via API")
+        elif action == 'web_keypress':
+            # Handle individual keypress events from web interface
+            if self.keyboard_listener and self.keyboard_listener.is_enabled:
+                key = command.get('key')
+                event = command.get('event')  # 'press' or 'release'
+                logger.info(f"🎮 Processing web keypress: {key}_{event}")
+                await self._handle_web_keypress(key, event)
+            else:
+                logger.warning("🎮 Keyboard control not enabled for web keypress")
         elif action == 'robot_connect':
             logger.info("🔌 Processing robot_connect command")
             if self.robot_interface and self.robot_interface.is_connected:
@@ -249,12 +258,78 @@ class ControlLoop:
                 success = self.robot_interface.disengage()
                 if success:
                     logger.info("🔌 Robot motors DISENGAGED via API")
+                    # Reset arm states to IDLE when robot is disengaged
+                    self.left_arm.reset()
+                    self.right_arm.reset()
+                    logger.info("🔓 Both arms: Position control DEACTIVATED after robot disconnect")
+                    
+                    # Hide visualization markers
+                    if self.visualizer:
+                        for arm in ["left", "right"]:
+                            self.visualizer.hide_marker(f"{arm}_goal")
+                            self.visualizer.hide_frame(f"{arm}_goal_frame")
+                            self.visualizer.hide_marker(f"{arm}_target")
+                            self.visualizer.hide_frame(f"{arm}_target_frame")
                 else:
                     logger.error("❌ Failed to disengage robot motors")
             else:
                 logger.warning("Cannot disengage robot: no robot interface")
         else:
             logger.warning(f"Unknown command: {action}")
+    
+    async def _handle_web_keypress(self, key: str, event: str):
+        """Handle keypress events from web interface by delegating to keyboard listener."""
+        if not self.keyboard_listener:
+            return
+            
+        # Create a mock key object for compatibility with keyboard listener
+        class MockKey:
+            def __init__(self, char=None, key_type=None):
+                self.char = char
+                self.key_type = key_type
+        
+        # Map special keys
+        special_keys = {
+            'tab': 'Key.tab',
+            'enter': 'Key.enter', 
+            'esc': 'Key.esc'
+        }
+        
+        try:
+            if event == 'press':
+                if key in special_keys:
+                    # Handle special keys
+                    if key == 'tab':
+                        from pynput.keyboard import Key
+                        mock_key = Key.tab
+                    elif key == 'enter':
+                        from pynput.keyboard import Key
+                        mock_key = Key.enter
+                    elif key == 'esc':
+                        from pynput.keyboard import Key
+                        mock_key = Key.esc
+                    else:
+                        return
+                else:
+                    # Handle character keys
+                    mock_key = MockKey(char=key)
+                
+                # Call keyboard listener's on_press method
+                self.keyboard_listener.on_press(mock_key)
+                
+            elif event == 'release':
+                if key in special_keys:
+                    # Special keys don't typically need release handling
+                    return
+                else:
+                    # Handle character key release
+                    mock_key = MockKey(char=key)
+                
+                # Call keyboard listener's on_release method
+                self.keyboard_listener.on_release(mock_key)
+                
+        except Exception as e:
+            logger.error(f"Error handling web keypress {key}_{event}: {e}")
     
     async def _execute_goal(self, goal: ControlGoal):
         """Execute a control goal."""
