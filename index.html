@@ -422,11 +422,10 @@
     <!-- VR-only content -->
     <div class="vr-content" id="vrContent">
       <div class="vr-title">VR Teleoperation</div>
-      <div class="vr-subtitle">Put on your headset and click "Start Controller Tracking" below</div>
     </div>
 
     <!-- A-Frame VR Scene -->
-    <a-scene vr-mode-ui="enabled: false;">
+    <a-scene vr-mode-ui="enabled: true;">
       <!-- Passthrough setup -->
       <a-entity webxr-passthrough="referenceSpaceType: local-floor"></a-entity>
 
@@ -580,14 +579,27 @@
           desktopInterface.style.display = 'none';
           vrContent.style.display = 'none';
         } else {
-          // Check if this is likely a desktop (has keyboard support)
-          const hasKeyboard = window.navigator.keyboard || window.ontouchstart === undefined;
-          if (hasKeyboard) {
+          // Check if this is a VR-capable device
+          if (navigator.xr) {
+            navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+              if (supported) {
+                // VR-capable device - show VR interface
+                desktopInterface.style.display = 'none';
+                vrContent.style.display = 'block';
+              } else {
+                // Not VR-capable - show desktop interface
+                desktopInterface.style.display = 'block';
+                vrContent.style.display = 'none';
+              }
+            }).catch(() => {
+              // Fallback to desktop interface if XR check fails
+              desktopInterface.style.display = 'block';
+              vrContent.style.display = 'none';
+            });
+          } else {
+            // No XR support - show desktop interface
             desktopInterface.style.display = 'block';
             vrContent.style.display = 'none';
-          } else {
-            desktopInterface.style.display = 'none';
-            vrContent.style.display = 'block';
           }
         }
       }

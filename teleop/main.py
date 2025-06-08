@@ -104,10 +104,16 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 if system.control_loop and system.control_loop.robot_interface:
                     robot_engaged = system.control_loop.robot_interface.is_engaged
                 
+                # Get VR connection status
+                vr_connected = False
+                if system.vr_server and system.vr_server.is_running:
+                    vr_connected = len(system.vr_server.clients) > 0
+                
                 status = {
                     **control_status,
                     "keyboardEnabled": keyboard_enabled,
-                    "robotEngaged": robot_engaged
+                    "robotEngaged": robot_engaged,
+                    "vrConnected": vr_connected
                 }
                 
                 # Send JSON response
