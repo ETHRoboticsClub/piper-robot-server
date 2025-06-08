@@ -2,9 +2,10 @@
 # For development with pinned versions, use: pip install -r requirements-dev.txt
 # For installation as package, use: pip install -e .
 
-numpy
-scipy
+numpy>=1.20.0
+scipy>=1.7.0
 lerobot[feetech]
-pynput
-pybullet
-websockets 
+pynput>=1.7.0
+pybullet>=3.2.0
+websockets>=10.0
+pyyaml>=6.0 

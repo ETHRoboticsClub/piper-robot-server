@@ -20,7 +20,7 @@ import threading
 from pathlib import Path
 import weakref
 
-from .config import TeleopConfig
+from .config import TeleopConfig, get_config_data, update_config_data
 from .control_loop import ControlLoop
 from .inputs.vr_ws_server import VRWebSocketServer
 from .inputs.keyboard_listener import KeyboardListener
@@ -61,6 +61,8 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         """Handle GET requests."""
         if self.path == '/api/status':
             self.handle_status_request()
+        elif self.path == '/api/config':
+            self.handle_config_get_request()
         elif self.path == '/' or self.path == '/index.html':
             # Serve main page
             self.serve_file('index.html', 'text/html')
@@ -81,6 +83,8 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.handle_robot_request()
         elif self.path == '/api/keypress':
             self.handle_keypress_request()
+        elif self.path == '/api/config':
+            self.handle_config_post_request()
         else:
             self.send_error(404, "Not found")
     
@@ -241,6 +245,52 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(400, "Invalid JSON")
         except Exception as e:
             logger.error(f"Error handling keypress request: {e}")
+            self.send_error(500, str(e))
+    
+    def handle_config_get_request(self):
+        """Handle configuration read requests."""
+        try:
+            config_data = get_config_data()
+            
+            # Send JSON response
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            
+            response = json.dumps(config_data)
+            self.wfile.write(response.encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error handling config get request: {e}")
+            self.send_error(500, str(e))
+    
+    def handle_config_post_request(self):
+        """Handle configuration update requests."""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error(400, "No request body")
+                return
+            
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            # Update configuration
+            success = update_config_data(data)
+            
+            if success:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "message": "Configuration updated successfully"}).encode('utf-8'))
+                logger.info("Configuration updated successfully")
+            else:
+                self.send_error(500, "Failed to save configuration")
+                
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+        except Exception as e:
+            logger.error(f"Error handling config post request: {e}")
             self.send_error(500, str(e))
     
     def serve_file(self, filename, content_type):

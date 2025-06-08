@@ -327,9 +327,260 @@
       .control-section {
         margin-top: 1rem;
       }
+
+      /* Settings button */
+      .settings-button {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10001;
+        background: rgba(255, 255, 255, 0.9);
+        border: 2px solid #3498db;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .settings-button:hover {
+        background: #3498db;
+        color: white;
+        transform: rotate(45deg);
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+      }
+
+      /* Settings modal */
+      .settings-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 20000;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(5px);
+      }
+
+      .settings-modal.show {
+        display: flex;
+      }
+
+      .settings-content {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      }
+
+      .settings-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 15px;
+      }
+
+      .settings-title {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2c3e50;
+      }
+
+      .close-button {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #7f8c8d;
+        padding: 5px;
+        border-radius: 50%;
+        width: 35px;
+        height: 35px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+      }
+
+      .close-button:hover {
+        background: #e74c3c;
+        color: white;
+      }
+
+      .settings-section {
+        margin-bottom: 25px;
+      }
+
+      .settings-section h3 {
+        color: #34495e;
+        margin-bottom: 15px;
+        font-size: 18px;
+        border-left: 4px solid #3498db;
+        padding-left: 10px;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #2c3e50;
+      }
+
+      .form-group input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 2px solid #bdc3c7;
+        border-radius: 5px;
+        font-size: 14px;
+        transition: border-color 0.3s ease;
+        box-sizing: border-box;
+      }
+
+      .form-group input:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+
+      .save-button {
+        background: linear-gradient(45deg, #27ae60, #2ecc71);
+        color: white;
+        border: none;
+        padding: 12px 25px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        width: 100%;
+        margin-top: 20px;
+      }
+
+      .save-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+      }
+
+      .save-button:disabled {
+        background: #95a5a6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
     </style>
   </head>
   <body>
+    <!-- Settings Button -->
+    <div class="settings-button" onclick="openSettings()">
+      ⚙️
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="settings-modal" id="settingsModal">
+      <div class="settings-content">
+        <div class="settings-header">
+          <div class="settings-title">System Configuration</div>
+          <button class="close-button" onclick="closeSettings()">×</button>
+        </div>
+        
+        <form id="settingsForm">
+          <div class="settings-section">
+            <h3>🤖 Robot Arms</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="leftArmName">Left Arm Name</label>
+                <input type="text" id="leftArmName" name="leftArmName">
+              </div>
+              <div class="form-group">
+                <label for="leftArmPort">Left Arm Port</label>
+                <input type="text" id="leftArmPort" name="leftArmPort" placeholder="/dev/ttySO100red">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="rightArmName">Right Arm Name</label>
+                <input type="text" id="rightArmName" name="rightArmName">
+              </div>
+              <div class="form-group">
+                <label for="rightArmPort">Right Arm Port</label>
+                <input type="text" id="rightArmPort" name="rightArmPort" placeholder="/dev/ttySO100blue">
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>🌐 Network Settings</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="httpsPort">HTTPS Port</label>
+                <input type="number" id="httpsPort" name="httpsPort" min="1024" max="65535">
+              </div>
+              <div class="form-group">
+                <label for="websocketPort">WebSocket Port</label>
+                <input type="number" id="websocketPort" name="websocketPort" min="1024" max="65535">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="hostIp">Host IP Address</label>
+              <input type="text" id="hostIp" name="hostIp" placeholder="0.0.0.0">
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>🎮 Control Parameters</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="vrScale">VR Scale Factor</label>
+                <input type="number" id="vrScale" name="vrScale" step="0.1" min="0.1" max="5.0">
+              </div>
+              <div class="form-group">
+                <label for="sendInterval">Send Interval (ms)</label>
+                <input type="number" id="sendInterval" name="sendInterval" step="1" min="10" max="200">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="posStep">Position Step (m)</label>
+                <input type="number" id="posStep" name="posStep" step="0.001" min="0.001" max="0.1">
+              </div>
+              <div class="form-group">
+                <label for="angleStep">Angle Step (degrees)</label>
+                <input type="number" id="angleStep" name="angleStep" step="0.5" min="0.5" max="45">
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="save-button" id="saveButton">
+            💾 Save Configuration
+          </button>
+        </form>
+      </div>
+    </div>
+
     <!-- Desktop Interface -->
     <div class="desktop-interface" id="desktopInterface">
       <div class="desktop-header">
@@ -472,6 +723,114 @@
       // Global state
       let isKeyboardEnabled = false;
       let isRobotEngaged = false;
+      let currentConfig = {};
+
+      // Settings modal functions
+      function openSettings() {
+        const modal = document.getElementById('settingsModal');
+        modal.classList.add('show');
+        loadConfiguration();
+      }
+
+      function closeSettings() {
+        const modal = document.getElementById('settingsModal');
+        modal.classList.remove('show');
+      }
+
+      function loadConfiguration() {
+        fetch('/api/config')
+          .then(response => response.json())
+          .then(config => {
+            currentConfig = config;
+            populateSettingsForm(config);
+          })
+          .catch(error => {
+            console.error('Error loading configuration:', error);
+            alert('Error loading configuration');
+          });
+      }
+
+      function populateSettingsForm(config) {
+        // Robot arms
+        document.getElementById('leftArmName').value = config.robot?.left_arm?.name || '';
+        document.getElementById('leftArmPort').value = config.robot?.left_arm?.port || '';
+        document.getElementById('rightArmName').value = config.robot?.right_arm?.name || '';
+        document.getElementById('rightArmPort').value = config.robot?.right_arm?.port || '';
+        
+        // Network settings
+        document.getElementById('httpsPort').value = config.network?.https_port || '';
+        document.getElementById('websocketPort').value = config.network?.websocket_port || '';
+        document.getElementById('hostIp').value = config.network?.host_ip || '';
+        
+        // Control parameters
+        document.getElementById('vrScale').value = config.robot?.vr_to_robot_scale || '';
+        document.getElementById('sendInterval').value = (config.robot?.send_interval * 1000) || ''; // Convert to ms
+        document.getElementById('posStep').value = config.control?.keyboard?.pos_step || '';
+        document.getElementById('angleStep').value = config.control?.keyboard?.angle_step || '';
+      }
+
+      function saveConfiguration() {
+        const form = document.getElementById('settingsForm');
+        const formData = new FormData(form);
+        
+        // Build config object
+        const updatedConfig = {
+          robot: {
+            left_arm: {
+              name: formData.get('leftArmName'),
+              port: formData.get('leftArmPort'),
+              enabled: true
+            },
+            right_arm: {
+              name: formData.get('rightArmName'),
+              port: formData.get('rightArmPort'),
+              enabled: true
+            },
+            vr_to_robot_scale: parseFloat(formData.get('vrScale')),
+            send_interval: parseFloat(formData.get('sendInterval')) / 1000 // Convert from ms
+          },
+          network: {
+            https_port: parseInt(formData.get('httpsPort')),
+            websocket_port: parseInt(formData.get('websocketPort')),
+            host_ip: formData.get('hostIp')
+          },
+          control: {
+            keyboard: {
+              pos_step: parseFloat(formData.get('posStep')),
+              angle_step: parseFloat(formData.get('angleStep'))
+            }
+          }
+        };
+
+        const saveButton = document.getElementById('saveButton');
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+
+        fetch('/api/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updatedConfig)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            alert('Configuration saved successfully! Please restart the system for changes to take effect.');
+            closeSettings();
+          } else {
+            alert('Failed to save configuration: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(error => {
+          console.error('Error saving configuration:', error);
+          alert('Error saving configuration');
+        })
+        .finally(() => {
+          saveButton.disabled = false;
+          saveButton.textContent = '💾 Save Configuration';
+        });
+      }
 
       // Update status indicators
       function updateStatus() {
@@ -645,6 +1004,19 @@
             updateUIForDevice();
           });
         }
+
+        // Settings form handler
+        document.getElementById('settingsForm').addEventListener('submit', (e) => {
+          e.preventDefault();
+          saveConfiguration();
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('settingsModal').addEventListener('click', (e) => {
+          if (e.target.id === 'settingsModal') {
+            closeSettings();
+          }
+        });
       });
 
       // Handle window resize

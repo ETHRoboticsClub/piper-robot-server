@@ -1,0 +1,34 @@
+control:
+  keyboard:
+    angle_step: 5
+    enabled: true
+    gripper_step: 10.0
+    pos_step: 0.01
+  pybullet:
+    enabled: true
+  vr:
+    enabled: true
+gripper:
+  closed_angle: 45.0
+  open_angle: 0.0
+network:
+  host_ip: 0.0.0.0
+  https_port: 8443
+  websocket_port: 8442
+paths:
+  urdf_path: URDF/SO_5DOF_ARM100_8j/urdf/so100.urdf
+robot:
+  left_arm:
+    enabled: true
+    name: Left Arm
+    port: /dev/ttySO100red
+  position_smoothing: 0.1
+  right_arm:
+    enabled: true
+    name: Right Arm
+    port: /dev/ttySO100blue
+  send_interval: 0.05
+  vr_to_robot_scale: 1
+ssl:
+  certfile: cert.pem
+  keyfile: key.pem
