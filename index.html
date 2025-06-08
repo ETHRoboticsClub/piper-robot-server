@@ -454,8 +454,8 @@
             const rightIndicator = document.getElementById('rightArmStatus');
             const vrIndicator = document.getElementById('vrStatus');
             
-            leftIndicator.className = 'status-indicator' + (data.leftArm ? ' connected' : '');
-            rightIndicator.className = 'status-indicator' + (data.rightArm ? ' connected' : '');
+            leftIndicator.className = 'status-indicator' + (data.left_arm_connected ? ' connected' : '');
+            rightIndicator.className = 'status-indicator' + (data.right_arm_connected ? ' connected' : '');
             vrIndicator.className = 'status-indicator' + (data.vrConnected ? ' connected' : '');
             
             // Update keyboard control status
