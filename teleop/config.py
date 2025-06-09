@@ -166,7 +166,7 @@ URDF_TO_INTERNAL_NAME_MAP = {
 }
 
 # --- PyBullet Configuration ---
-END_EFFECTOR_LINK_NAME = "Wrist_Pitch_Roll"
+END_EFFECTOR_LINK_NAME = "Fixed_Jaw_tip"
 
 # --- Keyboard Control ---
 POS_STEP = 0.01  # meters
