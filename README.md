@@ -2,6 +2,10 @@
 
 A consolidated teleoperation control system for the SO100 robot that supports multiple input methods (VR controllers, keyboard, phone support coming...) with shared inverse kinematics and 3D visualization.
 
+![VR Controller Instructions](teleop_instructions.jpg)
+
+*VR controller interface showing how to control the robot arms using grip and trigger buttons*
+
 ## Features
 
 - **Unified Architecture**: Single entry point that coordinates all components
@@ -124,14 +128,22 @@ python -m teleop --no-viz
 ### VR Controller Control
 
 1. **Setup**: Connect Meta Quest to same network, navigate to `https://<robot-ip>:8443`
-2. **Arm Control**: 
-   - Press and hold **grip button** to activate position control for that arm
-   - Move controller to control end effector position
-   - Rotate controller around forward axis to control wrist roll
-3. **Gripper Control**:
-   - Press **trigger** to close gripper
-   - Release **trigger** to open gripper
-4. **Independent Control**: Left and right controllers control respective robot arms
+
+2. **Arm Position Control**: 
+   - **Hold grip button** to activate position control for that arm
+   - While holding grip, the robot arm gripper tip will track your controller position in 3D space
+   - Release grip button to deactivate position control
+
+3. **Wrist Orientation Control**:
+   - The **roll and pitch** of your controller will be matched on the wrist joint of the arm
+   - This allows precise orientation control of the end effector
+
+4. **Gripper Control**:
+   - Press and **hold trigger button** to close the gripper
+   - The gripper stays closed as long as you hold the trigger
+   - Release trigger to open the gripper
+
+5. **Independent Control**: Left and right controllers control their respective robot arms independently - you can operate both arms simultaneously or one at a time
 
 ### Keyboard Control
 

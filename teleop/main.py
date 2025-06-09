@@ -73,6 +73,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.serve_file(self.path[1:], 'application/javascript')
         elif self.path.endswith('.ico'):
             self.serve_file(self.path[1:], 'image/x-icon')
+        elif self.path.endswith(('.jpg', '.jpeg')):
+            self.serve_file(self.path[1:], 'image/jpeg')
+        elif self.path.endswith('.png'):
+            self.serve_file(self.path[1:], 'image/png')
+        elif self.path.endswith('.gif'):
+            self.serve_file(self.path[1:], 'image/gif')
         else:
             self.send_error(404, "Not found")
     

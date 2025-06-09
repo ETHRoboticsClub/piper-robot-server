@@ -4,7 +4,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #333;
-  overflow-x: hidden;
+  overflow-x: auto;
+  min-width: 320px;
 }
 
 /* Desktop-only interface */
@@ -12,13 +13,18 @@ body {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
+  width: 100%;
+  height: 100vh;
   z-index: 10000;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   padding: 20px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+  overflow-y: auto;
+  min-width: 320px;
+  box-sizing: border-box;
 }
 
 .desktop-header {
@@ -44,11 +50,16 @@ body {
 
 /* Status indicators */
 .status-section {
-  margin-bottom: 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
 }
 
 .status-section h2 {
-  color: #333;
+  color: white;
   margin-bottom: 1rem;
   font-size: 1.2rem;
 }
@@ -241,26 +252,106 @@ body {
   margin-bottom: 30px;
 }
 
+/* VR Instructions Section */
+.vr-instructions-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.vr-instructions-section h2 {
+  color: white;
+  margin: 0 0 15px 0;
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.instructions-content {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.instructions-image {
+  flex: 1;
+  min-width: 200px;
+}
+
+.instructions-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.instruction-item {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.instruction-item strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.95em;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
+  body {
+    min-width: 280px;
+  }
+  
   .desktop-interface {
     padding: 15px 10px;
+    min-width: 280px;
+    overflow-x: auto;
   }
   
   .desktop-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 15px;
+    min-width: 260px;
   }
   
   .status-section {
     flex-direction: column;
     align-items: flex-start;
     gap: 15px;
+    min-width: 260px;
   }
   
   .help-columns {
     grid-template-columns: 1fr;
+  }
+  
+  .instructions-content {
+    flex-direction: column;
+  }
+  
+  .instructions-image {
+    order: -1;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .button-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .save-button,
+  .restart-button {
+    width: 100%;
   }
 }
 
@@ -310,7 +401,7 @@ a-scene {
 
 .engagement-status {
   font-size: 14px;
-  color: #666;
+  color: white;
   font-style: italic;
 }
 
