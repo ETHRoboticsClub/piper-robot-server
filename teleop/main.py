@@ -47,7 +47,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        super().end_headers()
+        try:
+            super().end_headers()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, ssl.SSLError):
+            # Client disconnected or SSL error - ignore silently
+            pass
     
     def do_OPTIONS(self):
         """Handle preflight CORS requests."""
@@ -333,9 +337,16 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             
         except FileNotFoundError:
             self.send_error(404, f"File {filename} not found")
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Client disconnected - log quietly and continue
+            logger.debug(f"Client disconnected while serving {filename}")
         except Exception as e:
             logger.error(f"Error serving file {filename}: {e}")
-            self.send_error(500, "Internal server error")
+            try:
+                self.send_error(500, "Internal server error")
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # Client already disconnected, ignore
+                pass
 
 
 class HTTPSServer:

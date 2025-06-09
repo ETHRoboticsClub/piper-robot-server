@@ -192,12 +192,12 @@ function updateEngagementUI() {
     engageBtn.classList.add('disconnect');
     engageBtnText.textContent = '🔌 Disconnect Robot';
     engagementStatusText.textContent = 'Motors Engaged';
-    engagementStatusText.style.color = '#4CAF50';
+    engagementStatusText.style.color = '#FFFFFF';
   } else {
     engageBtn.classList.remove('disconnect');
     engageBtnText.textContent = '🔌 Connect Robot';
     engagementStatusText.textContent = 'Motors Disengaged';
-    engagementStatusText.style.color = '#666';
+    engagementStatusText.style.color = '#FFFFFF';
   }
 }
 

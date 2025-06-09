@@ -1,10 +1,10 @@
-# SO100 Robot Teleoperation System
+# teleop - SO100 Robot Arm Teleoperation System
 
-A consolidated teleoperation control system for the SO100 robot that supports multiple input methods (VR controllers, keyboard, phone support coming...) with shared inverse kinematics and 3D visualization.
+A consolidated teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboard with shared inverse kinematics, 3D visualization and a web UI.
 
 ![VR Controller Instructions](teleop_instructions.jpg)
 
-*VR controller interface showing how to control the robot arms using grip and trigger buttons*
+*Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the teleop controller so you can record training data without a dedicated leader arm.*
 
 ## Features
 
@@ -21,7 +21,7 @@ A consolidated teleoperation control system for the SO100 robot that supports mu
 
 1. **Robot Hardware**: One or two SO100 arm robot with USB-serial connections
 2. **Python Environment**: Python 3.8+ with required packages
-3. **VR Setup** (optional): Meta Quest or other headset with WebXR support
+3. **VR Setup** (optional): Meta Quest or other headset with WebXR support (no app installation needed!)
 
 
 
@@ -45,11 +45,8 @@ After installing LeRobot, install this teleoperation package:
 
 ```bash
 # Install in editable mode (recommended for development)
+git clone 
 pip install -e .
-
-# Or install basic requirements manually
-pip install -r requirements.txt
-```
 
 ### Dependencies
 
