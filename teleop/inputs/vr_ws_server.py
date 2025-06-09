@@ -32,10 +32,9 @@ class VRControllerState:
         self.origin_position = None
         self.origin_rotation = None
         
-        # Frame-to-frame rotation tracking
-        self.previous_euler = None  # Previous frame's Euler angles
-        self.accumulated_pitch = 0.0  # Accumulated pitch change since grip press
-        self.accumulated_roll = 0.0   # Accumulated roll change since grip press
+        # Quaternion-based rotation tracking (more stable than Euler)
+        self.origin_quaternion = None
+        self.accumulated_rotation_quat = None  # Accumulated rotation as quaternion
         
         # Rotation tracking for wrist control
         self.z_axis_rotation = 0.0  # For wrist_roll
@@ -52,9 +51,8 @@ class VRControllerState:
         self.grip_active = False
         self.origin_position = None
         self.origin_rotation = None
-        self.previous_euler = None
-        self.accumulated_pitch = 0.0
-        self.accumulated_roll = 0.0
+        self.origin_quaternion = None
+        self.accumulated_rotation_quat = None
         self.z_axis_rotation = 0.0
         self.x_axis_rotation = 0.0
 
@@ -199,6 +197,7 @@ class VRWebSocketServer(BaseInputProvider):
         """Process data for a single controller."""
         position = data.get('position', {})
         rotation = data.get('rotation', {})
+        quaternion = data.get('quaternion', {})  # Get quaternion data directly
         grip_active = data.get('gripActive', False)
         trigger = data.get('trigger', 0)
         
@@ -226,8 +225,17 @@ class VRWebSocketServer(BaseInputProvider):
                 # Grip just activated - set origin
                 controller.grip_active = True
                 controller.origin_position = position.copy()
-                controller.origin_rotation = self.euler_to_quaternion(rotation) if rotation else None
-                controller.previous_euler = rotation.copy() if rotation else None
+                
+                # Use quaternion data directly if available, otherwise fall back to Euler conversion
+                if quaternion and all(k in quaternion for k in ['x', 'y', 'z', 'w']):
+                    controller.origin_quaternion = np.array([quaternion['x'], quaternion['y'], quaternion['z'], quaternion['w']])
+                    controller.origin_rotation = controller.origin_quaternion  # Store for compatibility
+                else:
+                    # Fallback to Euler angle conversion
+                    controller.origin_quaternion = self.euler_to_quaternion(rotation) if rotation else None
+                    controller.origin_rotation = controller.origin_quaternion
+                
+                controller.accumulated_rotation_quat = controller.origin_quaternion
                 controller.z_axis_rotation = 0.0
                 controller.x_axis_rotation = 0.0
                 
@@ -245,13 +253,19 @@ class VRWebSocketServer(BaseInputProvider):
                 
                 # Calculate Z-axis rotation for wrist_roll control
                 # Calculate X-axis rotation for wrist_flex control
-                if controller.origin_rotation is not None and rotation:
-                    # Update frame-to-frame rotation accumulation
-                    self.update_frame_rotation(controller, rotation)
+                if controller.origin_quaternion is not None:
+                    # Update quaternion-based rotation tracking
+                    if quaternion and all(k in quaternion for k in ['x', 'y', 'z', 'w']):
+                        # Use quaternion data directly
+                        current_quat = np.array([quaternion['x'], quaternion['y'], quaternion['z'], quaternion['w']])
+                        self.update_quaternion_rotation_direct(controller, current_quat)
+                    else:
+                        # Fallback to Euler angle conversion
+                        self.update_quaternion_rotation(controller, rotation)
                     
-                    # Get accumulated rotations
-                    controller.z_axis_rotation = controller.accumulated_roll
-                    controller.x_axis_rotation = controller.accumulated_pitch
+                    # Get accumulated rotations from quaternion
+                    controller.z_axis_rotation = self.extract_roll_from_quaternion(controller.accumulated_rotation_quat, controller.origin_quaternion)
+                    controller.x_axis_rotation = self.extract_pitch_from_quaternion(controller.accumulated_rotation_quat, controller.origin_quaternion)
                 
                 # Create position control goal
                 # Note: We send relative position here, the control loop will handle
@@ -315,36 +329,69 @@ class VRWebSocketServer(BaseInputProvider):
         rotation = R.from_euler('xyz', euler_rad)
         return rotation.as_quat()
     
-    def calculate_euler_roll(self, current_euler: dict, previous_euler: dict) -> float:
-        """Calculate accumulated roll rotation using frame-to-frame differences."""
-        return self.accumulated_roll
-    
-    def calculate_euler_pitch(self, current_euler: dict, previous_euler: dict) -> float:
-        """Calculate accumulated pitch rotation using frame-to-frame differences."""
-        return self.accumulated_pitch
-    
-    def update_frame_rotation(self, controller: VRControllerState, current_euler: dict):
-        """Update accumulated rotations based on frame-to-frame differences."""
+    def update_quaternion_rotation(self, controller: VRControllerState, current_euler: dict):
+        """Update quaternion-based rotation tracking."""
         if not current_euler:
             return
-            
-        if controller.previous_euler is not None:
-            # Calculate frame-to-frame differences
-            pitch_diff = self.angle_difference(current_euler.get('x', 0.0), controller.previous_euler.get('x', 0.0))
-            roll_diff = self.angle_difference(current_euler.get('z', 0.0), controller.previous_euler.get('z', 0.0))
-            
-            # Accumulate the differences
-            controller.accumulated_pitch += pitch_diff
-            controller.accumulated_roll += roll_diff
         
-        # Update previous frame for next iteration
-        controller.previous_euler = current_euler.copy()
+        # Convert current Euler to quaternion
+        current_quat = self.euler_to_quaternion(current_euler)
+        
+        # Store current quaternion for accumulated rotation calculation
+        controller.accumulated_rotation_quat = current_quat
     
-    def angle_difference(self, current: float, previous: float) -> float:
-        """Calculate the smallest angle difference between two angles, handling wrapping."""
-        diff = current - previous
-        while diff > 180:
-            diff -= 360
-        while diff < -180:
-            diff += 360
-        return diff 
+    def update_quaternion_rotation_direct(self, controller: VRControllerState, current_quat: np.ndarray):
+        """Update quaternion-based rotation tracking using quaternion data directly."""
+        if current_quat is None:
+            return
+        
+        # Store current quaternion for accumulated rotation calculation
+        controller.accumulated_rotation_quat = current_quat
+    
+    def extract_roll_from_quaternion(self, current_quat: np.ndarray, origin_quat: np.ndarray) -> float:
+        """Extract roll rotation around Z-axis from relative quaternion rotation."""
+        if current_quat is None or origin_quat is None:
+            return 0.0
+        
+        try:
+            # Calculate relative rotation quaternion (from origin to current)
+            origin_rotation = R.from_quat(origin_quat)
+            current_rotation = R.from_quat(current_quat)
+            relative_rotation = current_rotation * origin_rotation.inv()
+            
+            # Project the relative rotation onto the Z-axis (roll)
+            # Get the rotation vector (axis-angle representation)
+            rotvec = relative_rotation.as_rotvec()
+            
+            # The Z-component of the rotation vector represents rotation around Z-axis (roll)
+            z_rotation_rad = rotvec[2]
+            z_rotation_deg = np.degrees(z_rotation_rad)
+            
+            return z_rotation_deg
+        except Exception as e:
+            logger.warning(f"Error extracting roll from quaternion: {e}")
+            return 0.0
+    
+    def extract_pitch_from_quaternion(self, current_quat: np.ndarray, origin_quat: np.ndarray) -> float:
+        """Extract pitch rotation around X-axis from relative quaternion rotation."""
+        if current_quat is None or origin_quat is None:
+            return 0.0
+        
+        try:
+            # Calculate relative rotation quaternion (from origin to current)
+            origin_rotation = R.from_quat(origin_quat)
+            current_rotation = R.from_quat(current_quat)
+            relative_rotation = current_rotation * origin_rotation.inv()
+            
+            # Project the relative rotation onto the X-axis (pitch)
+            # Get the rotation vector (axis-angle representation)
+            rotvec = relative_rotation.as_rotvec()
+            
+            # The X-component of the rotation vector represents rotation around X-axis (pitch)
+            x_rotation_rad = rotvec[0]
+            x_rotation_deg = np.degrees(x_rotation_rad)
+            
+            return x_rotation_deg
+        except Exception as e:
+            logger.warning(f"Error extracting pitch from quaternion: {e}")
+            return 0.0 

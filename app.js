@@ -456,6 +456,12 @@ AFRAME.registerComponent('controller-updater', {
         // Collect left controller data
         leftController.position = { x: leftPos.x, y: leftPos.y, z: leftPos.z };
         leftController.rotation = { x: leftRotX, y: leftRotY, z: leftRotZ };
+        leftController.quaternion = { 
+          x: this.leftHand.object3D.quaternion.x, 
+          y: this.leftHand.object3D.quaternion.y, 
+          z: this.leftHand.object3D.quaternion.z, 
+          w: this.leftHand.object3D.quaternion.w 
+        };
         leftController.trigger = this.leftTriggerDown ? 1 : 0;
         leftController.gripActive = this.leftGripDown;
     }
@@ -501,6 +507,12 @@ AFRAME.registerComponent('controller-updater', {
         // Collect right controller data
         rightController.position = { x: rightPos.x, y: rightPos.y, z: rightPos.z };
         rightController.rotation = { x: rightRotX, y: rightRotY, z: rightRotZ };
+        rightController.quaternion = { 
+          x: this.rightHand.object3D.quaternion.x, 
+          y: this.rightHand.object3D.quaternion.y, 
+          z: this.rightHand.object3D.quaternion.z, 
+          w: this.rightHand.object3D.quaternion.w 
+        };
         rightController.trigger = this.rightTriggerDown ? 1 : 0;
         rightController.gripActive = this.rightGripDown;
     }
