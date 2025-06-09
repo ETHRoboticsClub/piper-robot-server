@@ -15,23 +15,71 @@ import socket
 import json
 import urllib.parse
 import time
+import contextlib
 from typing import Optional
 import queue  # Add regular queue for thread-safe communication
 import threading
 from pathlib import Path
 import weakref
 
+
+def get_local_ip():
+    """Get the local IP address of this machine."""
+    try:
+        # Connect to a remote address to determine the local IP
+        # This doesn't actually send any data
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        try:
+            # Fallback: get hostname IP
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            # Final fallback
+            return "localhost"
+
+
+@contextlib.contextmanager
+def suppress_stdout_stderr():
+    """Context manager to suppress stdout and stderr output at the file descriptor level."""
+    # Save original file descriptors
+    stdout_fd = sys.stdout.fileno()
+    stderr_fd = sys.stderr.fileno()
+    
+    # Save original file descriptors
+    saved_stdout_fd = os.dup(stdout_fd)
+    saved_stderr_fd = os.dup(stderr_fd)
+    
+    try:
+        # Open devnull
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        
+        # Redirect stdout and stderr to devnull
+        os.dup2(devnull_fd, stdout_fd)
+        os.dup2(devnull_fd, stderr_fd)
+        
+        yield
+        
+    finally:
+        # Restore original file descriptors
+        os.dup2(saved_stdout_fd, stdout_fd)
+        os.dup2(saved_stderr_fd, stderr_fd)
+        
+        # Close saved file descriptors
+        os.close(saved_stdout_fd)
+        os.close(saved_stderr_fd)
+        os.close(devnull_fd)
+
+
+# Import telegrip modules after function definition
 from .config import TelegripConfig, get_config_data, update_config_data
 from .control_loop import ControlLoop
 from .inputs.vr_ws_server import VRWebSocketServer
 from .inputs.keyboard_listener import KeyboardListener
 from .inputs.base import ControlGoal
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Logger will be configured in main() based on command line arguments
 logger = logging.getLogger(__name__)
 
 
@@ -380,7 +428,9 @@ class HTTPSServer:
             self.server_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
             self.server_thread.start()
             
-            logger.info(f"HTTPS server started on {self.config.host_ip}:{self.config.https_port}")
+            # Only log if INFO level or more verbose
+            if getattr(logging, self.config.log_level.upper()) <= logging.INFO:
+                logger.info(f"HTTPS server started on {self.config.host_ip}:{self.config.https_port}")
             
         except Exception as e:
             logger.error(f"Failed to start HTTPS server: {e}")
@@ -582,6 +632,9 @@ def parse_arguments():
     parser.add_argument("--no-vr", action="store_true", help="Disable VR WebSocket server")
     parser.add_argument("--no-keyboard", action="store_true", help="Disable keyboard input")
     parser.add_argument("--no-https", action="store_true", help="Disable HTTPS server")
+    parser.add_argument("--log-level", default="warning", 
+                       choices=["debug", "info", "warning", "error", "critical"],
+                       help="Set logging level (default: warning)")
     
     # Network settings
     parser.add_argument("--https-port", type=int, default=8443, help="HTTPS server port")
@@ -610,6 +663,7 @@ def create_config_from_args(args) -> TelegripConfig:
     config.enable_pybullet = not args.no_viz
     config.enable_vr = not args.no_vr
     config.enable_keyboard = not args.no_keyboard
+    config.log_level = args.log_level
     
     config.https_port = args.https_port
     config.websocket_port = args.ws_port
@@ -630,29 +684,54 @@ def create_config_from_args(args) -> TelegripConfig:
 
 async def main():
     """Main entry point."""
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    # Parse arguments first to check for log level
+    args = parse_arguments()
+    
+    # Setup logging based on log level
+    log_level = getattr(logging, args.log_level.upper())
+    
+    # Suppress PyBullet's native output when not in verbose mode
+    if log_level > logging.INFO:
+        os.environ['PYBULLET_SUPPRESS_CONSOLE_OUTPUT'] = '1'
+        os.environ['PYBULLET_SUPPRESS_WARNINGS'] = '1'
+    
+    if log_level <= logging.INFO:
+        # Verbose mode - show detailed logging with timestamps
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    else:
+        # Quiet mode - only show warnings and errors with simple format
+        logging.basicConfig(
+            level=log_level,
+            format='%(message)s'
+        )
     
     # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Parse arguments
-    args = parse_arguments()
     config = create_config_from_args(args)
     
-    # Log configuration
-    logger.info("Starting with configuration:")
-    logger.info(f"  Robot: {'enabled' if config.enable_robot else 'disabled'}")
-    logger.info(f"  PyBullet: {'enabled' if config.enable_pybullet else 'disabled'}")
-    logger.info(f"  VR: {'enabled' if config.enable_vr else 'disabled'}")
-    logger.info(f"  Keyboard: {'enabled' if config.enable_keyboard else 'disabled'}")
-    logger.info(f"  HTTPS Port: {config.https_port}")
-    logger.info(f"  WebSocket Port: {config.websocket_port}")
-    logger.info(f"  Robot Ports: {config.follower_ports}")
+    # Log configuration (only if INFO level or more verbose)
+    if log_level <= logging.INFO:
+        logger.info("Starting with configuration:")
+        logger.info(f"  Robot: {'enabled' if config.enable_robot else 'disabled'}")
+        logger.info(f"  PyBullet: {'enabled' if config.enable_pybullet else 'disabled'}")
+        logger.info(f"  VR: {'enabled' if config.enable_vr else 'disabled'}")
+        logger.info(f"  Keyboard: {'enabled' if config.enable_keyboard else 'disabled'}")
+        logger.info(f"  HTTPS Port: {config.https_port}")
+        logger.info(f"  WebSocket Port: {config.websocket_port}")
+        logger.info(f"  Robot Ports: {config.follower_ports}")
+    else:
+        # Show clean startup message with HTTPS URL
+        host_display = get_local_ip() if config.host_ip == "0.0.0.0" else config.host_ip
+        print(f"🤖 telegrip starting...")
+        print(f"📱 Open your VR headset browser and navigate to:")
+        print(f"   https://{host_display}:{config.https_port}")
+        print(f"💡 Use --log-level info to see detailed output")
+        print()
     
     # Create and start teleoperation system
     system = TelegripSystem(config)
@@ -660,11 +739,19 @@ async def main():
     try:
         await system.start()
     except KeyboardInterrupt:
-        logger.info("Received interrupt signal")
+        if log_level <= logging.INFO:
+            logger.info("Received interrupt signal")
+        else:
+            print("\n🛑 Shutting down...")
     except Exception as e:
-        logger.error(f"System error: {e}")
+        if log_level <= logging.INFO:
+            logger.error(f"System error: {e}")
+        else:
+            print(f"❌ Error: {e}")
     finally:
         await system.stop()
+        if log_level > logging.INFO:
+            print("✅ Shutdown complete.")
 
 
 def main_cli():

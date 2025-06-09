@@ -1,14 +1,15 @@
 # telegrip - SO100 Robot Arm Teleoperation System
 
-A consolidated teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboard with shared inverse kinematics, 3D visualization and a web UI.
+An open source teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboard with shared inverse kinematics, 3D visualization and a web UI.
+
+<img src="telegrip_instructions.jpg" alt="VR Controller Instructions" width="400">
+
+*Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm.*
 
 https://github.com/user-attachments/assets/2dd84705-1640-4bba-b02b-68213ec9ca17
 
 *telegrip operation of two SO-100 arms using a Quest 3 headset*
 
-<img src="telegrip_instructions.jpg" alt="VR Controller Instructions" width="400">
-
-*Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm.*
 
 ## Features
 
@@ -99,6 +100,7 @@ Options:
   --no-viz          Disable PyBullet visualization  
   --no-vr           Disable VR WebSocket server
   --no-keyboard     Disable keyboard input
+  --log-level LEVEL Set logging level: debug, info, warning, error, critical (default: warning)
   --https-port PORT HTTPS server port (default: 8443)
   --ws-port PORT    WebSocket server port (default: 8442)
   --host HOST       Host IP address (default: 0.0.0.0)
@@ -281,10 +283,10 @@ class ControlGoal:
 
 ### Debug Modes
 
-**Verbose Logging**:
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
+**Detailed Logging**:
+```bash
+telegrip --log-level info    # Show detailed startup and operation info
+telegrip --log-level debug   # Show maximum detail for debugging
 ```
 
 **Component Isolation**:

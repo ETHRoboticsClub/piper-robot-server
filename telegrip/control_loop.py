@@ -12,7 +12,7 @@ from typing import Dict, Optional
 
 from .config import TelegripConfig, NUM_JOINTS, WRIST_FLEX_INDEX, WRIST_ROLL_INDEX, GRIPPER_INDEX
 from .core.robot_interface import RobotInterface
-from .core.visualizer import PyBulletVisualizer
+# PyBulletVisualizer will be imported on demand
 from .inputs.base import ControlGoal, ControlMode
 
 logger = logging.getLogger(__name__)
@@ -93,9 +93,13 @@ class ControlLoop:
         # Setup PyBullet visualizer
         if self.config.enable_pybullet:
             try:
+                # Import PyBulletVisualizer on demand
+                from .core.visualizer import PyBulletVisualizer
+                
                 self.visualizer = PyBulletVisualizer(
                     self.config.urdf_path, 
-                    use_gui=True
+                    use_gui=True,
+                    log_level=self.config.log_level
                 )
                 if not self.visualizer.setup():
                     error_msg = "PyBullet visualizer setup failed"

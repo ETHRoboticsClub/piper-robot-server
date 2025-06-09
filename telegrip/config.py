@@ -204,6 +204,7 @@ class TelegripConfig:
     enable_robot: bool = True
     enable_vr: bool = True
     enable_keyboard: bool = True
+    log_level: str = "warning"
     
     # Paths
     urdf_path: str = URDF_PATH

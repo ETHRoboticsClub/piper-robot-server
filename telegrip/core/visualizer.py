@@ -10,6 +10,8 @@ import pybullet as p
 import pybullet_data
 from typing import Dict, List, Optional, Tuple
 import logging
+import sys
+import contextlib
 from scipy.spatial.transform import Rotation as R
 
 from ..config import (
@@ -20,12 +22,45 @@ from ..config import (
 logger = logging.getLogger(__name__)
 
 
+@contextlib.contextmanager
+def suppress_stdout_stderr():
+    """Context manager to suppress stdout and stderr output at the file descriptor level."""
+    # Save original file descriptors
+    stdout_fd = sys.stdout.fileno()
+    stderr_fd = sys.stderr.fileno()
+    
+    # Save original file descriptors
+    saved_stdout_fd = os.dup(stdout_fd)
+    saved_stderr_fd = os.dup(stderr_fd)
+    
+    try:
+        # Open devnull
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        
+        # Redirect stdout and stderr to devnull
+        os.dup2(devnull_fd, stdout_fd)
+        os.dup2(devnull_fd, stderr_fd)
+        
+        yield
+        
+    finally:
+        # Restore original file descriptors
+        os.dup2(saved_stdout_fd, stdout_fd)
+        os.dup2(saved_stderr_fd, stderr_fd)
+        
+        # Close saved file descriptors
+        os.close(saved_stdout_fd)
+        os.close(saved_stderr_fd)
+        os.close(devnull_fd)
+
+
 class PyBulletVisualizer:
     """PyBullet visualization for robot teleoperation."""
     
-    def __init__(self, urdf_path: str, use_gui: bool = True):
+    def __init__(self, urdf_path: str, use_gui: bool = True, log_level: str = "warning"):
         self.urdf_path = urdf_path
         self.use_gui = use_gui
+        self.log_level = log_level
         
         # PyBullet state
         self.physics_client = None
@@ -45,29 +80,48 @@ class PyBulletVisualizer:
     
     def setup(self) -> bool:
         """Initialize PyBullet and load the robot."""
+        # Determine if we should suppress output
+        should_suppress = getattr(logging, self.log_level.upper()) > logging.INFO
+        
         try:
-            if self.use_gui:
-                self.physics_client = p.connect(p.GUI)
+            if should_suppress:
+                # Use DIRECT mode in quiet mode to avoid GUI output
+                with suppress_stdout_stderr():
+                    self.physics_client = p.connect(p.DIRECT)
             else:
-                self.physics_client = p.connect(p.DIRECT)
+                if self.use_gui:
+                    self.physics_client = p.connect(p.GUI)
+                else:
+                    self.physics_client = p.connect(p.DIRECT)
         except p.error as e:
             logger.warning(f"Could not connect to PyBullet: {e}")
-            if self.use_gui:
-                try:
+            try:
+                if should_suppress:
+                    with suppress_stdout_stderr():
+                        self.physics_client = p.connect(p.DIRECT)
+                else:
                     self.physics_client = p.connect(p.DIRECT)
                     logger.info("Fallback to DIRECT mode")
-                except p.error:
-                    logger.error("Failed to connect to PyBullet")
-                    return False
-            else:
+            except p.error:
+                logger.error("Failed to connect to PyBullet")
                 return False
         
         if self.physics_client < 0:
             return False
         
+        # Configure PyBullet to reduce output
+        if should_suppress:
+            p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+            p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, 0)
+        
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -9.81)
-        p.loadURDF("plane.urdf")
+        
+        if should_suppress:
+            with suppress_stdout_stderr():
+                p.loadURDF("plane.urdf")
+        else:
+            p.loadURDF("plane.urdf")
         
         # Load robot URDF
         if not os.path.exists(self.urdf_path):
@@ -75,14 +129,22 @@ class PyBulletVisualizer:
             return False
         
         try:
-            self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            if should_suppress:
+                with suppress_stdout_stderr():
+                    self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            else:
+                self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
         except p.error as e:
             logger.error(f"Failed to load URDF: {e}")
             return False
         
         # Load right robot 40cm away in X direction
         try:
-            self.robot_ids['right'] = p.loadURDF(self.urdf_path, [-0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            if should_suppress:
+                with suppress_stdout_stderr():
+                    self.robot_ids['right'] = p.loadURDF(self.urdf_path, [-0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
+            else:
+                self.robot_ids['right'] = p.loadURDF(self.urdf_path, [-0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
         except p.error as e:
             logger.error(f"Failed to load right robot URDF: {e}")
             return False
@@ -105,7 +167,8 @@ class PyBulletVisualizer:
         self._setup_camera()
         
         self.is_connected = True
-        logger.info("PyBullet visualization setup complete")
+        if getattr(logging, self.log_level.upper()) <= logging.INFO:
+            logger.info("PyBullet visualization setup complete")
         return True
     
     def _map_joints(self) -> bool:
@@ -113,7 +176,8 @@ class PyBulletVisualizer:
         success = True
         
         for arm_name, robot_id in self.robot_ids.items():
-            logger.info(f"Mapping joints for {arm_name} robot:")
+            if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                logger.info(f"Mapping joints for {arm_name} robot:")
             num_joints = p.getNumJoints(robot_id)
             p_name_to_index = {}
             
@@ -121,7 +185,8 @@ class PyBulletVisualizer:
                 info = p.getJointInfo(robot_id, i)
                 joint_name = info[1].decode('UTF-8')
                 joint_type = info[2]
-                logger.info(f"  Index: {i}, Name: '{joint_name}', Type: {joint_type}")
+                if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                    logger.info(f"  Index: {i}, Name: '{joint_name}', Type: {joint_type}")
                 p_name_to_index[joint_name] = i
                 if joint_type != p.JOINT_FIXED:
                     p.setJointMotorControl2(robot_id, i, p.VELOCITY_CONTROL, force=0)
@@ -133,7 +198,8 @@ class PyBulletVisualizer:
                     target_idx = JOINT_NAMES.index(internal_name)
                     self.joint_indices[arm_name][target_idx] = p_name_to_index[urdf_name]
                     mapped_count += 1
-                    logger.info(f"  Mapped: '{internal_name}' -> '{urdf_name}' (Index {p_name_to_index[urdf_name]})")
+                    if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                        logger.info(f"  Mapped: '{internal_name}' -> '{urdf_name}' (Index {p_name_to_index[urdf_name]})")
             
             if mapped_count < NUM_JOINTS:
                 missing = [name for i, name in enumerate(JOINT_NAMES) if self.joint_indices[arm_name][i] is None]
@@ -154,7 +220,8 @@ class PyBulletVisualizer:
                 link_name = info[12].decode('UTF-8')
                 if link_name == END_EFFECTOR_LINK_NAME:
                     self.end_effector_link_indices[arm_name] = i
-                    logger.info(f"Found end effector link '{END_EFFECTOR_LINK_NAME}' for {arm_name} robot at index {i}")
+                    if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                        logger.info(f"Found end effector link '{END_EFFECTOR_LINK_NAME}' for {arm_name} robot at index {i}")
                     found = True
                     break
             
@@ -166,7 +233,8 @@ class PyBulletVisualizer:
     
     def _read_joint_limits(self):
         """Read joint limits from URDF (using left robot as reference)."""
-        logger.info("Reading URDF joint limits:")
+        if getattr(logging, self.log_level.upper()) <= logging.INFO:
+            logger.info("Reading URDF joint limits:")
         for i in range(NUM_JOINTS):
             pb_index = self.joint_indices['left'][i]
             joint_name = JOINT_NAMES[i]
@@ -176,9 +244,11 @@ class PyBulletVisualizer:
                 if lower < upper:
                     self.joint_limits_min_deg[i] = math.degrees(lower)
                     self.joint_limits_max_deg[i] = math.degrees(upper)
-                    logger.info(f"  {joint_name}: {self.joint_limits_min_deg[i]:.1f}° to {self.joint_limits_max_deg[i]:.1f}°")
+                    if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                        logger.info(f"  {joint_name}: {self.joint_limits_min_deg[i]:.1f}° to {self.joint_limits_max_deg[i]:.1f}°")
                 else:
-                    logger.info(f"  {joint_name}: No limits found, using defaults")
+                    if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                        logger.info(f"  {joint_name}: No limits found, using defaults")
     
     def _create_markers(self):
         """Create visualization markers."""
@@ -225,7 +295,8 @@ class PyBulletVisualizer:
             cameraTargetPosition=camera_target
         )
         
-        logger.info(f"Camera positioned behind robot at distance={camera_distance}, yaw={camera_yaw}°, pitch={camera_pitch}°")
+        if getattr(logging, self.log_level.upper()) <= logging.INFO:
+            logger.info(f"Camera positioned behind robot at distance={camera_distance}, yaw={camera_yaw}°, pitch={camera_pitch}°")
     
     def update_robot_pose(self, joint_angles_deg: np.ndarray, arm: str = 'left'):
         """Update robot joint positions in visualization for specified arm."""
@@ -314,7 +385,8 @@ class PyBulletVisualizer:
         if self.is_connected and p.isConnected(self.physics_client):
             p.disconnect(self.physics_client)
             self.is_connected = False
-            logger.info("PyBullet disconnected")
+            if getattr(logging, self.log_level.upper()) <= logging.INFO:
+                logger.info("PyBullet disconnected")
     
     @property
     def get_joint_limits(self) -> Tuple[np.ndarray, np.ndarray]:

@@ -2,8 +2,8 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>VR Teleoperation Control</title>
-    <meta name="description" content="VR Teleoperation System with dual-arm robot control">
+    <title>telegrip - Robot Arm Teleoperation</title>
+    <meta name="description" content="telegrip - Robot Arm Teleoperation">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script src="vr_app.js" defer></script>
@@ -106,8 +106,8 @@
     <!-- Desktop Interface -->
     <div class="desktop-interface" id="desktopInterface">
       <div class="desktop-header">
-        <div class="desktop-title">VR Teleoperation System</div>
-        <div class="desktop-subtitle">Dual-arm robot control via VR controllers</div>
+        <div class="desktop-title">telegrip</div>
+        <div class="desktop-subtitle">Dual-arm robot control via VR controllers and keyboard</div>
         
         <div class="status-section">
           <h2>🤖 Robot Status</h2>
@@ -146,16 +146,16 @@
             </div>
             <div class="instructions-text">
               <div class="instruction-item">
-                <strong>🎯 Setup:</strong> Go to <span id="vrServerUrl" style="font-family: monospace; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">https://loading...</span> in your headset's browser and click "Start"
+                <strong>Setup:</strong> Go to <span id="vrServerUrl" style="font-family: monospace; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">https://loading...</span> in your headset's browser and click "Start"
               </div>
               <div class="instruction-item">
-                <strong>🤏 Grip Button:</strong> The robot arm's gripper tip will track your relative controller movements as long as you hold the grip button
+                <strong>Grip Button:</strong> The robot arm's gripper tip will track your relative controller movements as long as you hold the grip button
               </div>
               <div class="instruction-item">
-                <strong>🔄 Controller Orientation:</strong> Roll and pitch of your controller will be matched on the wrist joint of the robot arm
+                <strong>Controller Orientation:</strong> Roll and pitch of your controller will be matched on the wrist joint of the robot arm
               </div>
               <div class="instruction-item">
-                <strong>🎯 Trigger Button:</strong> The gripper stays closed while you hold the trigger button. Release the trigger button to open the gripper.
+                <strong>Trigger Button:</strong> The gripper stays closed while you hold the trigger button. Release the trigger button to open the gripper.
               </div>
             </div>
           </div>
