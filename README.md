@@ -45,7 +45,7 @@ After installing LeRobot, install this teleoperation package:
 
 ```bash
 # Install in editable mode (recommended for development)
-git clone 
+git clone https://github.com/DipFlip/telegrip.git
 pip install -e .
 
 ### Dependencies
@@ -60,7 +60,7 @@ Required packages include:
 
 ### SSL Certificates (Auto-Generated)
 
-The system will automatically create self-signed SSL certificates (`cert.pem` and `key.pem`) if they don't exist. No manual setup required!
+The system will automatically create self-signed SSL certificates (`cert.pem` and `key.pem`) if they don't exist.
 
 If you need to generate them manually for any reason:
 
@@ -75,7 +75,7 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 3
 Run the complete teleoperation system:
 
 ```bash
-python -m telegrip
+telegrip
 ```
 
 This starts:
@@ -88,7 +88,7 @@ This starts:
 ### Command Line Options
 
 ```bash
-python -m telegrip [OPTIONS]
+telegrip [OPTIONS]
 
 Options:
   --no-robot        Disable robot connection (visualization only)
@@ -107,17 +107,17 @@ Options:
 
 **Visualization Only** (no robot hardware):
 ```bash
-python -m telegrip --no-robot
+telegrip --no-robot
 ```
 
 **Keyboard Only** (no VR):
 ```bash
-python -m telegrip --no-vr
+telegrip --no-vr
 ```
 
 **Headless** (no PyBullet GUI):
 ```bash
-python -m telegrip --no-viz
+telegrip --no-viz
 ```
 
 ## Control Methods
