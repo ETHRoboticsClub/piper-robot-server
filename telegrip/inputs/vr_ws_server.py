@@ -1,5 +1,5 @@
 """
-VR WebSocket server for receiving controller data.
+VR WebSocket server for receiving controller data from web browsers.
 Adapted from the original vr_robot_teleop.py script.
 """
 
@@ -14,7 +14,7 @@ from typing import Dict, Optional, Set
 from scipy.spatial.transform import Rotation as R
 
 from .base import BaseInputProvider, ControlGoal, ControlMode
-from ..config import TeleopConfig
+from ..config import TelegripConfig
 from ..core.kinematics import compute_relative_position
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class VRControllerState:
 class VRWebSocketServer(BaseInputProvider):
     """WebSocket server for VR controller input."""
     
-    def __init__(self, command_queue: asyncio.Queue, config: TeleopConfig):
+    def __init__(self, command_queue: asyncio.Queue, config: TelegripConfig):
         super().__init__(command_queue)
         self.config = config
         self.clients: Set = set()

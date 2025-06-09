@@ -180,7 +180,7 @@ DEFAULT_FOLLOWER_PORTS = {
 }
 
 @dataclass
-class TeleopConfig:
+class TelegripConfig:
     """Main configuration class for the teleoperation system."""
     
     # Network settings
@@ -208,6 +208,22 @@ class TeleopConfig:
     # Paths
     urdf_path: str = URDF_PATH
     webapp_dir: str = "webapp"
+    
+    # IK settings
+    use_reference_poses: bool = USE_REFERENCE_POSES
+    reference_poses_file: str = REFERENCE_POSES_FILE
+    ik_position_error_threshold: float = IK_POSITION_ERROR_THRESHOLD
+    ik_hysteresis_threshold: float = IK_HYSTERESIS_THRESHOLD
+    ik_movement_penalty_weight: float = IK_MOVEMENT_PENALTY_WEIGHT
+    
+    # Gripper settings
+    gripper_open_angle: float = GRIPPER_OPEN_ANGLE
+    gripper_closed_angle: float = GRIPPER_CLOSED_ANGLE
+    
+    # Keyboard control
+    pos_step: float = POS_STEP
+    angle_step: float = ANGLE_STEP
+    gripper_step: float = GRIPPER_STEP
     
     def __post_init__(self):
         if self.follower_ports is None:
@@ -244,4 +260,4 @@ def update_config_data(new_config: dict):
     return save_config(_config_data)
 
 # Global configuration instance
-config = TeleopConfig() 
+config = TelegripConfig() 

@@ -1,11 +1,16 @@
-# Basic requirements for teleop package
+# Basic requirements for telegrip package
 # For development with pinned versions, use: pip install -r requirements-dev.txt
 # For installation as package, use: pip install -e .
 
-numpy>=1.20.0
-scipy>=1.7.0
+numpy
+torch
+scipy
+pybullet
+websockets
+pynput
 lerobot[feetech]
-pynput>=1.7.0
-pybullet>=3.2.0
-websockets>=10.0
+# For development
+pytest
+black
+flake8
 pyyaml>=6.0 

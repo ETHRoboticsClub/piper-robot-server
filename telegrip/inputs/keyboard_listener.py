@@ -11,7 +11,7 @@ from pynput import keyboard
 import threading
 
 from .base import BaseInputProvider, ControlGoal, ControlMode
-from ..config import TeleopConfig, POS_STEP, ANGLE_STEP, GRIPPER_STEP
+from ..config import TelegripConfig, POS_STEP, ANGLE_STEP, GRIPPER_STEP
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class KeyboardListener(BaseInputProvider):
     """Keyboard input provider for dual-arm teleoperation."""
     
-    def __init__(self, command_queue: asyncio.Queue, config: TeleopConfig):
+    def __init__(self, command_queue: asyncio.Queue, config: TelegripConfig):
         super().__init__(command_queue)
         self.config = config
         

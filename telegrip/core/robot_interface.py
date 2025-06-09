@@ -16,7 +16,7 @@ from lerobot.common.robot_devices.motors.configs import FeetechMotorsBusConfig
 from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
 
 from ..config import (
-    TeleopConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
+    TelegripConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
     GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, 
     WRIST_FLEX_INDEX, URDF_TO_INTERNAL_NAME_MAP
 )
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class RobotInterface:
     """High-level interface for SO100 robot control with safety features."""
     
-    def __init__(self, config: TeleopConfig):
+    def __init__(self, config: TelegripConfig):
         self.config = config
         self.robot = None
         self.is_connected = False

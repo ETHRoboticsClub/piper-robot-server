@@ -13,11 +13,11 @@ import numpy as np
 import logging
 from pathlib import Path
 
-# Add the teleop package to the path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the telegrip package to the path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from teleop.config import TeleopConfig, REFERENCE_POSES_FILE, NUM_JOINTS
-from teleop.core.robot_interface import RobotInterface
+from telegrip.config import TelegripConfig, REFERENCE_POSES_FILE, NUM_JOINTS
+from telegrip.core.robot_interface import RobotInterface
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -27,7 +27,7 @@ class PoseRecorder:
     """Records robot poses for use as IK reference poses."""
     
     def __init__(self):
-        self.config = TeleopConfig()
+        self.config = TelegripConfig()
         self.robot_interface = RobotInterface(self.config)
         self.reference_poses = {
             'left': [],

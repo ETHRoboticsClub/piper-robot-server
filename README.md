@@ -1,10 +1,10 @@
-# teleop - SO100 Robot Arm Teleoperation System
+# telegrip - SO100 Robot Arm Teleoperation System
 
 A consolidated teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboard with shared inverse kinematics, 3D visualization and a web UI.
 
-![VR Controller Instructions](teleop_instructions.jpg)
+![VR Controller Instructions](telegrip_instructions.jpg)
 
-*Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the teleop controller so you can record training data without a dedicated leader arm.*
+*Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm.*
 
 ## Features
 
@@ -75,7 +75,7 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 3
 Run the complete teleoperation system:
 
 ```bash
-python -m teleop
+python -m telegrip
 ```
 
 This starts:
@@ -88,7 +88,7 @@ This starts:
 ### Command Line Options
 
 ```bash
-python -m teleop [OPTIONS]
+python -m telegrip [OPTIONS]
 
 Options:
   --no-robot        Disable robot connection (visualization only)
@@ -107,17 +107,17 @@ Options:
 
 **Visualization Only** (no robot hardware):
 ```bash
-python -m teleop --no-robot
+python -m telegrip --no-robot
 ```
 
 **Keyboard Only** (no VR):
 ```bash
-python -m teleop --no-vr
+python -m telegrip --no-vr
 ```
 
 **Headless** (no PyBullet GUI):
 ```bash
-python -m teleop --no-viz
+python -m telegrip --no-viz
 ```
 
 ## Control Methods
@@ -169,7 +169,7 @@ python -m teleop --no-viz
 ### Directory Structure
 
 ```
-teleop/                     # Main Python package
+telegrip/                     # Main Python package
 ├── __init__.py            # Package initialization
 ├── __main__.py            # Module entry point
 ├── main.py                # Main system coordinator
@@ -294,7 +294,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 1. Create new input provider inheriting from `BaseInputProvider`
 2. Implement `start()`, `stop()`, and command generation
-3. Add to `TeleopSystem` initialization
+3. Add to `TelegripSystem` initialization
 4. Configure via command line arguments
 
 ### Extending Robot Interface
@@ -320,4 +320,4 @@ logging.basicConfig(level=logging.DEBUG)
 
 ## License
 
-This project is part of the SO100 robot teleoperation research. See individual component licenses for details. 
+This project is part of the SO100 robot teleoperation research. See individual component licenses for details.

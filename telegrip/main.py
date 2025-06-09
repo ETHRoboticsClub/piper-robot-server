@@ -21,7 +21,7 @@ import threading
 from pathlib import Path
 import weakref
 
-from .config import TeleopConfig, get_config_data, update_config_data
+from .config import TelegripConfig, get_config_data, update_config_data
 from .control_loop import ControlLoop
 from .inputs.vr_ws_server import VRWebSocketServer
 from .inputs.keyboard_listener import KeyboardListener
@@ -352,15 +352,15 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 class HTTPSServer:
     """HTTPS server for the teleoperation API."""
     
-    def __init__(self, config: TeleopConfig):
+    def __init__(self, config: TelegripConfig):
         self.config = config
         self.httpd = None
         self.server_thread = None
-        self.system_ref = None  # Weak reference to the main system
+        self.api_handler = None  # Reference to main system
     
     def set_system_ref(self, system_ref):
         """Set reference to the main teleoperation system."""
-        self.system_ref = system_ref
+        self.api_handler = system_ref
     
     async def start(self):
         """Start the HTTPS server."""
@@ -369,7 +369,7 @@ class HTTPSServer:
             self.httpd = http.server.HTTPServer((self.config.host_ip, self.config.https_port), APIHandler)
             
             # Set API handler reference for command queuing
-            self.httpd.api_handler = self.system_ref() if self.system_ref else None
+            self.httpd.api_handler = self.api_handler
             
             # Setup SSL
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -395,10 +395,10 @@ class HTTPSServer:
             logger.info("HTTPS server stopped")
 
 
-class TeleopSystem:
+class TelegripSystem:
     """Main teleoperation system that coordinates all components."""
     
-    def __init__(self, config: TeleopConfig):
+    def __init__(self, config: TelegripConfig):
         self.config = config
         
         # Command queues
@@ -472,13 +472,17 @@ class TeleopSystem:
         """Restart the teleoperation system."""
         def do_restart():
             try:
-                logger.info("Initiating system restart...")
-                # Schedule stop and restart
-                asyncio.create_task(self._restart_sequence())
+                # Create new event loop for this thread
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                
+                # Run restart in new loop
+                new_loop.run_until_complete(self._restart_sequence())
+                new_loop.close()
             except Exception as e:
-                logger.error(f"Error during restart: {e}")
+                logger.error(f"Error in restart thread: {e}")
         
-        # Run restart in a separate thread to avoid blocking the HTTP response
+        # Start restart in new thread to avoid blocking HTTP response
         restart_thread = threading.Thread(target=do_restart, daemon=True)
         restart_thread.start()
     
@@ -605,9 +609,9 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def create_config_from_args(args) -> TeleopConfig:
-    """Create configuration from command line arguments."""
-    config = TeleopConfig()
+def create_config_from_args(args) -> TelegripConfig:
+    """Create configuration object from command line arguments."""
+    config = TelegripConfig()
     
     # Apply command line overrides
     config.enable_robot = not args.no_robot
@@ -659,7 +663,7 @@ async def main():
     logger.info(f"  Robot Ports: {config.follower_ports}")
     
     # Create and start teleoperation system
-    system = TeleopSystem(config)
+    system = TelegripSystem(config)
     
     try:
         await system.start()

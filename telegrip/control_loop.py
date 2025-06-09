@@ -10,7 +10,7 @@ import time
 import queue  # Add import for thread-safe queue
 from typing import Dict, Optional
 
-from .config import TeleopConfig, NUM_JOINTS, WRIST_FLEX_INDEX, WRIST_ROLL_INDEX, GRIPPER_INDEX
+from .config import TelegripConfig, NUM_JOINTS, WRIST_FLEX_INDEX, WRIST_ROLL_INDEX, GRIPPER_INDEX
 from .core.robot_interface import RobotInterface
 from .core.visualizer import PyBulletVisualizer
 from .inputs.base import ControlGoal, ControlMode
@@ -45,7 +45,7 @@ class ArmState:
 class ControlLoop:
     """Main control loop that processes command queue and controls robot."""
     
-    def __init__(self, command_queue: asyncio.Queue, config: TeleopConfig, control_commands_queue: Optional[queue.Queue] = None):
+    def __init__(self, command_queue: asyncio.Queue, config: TelegripConfig, control_commands_queue: Optional[queue.Queue] = None):
         self.command_queue = command_queue
         self.control_commands_queue = control_commands_queue
         self.config = config

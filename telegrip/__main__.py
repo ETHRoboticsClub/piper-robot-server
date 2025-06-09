@@ -1,10 +1,10 @@
 """
 Entry point for running the teleoperation package as a module.
-Usage: python -m teleop [options]
+Usage: python -m telegrip [options]
 """
 
 import asyncio
-from .main import main
+from .main import main_cli
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main_cli() 

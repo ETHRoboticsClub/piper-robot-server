@@ -1,8 +1,8 @@
-# Reference Poses for IK Solutions
+# Reference Poses for SO100 Robot Arms
 
 ## Overview
 
-The teleoperation system uses **reference poses** to help the IK solver escape local minima and find better solutions when the robot gets stuck. These are pre-recorded joint configurations that represent good, reachable poses for common workspace areas.
+The telegrip system uses **reference poses** to help the IK solver escape local minima and find better solutions when the robot gets stuck. These are pre-recorded joint configurations that represent good, reachable poses for common workspace areas.
 
 ## How It Works
 
