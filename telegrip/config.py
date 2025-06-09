@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
         }
     },
     "paths": {
-        "urdf_path": "URDF/SO_5DOF_ARM100_8j/urdf/so100.urdf"
+        "urdf_path": "URDF/SO100_NEW/so100.urdf"
     },
     "gripper": {
         "open_angle": 0.0,
@@ -157,16 +157,28 @@ COMMON_MOTORS = {
 
 # URDF joint name mapping
 URDF_TO_INTERNAL_NAME_MAP = {
-    "Rotation": "shoulder_pan",
-    "Pitch": "shoulder_lift",
-    "Elbow": "elbow_flex",
-    "Wrist_Pitch": "wrist_flex",
-    "Wrist_Roll": "wrist_roll",
-    "Jaw": "gripper",
+    "1": "shoulder_pan",
+    "2": "shoulder_lift",
+    "3": "elbow_flex",
+    "4": "wrist_flex",
+    "5": "wrist_roll",
+    "6": "gripper",
 }
 
 # --- PyBullet Configuration ---
-END_EFFECTOR_LINK_NAME = "Fixed_Jaw_tip"
+END_EFFECTOR_LINK_NAME = "gripper"
+
+# Lerobot joint angle compensation for updated lerobot version
+# These compensations account for changes in joint angle definitions/calibration
+# in the newer lerobot version
+LEROBOT_ANGLE_COMPENSATION = {
+    "shoulder_pan": {"sign": 1, "offset": 0},      # Joint angle changes to be determined
+    "shoulder_lift": {"sign": 1, "offset": 0},     # Joint angle changes to be determined  
+    "elbow_flex": {"sign": 1, "offset": 0},        # Joint angle changes to be determined
+    "wrist_flex": {"sign": 1, "offset": 0},        # Joint angle changes to be determined
+    "wrist_roll": {"sign": 1, "offset": 0},        # Joint angle changes to be determined
+    "gripper": {"sign": 1, "offset": 0},           # Joint angle changes to be determined
+}
 
 # --- Keyboard Control ---
 POS_STEP = 0.01  # meters

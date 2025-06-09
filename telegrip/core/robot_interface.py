@@ -450,6 +450,37 @@ class RobotInterface:
         # Return raw angles without any correction for proper diagnosis
         return self.get_arm_angles(arm)
     
+    def get_actual_arm_angles(self, arm: str) -> np.ndarray:
+        """Get actual joint angles from robot hardware (not commanded angles)."""
+        try:
+            if arm == "left" and self.left_robot and self.left_arm_connected:
+                observation = self.left_robot.get_observation()
+                if observation:
+                    return np.array([
+                        observation['shoulder_pan.pos'],
+                        observation['shoulder_lift.pos'],
+                        observation['elbow_flex.pos'],
+                        observation['wrist_flex.pos'],
+                        observation['wrist_roll.pos'],
+                        observation['gripper.pos']
+                    ])
+            elif arm == "right" and self.right_robot and self.right_arm_connected:
+                observation = self.right_robot.get_observation()
+                if observation:
+                    return np.array([
+                        observation['shoulder_pan.pos'],
+                        observation['shoulder_lift.pos'],
+                        observation['elbow_flex.pos'],
+                        observation['wrist_flex.pos'],
+                        observation['wrist_roll.pos'],
+                        observation['gripper.pos']
+                    ])
+        except Exception as e:
+            logger.debug(f"Error reading actual arm angles for {arm}: {e}")
+        
+        # Fallback to commanded angles if we can't read actual angles
+        return self.get_arm_angles(arm)
+    
     def return_to_initial_position(self):
         """Return both arms to initial position."""
         logger.info("⏪ Returning robot to initial position...")
