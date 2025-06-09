@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "telegrip"
-version = "0.1.0"
+version = "0.9.0"
 description = "Teleoperation Control System for the SO100 Robot Arm(s)"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Emil Rofors", email = "emirof@gmail.com"},
 ]
 keywords = ["robotics", "teleoperation", "vr", "robot-control"]
 

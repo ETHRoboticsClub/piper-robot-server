@@ -356,11 +356,11 @@ class HTTPSServer:
         self.config = config
         self.httpd = None
         self.server_thread = None
-        self.api_handler = None  # Reference to main system
+        self.system_ref = None  # Direct reference to the main system
     
     def set_system_ref(self, system_ref):
         """Set reference to the main teleoperation system."""
-        self.api_handler = system_ref
+        self.system_ref = system_ref
     
     async def start(self):
         """Start the HTTPS server."""
@@ -369,7 +369,7 @@ class HTTPSServer:
             self.httpd = http.server.HTTPServer((self.config.host_ip, self.config.https_port), APIHandler)
             
             # Set API handler reference for command queuing
-            self.httpd.api_handler = self.api_handler
+            self.httpd.api_handler = self.system_ref
             
             # Setup SSL
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -412,14 +412,10 @@ class TelegripSystem:
         self.control_loop = ControlLoop(self.command_queue, config, self.control_commands_queue)
         
         # Set system reference for API calls
-        import weakref
-        self.https_server.set_system_ref(weakref.ref(self))
+        self.https_server.set_system_ref(self)
         
         # Set up cross-references
         self.control_loop.keyboard_listener = self.keyboard_listener
-        
-        # Set API handler reference for HTTPSServer
-        self.https_server.httpd = None  # Will be set during start
         
         # Tasks
         self.tasks = []
@@ -472,17 +468,13 @@ class TelegripSystem:
         """Restart the teleoperation system."""
         def do_restart():
             try:
-                # Create new event loop for this thread
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                
-                # Run restart in new loop
-                new_loop.run_until_complete(self._restart_sequence())
-                new_loop.close()
+                logger.info("Initiating system restart...")
+                # Schedule stop and restart
+                asyncio.create_task(self._restart_sequence())
             except Exception as e:
-                logger.error(f"Error in restart thread: {e}")
+                logger.error(f"Error during restart: {e}")
         
-        # Start restart in new thread to avoid blocking HTTP response
+        # Run restart in a separate thread to avoid blocking the HTTP response
         restart_thread = threading.Thread(target=do_restart, daemon=True)
         restart_thread.start()
     
