@@ -210,23 +210,6 @@ class RobotInterface:
         # Apply standard joint limits to all joints
         return np.clip(processed_angles, self.joint_limits_min_deg, self.joint_limits_max_deg)
     
-    def clamp_wrist_angle(self, angle: float, joint_name: str) -> float:
-        """Clamp wrist angle to safe limits with margins."""
-        if joint_name == "wrist_flex":
-            joint_idx = WRIST_FLEX_INDEX
-            margin = {"lower": 0.0, "upper": 0.0}
-            min_limit = self.joint_limits_min_deg[joint_idx] + margin["lower"]
-            max_limit = self.joint_limits_max_deg[joint_idx] - margin["upper"]
-        elif joint_name == "wrist_roll":
-            joint_idx = 4  # wrist_roll index
-            min_limit = self.joint_limits_min_deg[joint_idx]
-            max_limit = self.joint_limits_max_deg[joint_idx]
-        else:
-            logger.warning(f"Unknown wrist joint: {joint_name}")
-            return angle
-        
-        return np.clip(angle, min_limit, max_limit)
-    
     def update_arm_angles(self, arm: str, ik_angles: np.ndarray, wrist_flex: float, wrist_roll: float, gripper: float):
         """Update joint angles for specified arm with IK solution and direct wrist/gripper control."""
         if arm == "left":
@@ -239,12 +222,14 @@ class RobotInterface:
         # Update first 3 joints with IK solution
         target_angles[:3] = ik_angles
         
-        # Apply margins to wrist angles before setting them
-        target_angles[3] = self.clamp_wrist_angle(wrist_flex, "wrist_flex")
-        target_angles[4] = self.clamp_wrist_angle(wrist_roll, "wrist_roll")
-        target_angles[5] = self.clamp_wrist_angle(gripper, "gripper")
+        # Set wrist angles directly
+        target_angles[3] = wrist_flex
+        target_angles[4] = wrist_roll
         
-        # Apply final clamping (this will also handle the IK joints)
+        # Handle gripper separately (clamp to gripper limits)
+        target_angles[5] = np.clip(gripper, GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE)
+        
+        # Apply joint limits to all joints (except gripper which we handle specially)
         clamped_angles = self.clamp_joint_angles(target_angles)
         
         # Preserve gripper control (don't clamp gripper if it was set intentionally)
