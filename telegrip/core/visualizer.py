@@ -306,6 +306,13 @@ class PyBulletVisualizer:
         joint_angles_rad = np.deg2rad(joint_angles_deg)
         for i in range(NUM_JOINTS):
             if self.joint_indices[arm][i] is not None:
+                joint_name = JOINT_NAMES[i]
+                urdf_name = None
+                for urdf_name_candidate, internal_name in URDF_TO_INTERNAL_NAME_MAP.items():
+                    if internal_name == joint_name:
+                        urdf_name = urdf_name_candidate
+                        break
+                
                 p.resetJointState(self.robot_ids[arm], self.joint_indices[arm][i], joint_angles_rad[i])
     
     def update_marker_position(self, marker_name: str, position: np.ndarray, 

@@ -1,6 +1,6 @@
 """
 Robot interface module for the SO100 teleoperation system.
-Provides a clean wrapper around ManipulatorRobot with safety checks and convenience methods.
+Provides a clean wrapper around robot devices with safety checks and convenience methods.
 """
 
 import numpy as np
@@ -12,13 +12,12 @@ import sys
 import contextlib
 from typing import Optional, Dict, Tuple
 
-from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
-from lerobot.common.robot_devices.robots.configs import So100RobotConfig
-from lerobot.common.robot_devices.motors.configs import FeetechMotorsBusConfig
-from lerobot.common.robot_devices.utils import RobotDeviceNotConnectedError
+# New lerobot structure imports
+from lerobot.common.robots.so100_follower.config_so100_follower import SO100FollowerConfig
+from lerobot.common.robots.so100_follower.so100_follower import SO100Follower
 
 from ..config import (
-    TelegripConfig, COMMON_MOTORS, NUM_JOINTS, JOINT_NAMES,
+    TelegripConfig, NUM_JOINTS, JOINT_NAMES,
     GRIPPER_OPEN_ANGLE, GRIPPER_CLOSED_ANGLE, 
     WRIST_FLEX_INDEX, URDF_TO_INTERNAL_NAME_MAP
 )
@@ -64,7 +63,8 @@ class RobotInterface:
     
     def __init__(self, config: TelegripConfig):
         self.config = config
-        self.robot = None
+        self.left_robot = None
+        self.right_robot = None
         self.is_connected = False
         self.is_engaged = False  # New state for motor engagement
         
@@ -94,91 +94,133 @@ class RobotInterface:
         self.max_arm_errors = 3  # Allow fewer errors per arm before marking as disconnected
         self.max_general_errors = 8  # Allow more general errors before full disconnection
         
-        # Initial positions for safe shutdown
+        # Initial positions for safe shutdown - restored original values
         self.initial_left_arm = np.array([2, 185, 175, 72, 4, 0])
         self.initial_right_arm = np.array([2, 185, 175, 72, -4, 0])
     
-    def setup_robot_config(self) -> So100RobotConfig:
-        """Create robot configuration based on current settings."""
-        logger.info(f"Setting up robot config with ports: {self.config.follower_ports}")
-        return So100RobotConfig(
-            follower_arms={
-                "left": FeetechMotorsBusConfig(port=self.config.follower_ports["left"], motors=COMMON_MOTORS.copy()),
-                "right": FeetechMotorsBusConfig(port=self.config.follower_ports["right"], motors=COMMON_MOTORS.copy())
-            },
-            leader_arms={},  # Explicitly disable leader arms to prevent using default ports
-            cameras={}
+    def setup_robot_configs(self) -> Tuple[SO100FollowerConfig, SO100FollowerConfig]:
+        """Create robot configurations for both arms."""
+        logger.info(f"Setting up robot configs with ports: {self.config.follower_ports}")
+        
+        left_config = SO100FollowerConfig(
+            port=self.config.follower_ports["left"],
+            use_degrees=True,  # Use degrees for easier debugging
+            disable_torque_on_disconnect=True
         )
+        # Set the robot name for calibration file lookup
+        left_config.id = "left_follower"
+        
+        right_config = SO100FollowerConfig(
+            port=self.config.follower_ports["right"],
+            use_degrees=True,  # Use degrees for easier debugging
+            disable_torque_on_disconnect=True
+        )
+        # Set the robot name for calibration file lookup
+        right_config.id = "right_follower"
+        
+        return left_config, right_config
     
     def connect(self) -> bool:
-        """Connect to the robot."""
-        if not self.config.enable_robot:
-            logger.info("Robot disabled in configuration")
-            return False
+        """Connect to robot hardware."""
+        if self.is_connected:
+            logger.info("Robot interface already connected")
+            return True
         
-        # Determine if we should suppress output based on log level
-        should_suppress = getattr(logging, self.config.log_level.upper()) > logging.INFO
+        if not self.config.enable_robot:
+            logger.info("Robot interface disabled in config")
+            self.is_connected = True  # Mark as "connected" for testing
+            return True
+        
+        # Setup suppression if requested
+        should_suppress = (self.config.log_level == "warning" or 
+                          self.config.log_level == "critical" or 
+                          self.config.log_level == "error")
         
         try:
-            robot_config = self.setup_robot_config()
+            left_config, right_config = self.setup_robot_configs()
             if not should_suppress:
                 logger.info("Connecting to robot...")
             
-            if should_suppress:
-                with suppress_stdout_stderr():
-                    self.robot = ManipulatorRobot(robot_config)
-                    self.robot.connect()
-            else:
-                self.robot = ManipulatorRobot(robot_config)
-                self.robot.connect()
+            # Connect left arm
+            try:
+                if should_suppress:
+                    with suppress_stdout_stderr():
+                        self.left_robot = SO100Follower(left_config)
+                        self.left_robot.connect()
+                else:
+                    self.left_robot = SO100Follower(left_config)
+                    self.left_robot.connect()
+                self.left_arm_connected = True
+                logger.info("✅ Left arm connected successfully")
+            except Exception as e:
+                logger.error(f"❌ Left arm connection failed: {e}")
+                self.left_arm_connected = False
+            
+            # Connect right arm  
+            try:
+                if should_suppress:
+                    with suppress_stdout_stderr():
+                        self.right_robot = SO100Follower(right_config)
+                        self.right_robot.connect()
+                else:
+                    self.right_robot = SO100Follower(right_config)
+                    self.right_robot.connect()
+                self.right_arm_connected = True
+                logger.info("✅ Right arm connected successfully")
+            except Exception as e:
+                logger.error(f"❌ Right arm connection failed: {e}")
+                self.right_arm_connected = False
                 
-            self.is_connected = True
+            # Mark as connected if at least one arm is connected
+            self.is_connected = self.left_arm_connected or self.right_arm_connected
             
-            # Initially assume both arms are connected
-            self.left_arm_connected = True
-            self.right_arm_connected = True
-            if not should_suppress:
-                logger.info("✅ Robot connected successfully")
-            
-            # Read initial state
-            self._read_initial_state()
-            return True
+            if self.is_connected:
+                # Initialize joint states
+                self._read_initial_state()
+                logger.info(f"🤖 Robot interface connected: Left={self.left_arm_connected}, Right={self.right_arm_connected}")
+            else:
+                logger.error("❌ Failed to connect any robot arms")
+                
+            return self.is_connected
             
         except Exception as e:
-            logger.error(f"❌ Failed to connect to robot: {e}")
+            logger.error(f"❌ Robot connection failed with exception: {e}")
             self.is_connected = False
-            self.left_arm_connected = False
-            self.right_arm_connected = False
             return False
     
     def _read_initial_state(self):
         """Read initial joint state from robot."""
         try:
-            observation = self.robot.capture_observation()
-            if observation and "observation.state" in observation:
-                initial_state = observation["observation.state"].cpu().numpy()
-                logger.info(f"Initial joint state shape: {initial_state.shape}")
-                logger.info(f"Initial joint state values: {initial_state}")
-                
-                if len(initial_state) == NUM_JOINTS * 2:  # Dual arm configuration
-                    self.left_arm_angles = initial_state[:NUM_JOINTS].copy()
-                    self.right_arm_angles = initial_state[NUM_JOINTS:].copy()
-                    logger.info(f"Left arm initial: {self.left_arm_angles.round(1)}")
-                    logger.info(f"Right arm initial: {self.right_arm_angles.round(1)}")
-                elif len(initial_state) == NUM_JOINTS:  # Single arm
-                    self.left_arm_angles = initial_state.copy()
-                    self.right_arm_angles = initial_state.copy()
-                    logger.info(f"Single arm state used for both: {initial_state.round(1)}")
-                else:
-                    logger.warning(f"Unexpected state length {len(initial_state)}, using defaults")
+            if self.left_robot and self.left_arm_connected:
+                observation = self.left_robot.get_observation()
+                if observation:
+                    # Extract joint positions from observation
+                    self.left_arm_angles = np.array([
+                        observation['shoulder_pan.pos'],
+                        observation['shoulder_lift.pos'],
+                        observation['elbow_flex.pos'],
+                        observation['wrist_flex.pos'],
+                        observation['wrist_roll.pos'],
+                        observation['gripper.pos']
+                    ])
+                    logger.info(f"Left arm initial state: {self.left_arm_angles.round(1)}")
+                    
+            if self.right_robot and self.right_arm_connected:
+                observation = self.right_robot.get_observation()
+                if observation:
+                    # Extract joint positions from observation
+                    self.right_arm_angles = np.array([
+                        observation['shoulder_pan.pos'],
+                        observation['shoulder_lift.pos'],
+                        observation['elbow_flex.pos'],
+                        observation['wrist_flex.pos'],
+                        observation['wrist_roll.pos'],
+                        observation['gripper.pos']
+                    ])
+                    logger.info(f"Right arm initial state: {self.right_arm_angles.round(1)}")
                     
         except Exception as e:
-            logger.warning(f"Could not read initial robot state: {e}")
-        
-        # Ensure grippers start in open position regardless of robot's current state
-        self.left_arm_angles[5] = GRIPPER_OPEN_ANGLE
-        self.right_arm_angles[5] = GRIPPER_OPEN_ANGLE
-        logger.info(f"Set grippers to open position ({GRIPPER_OPEN_ANGLE}°)")
+            logger.error(f"Error reading initial state: {e}")
     
     def setup_kinematics(self, physics_client, robot_ids: Dict, joint_indices: Dict, 
                         end_effector_link_indices: Dict, joint_limits_min_deg: np.ndarray, 
@@ -318,59 +360,67 @@ class RobotInterface:
             return False
     
     def send_command(self) -> bool:
-        """Send current joint angles to robot."""
-        if not self.is_connected or not self.robot:
-            return False
-        
-        # Only send commands if robot is engaged
-        if not self.is_engaged:
+        """Send current joint angles to robot using dictionary format."""
+        if not self.is_connected or not self.is_engaged:
             return False
         
         current_time = time.time()
         if current_time - self.last_send_time < self.config.send_interval:
-            return False
-        
-        # Update arm connection status based on device file existence
-        self.update_arm_connection_status()
+            return True  # Don't send too frequently
         
         try:
-            # Create concatenated command for dual arm robot
-            concatenated_angles = np.concatenate([self.left_arm_angles, self.right_arm_angles])
-            action_tensor = torch.from_numpy(concatenated_angles).float()
+            # Send commands with dictionary format - no joint direction mapping
+            success = True
             
-            self.robot.send_action(action_tensor)
+            # Send left arm command
+            if self.left_robot and self.left_arm_connected:
+                try:
+                    action_dict = {
+                        "shoulder_pan.pos": float(self.left_arm_angles[0]),
+                        "shoulder_lift.pos": float(self.left_arm_angles[1]),
+                        "elbow_flex.pos": float(self.left_arm_angles[2]),
+                        "wrist_flex.pos": float(self.left_arm_angles[3]),
+                        "wrist_roll.pos": float(self.left_arm_angles[4]),
+                        "gripper.pos": float(self.left_arm_angles[5])
+                    }
+                    self.left_robot.send_action(action_dict)
+                except Exception as e:
+                    logger.error(f"Error sending left arm command: {e}")
+                    self.left_arm_errors += 1
+                    if self.left_arm_errors > self.max_arm_errors:
+                        self.left_arm_connected = False
+                        logger.error("❌ Left arm disconnected due to repeated errors")
+                    success = False
+            
+            # Send right arm command
+            if self.right_robot and self.right_arm_connected:
+                try:
+                    action_dict = {
+                        "shoulder_pan.pos": float(self.right_arm_angles[0]),
+                        "shoulder_lift.pos": float(self.right_arm_angles[1]),
+                        "elbow_flex.pos": float(self.right_arm_angles[2]),
+                        "wrist_flex.pos": float(self.right_arm_angles[3]),
+                        "wrist_roll.pos": float(self.right_arm_angles[4]),
+                        "gripper.pos": float(self.right_arm_angles[5])
+                    }
+                    self.right_robot.send_action(action_dict)
+                except Exception as e:
+                    logger.error(f"Error sending right arm command: {e}")
+                    self.right_arm_errors += 1
+                    if self.right_arm_errors > self.max_arm_errors:
+                        self.right_arm_connected = False
+                        logger.error("❌ Right arm disconnected due to repeated errors")
+                    success = False
+            
             self.last_send_time = current_time
-            
-            # Reset ALL error counters on successful send
-            self.left_arm_errors = 0
-            self.right_arm_errors = 0
-            self.general_errors = 0
-            
-            return True
+            return success
             
         except Exception as e:
-            error_str = str(e).lower()
             logger.error(f"Error sending robot command: {e}")
-            
-            # Try to detect which specific arm failed
-            left_arm_error = ("ttySO100red" in error_str or "ttys100red" in error_str or 
-                            "left" in error_str.lower())
-            right_arm_error = ("ttySO100blue" in error_str or "ttys100blue" in error_str or 
-                             "right" in error_str.lower())
-            
-            if left_arm_error:
-                self.left_arm_errors += 1
-                logger.warning(f"⚠️  LEFT ARM communication error (count: {self.left_arm_errors})")
-                    
-            elif right_arm_error:
-                self.right_arm_errors += 1
-                logger.warning(f"⚠️  RIGHT ARM communication error (count: {self.right_arm_errors})")
-                    
-            else:
-                # General error - couldn't determine which arm
-                self.general_errors += 1
-                logger.warning(f"⚠️  General robot communication error (count: {self.general_errors})")
-            
+            self.general_errors += 1
+            if self.general_errors > self.max_general_errors:
+                self.is_connected = False
+                logger.error("❌ Robot interface disconnected due to repeated errors")
             return False
     
     def set_gripper(self, arm: str, closed: bool):
@@ -395,69 +445,78 @@ class RobotInterface:
         
         return angles
     
+    def get_arm_angles_for_visualization(self, arm: str) -> np.ndarray:
+        """Get current joint angles for specified arm, for PyBullet visualization."""
+        # Return raw angles without any correction for proper diagnosis
+        return self.get_arm_angles(arm)
+    
     def return_to_initial_position(self):
-        """Move robot arms back to initial positions."""
-        if not self.is_connected:
-            return
+        """Return both arms to initial position."""
+        logger.info("⏪ Returning robot to initial position...")
         
         try:
-            logger.info("🏠 Moving robot arms back to initial positions...")
-            
-            # Set to initial positions
+            # Set initial positions - no direction mapping
             self.left_arm_angles = self.initial_left_arm.copy()
             self.right_arm_angles = self.initial_right_arm.copy()
             
-            # Force send command immediately, bypassing engagement and timing checks
-            if self.robot:
-                concatenated_angles = np.concatenate([self.left_arm_angles, self.right_arm_angles])
-                action_tensor = torch.from_numpy(concatenated_angles).float()
-                self.robot.send_action(action_tensor)
-                logger.info("🏠 Commanded return to initial positions")
+            # Send commands for a few iterations to ensure movement
+            for i in range(10):
+                self.send_command()
+                time.sleep(0.1)
                 
-                # Wait for movement - give arms time to reach home position
-                time.sleep(1.5)
-            else:
-                logger.warning("🏠 No robot interface available for home positioning")
-            
+            logger.info("✅ Robot returned to initial position")
         except Exception as e:
-            logger.error(f"Error moving to initial position: {e}")
+            logger.error(f"Error returning to initial position: {e}")
     
     def disable_torque(self):
         """Disable torque on all robot joints."""
-        if not self.is_connected or not self.robot:
+        if not self.is_connected:
             return
         
         try:
             logger.info("Disabling torque on follower motors...")
-            if hasattr(self.robot, 'follower_arms'):
-                for arm_name, arm in self.robot.follower_arms.items():
-                    try:
-                        arm.write("Torque_Enable", 0)
-                        logger.info(f"Disabled torque on arm: {arm_name}")
-                    except Exception as e:
-                        logger.warning(f"Could not disable torque on arm {arm_name}: {e}")
+            
+            # The new SO100Follower automatically handles torque disable on disconnect
+            # We don't need to manually disable torque as it's handled by the robot class
+            logger.info("Torque will be disabled automatically on disconnect")
+                    
         except Exception as e:
             logger.error(f"Error disabling torque: {e}")
     
     def disconnect(self):
-        """Disconnect from robot."""
+        """Disconnect from robot hardware."""
         if not self.is_connected:
             return
         
-        try:
-            # Return to safe position first
-            self.return_to_initial_position()
+        logger.info("Disconnecting from robot...")
+        
+        # Return to initial positions if engaged
+        if self.is_engaged:
+            try:
+                self.return_to_initial_position()
+            except Exception as e:
+                logger.error(f"Error returning to initial position: {e}")
+        
+        # Disconnect both arms
+        if self.left_robot:
+            try:
+                self.left_robot.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting left arm: {e}")
+            self.left_robot = None
             
-            # Disable torque
-            self.disable_torque()
-            
-            # Disconnect
-            self.robot.disconnect()
-            self.is_connected = False
-            logger.info("Robot disconnected")
-            
-        except Exception as e:
-            logger.error(f"Error disconnecting robot: {e}")
+        if self.right_robot:
+            try:
+                self.right_robot.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting right arm: {e}")
+            self.right_robot = None
+        
+        self.is_connected = False
+        self.is_engaged = False
+        self.left_arm_connected = False
+        self.right_arm_connected = False
+        logger.info("🔌 Robot disconnected")
     
     def get_arm_connection_status(self, arm: str) -> bool:
         """Get connection status for specific arm based on device file existence."""

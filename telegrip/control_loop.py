@@ -462,9 +462,9 @@ class ControlLoop:
         if not self.visualizer:
             return
         
-        # Update robot poses for both arms
-        left_angles = self.robot_interface.get_arm_angles("left")
-        right_angles = self.robot_interface.get_arm_angles("right")
+        # Update robot poses for both arms using corrected angles for visualization
+        left_angles = self.robot_interface.get_arm_angles_for_visualization("left")
+        right_angles = self.robot_interface.get_arm_angles_for_visualization("right")
         
         self.visualizer.update_robot_pose(left_angles, 'left')
         self.visualizer.update_robot_pose(right_angles, 'right')
