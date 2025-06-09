@@ -2,7 +2,7 @@
 
 A consolidated teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboard with shared inverse kinematics, 3D visualization and a web UI.
 
-![VR Demo](telegrip_vr_demo.mp4)
+https://github.com/user-attachments/assets/2dd84705-1640-4bba-b02b-68213ec9ca17
 
 *telegrip operation of two SO-100 arms using a Quest 3 headset*
 
