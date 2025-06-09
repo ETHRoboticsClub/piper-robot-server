@@ -41,29 +41,17 @@ Follow the official LeRobot installation guide:
 # Clone the official LeRobot repository
 git clone https://github.com/huggingface/lerobot.git
 cd lerobot
-
 # Install according to their instructions (typically):
 pip install -e .
 ```
 
-After installing LeRobot, install this teleoperation package:
+After installing LeRobot, install telegrip (this package):
 
 ```bash
 # Install in editable mode (recommended for development)
 git clone https://github.com/DipFlip/telegrip.git
 pip install -e .
-
-### Dependencies
-
-Required packages include:
-- `lerobot` - Robot control library (install manually first!)
-- `pybullet` - Physics simulation and IK/FK
-- `websockets` - WebSocket server for VR
-- `pynput` - Keyboard input handling
-- `scipy` - Spatial transformations
-- `numpy`, `torch` - Numerical computing
-
-### SSL Certificates (Auto-Generated)
+```
 
 The system will automatically create self-signed SSL certificates (`cert.pem` and `key.pem`) if they don't exist.
 
@@ -82,13 +70,14 @@ Run the complete teleoperation system:
 ```bash
 telegrip
 ```
-
-This starts:
-- HTTPS server for web interface (default port 8443)
-- WebSocket server for VR controllers (default port 8442)
-- Keyboard input listener
-- Robot interface and control loop
-- PyBullet 3D visualization
+The first time you might be asked to complete pose calibrations as shown in [this guide](https://github.com/huggingface/lerobot/blob/8cfab3882480bdde38e42d93a9752de5ed42cae2/examples/10_use_so100.md#e-calibrate). Calibration files are stored in `.cache/calibration/so100/arm_name.json`. When calibration files are found, you will be greeted with a message like 
+```bash
+🤖 telegrip starting...
+📱 Open your VR headset browser and navigate to:
+   https://192.168.7.233:8443
+```
+Click on or enter your address in a browser to show the UI. Visit the same address from your VR headset to enter the VR web-app. The first time you should enter robot arm port information under the settings menu (top right). Alternatively you can manually enter the details in the `config.yaml` file in the root of this repo.
+Once you see that the robot arms are found (green indicators) you can click "Connect Robot" and start controlling it by keyboard or with the VR headset.
 
 ### Command Line Options
 
@@ -130,7 +119,7 @@ telegrip --no-viz
 
 ### VR Controller Control
 
-1. **Setup**: Connect Meta Quest to same network, navigate to `https://<robot-ip>:8443`
+1. **Setup**: Connect Meta Quest to same network, navigate to `https://<your-ip>:8443`
 
 2. **Arm Position Control**: 
    - **Hold grip button** to activate position control for that arm
@@ -150,50 +139,21 @@ telegrip --no-viz
 
 ### Keyboard Control
 
-1. **Left Arm Control**:
+**Left Arm Control**:
    - **W/S**: Forward/Backward
    - **A/D**: Left/Right 
    - **Q/E**: Down/Up
    - **Z/X**: Wrist roll
    - **F**: Toggle gripper open/closed
-   - **Tab**: Manual toggle position control on/off
 
-2. **Right Arm Control**:
+**Right Arm Control**:
    - **I/K**: Forward/Backward
    - **J/L**: Left/Right
    - **U/O**: Up/Down
    - **N/M**: Wrist roll
    - **; (semicolon)**: Toggle gripper open/closed
-   - **Enter**: Manual toggle position control on/off
-
-3. **Auto-Activation**: Position control is automatically activated when you press movement keys. Tab/Enter are only needed for manual toggle.
-
-4. **Exit**: **ESC** to stop the system
 
 ## Architecture
-
-### Directory Structure
-
-```
-telegrip/                     # Main Python package
-├── __init__.py            # Package initialization
-├── __main__.py            # Module entry point
-├── main.py                # Main system coordinator
-├── config.py              # Configuration and constants
-├── control_loop.py        # Main control loop
-├── core/                  # Core robot functionality
-│   ├── robot_interface.py # Robot control wrapper
-│   ├── kinematics.py      # IK/FK utilities
-│   └── visualizer.py      # PyBullet visualization
-└── inputs/                # Input providers
-    ├── base.py            # Base classes and data structures
-    ├── vr_ws_server.py    # VR WebSocket server
-    └── keyboard_listener.py # Keyboard input handler
-
-webapp/                    # Web application files
-├── index.html            # VR interface HTML
-└── app.js                # VR controller JavaScript
-```
 
 ### Component Communication
 
