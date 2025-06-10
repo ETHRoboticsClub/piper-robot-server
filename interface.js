@@ -305,23 +305,30 @@ document.addEventListener('keydown', handleKeyDown);
 document.addEventListener('keyup', handleKeyUp);
 
 function handleKeyDown(event) {
+  // Prevent default browser behavior for our control keys regardless of keyboard state
+  if (isControlKey(event.code)) {
+    event.preventDefault();
+  }
+  
   // Only handle keys if keyboard control is enabled and we're focused on the page
   if (!isKeyboardEnabled || pressedKeys.has(event.code)) return;
   
-  // Prevent default browser behavior for our control keys
   if (isControlKey(event.code)) {
-    event.preventDefault();
     pressedKeys.add(event.code);
     sendKeyCommand(event.code, 'press');
   }
 }
 
 function handleKeyUp(event) {
+  // Prevent default browser behavior for our control keys regardless of keyboard state
+  if (isControlKey(event.code)) {
+    event.preventDefault();
+  }
+  
   // Only handle keys if keyboard control is enabled
   if (!isKeyboardEnabled || !pressedKeys.has(event.code)) return;
   
   if (isControlKey(event.code)) {
-    event.preventDefault();
     pressedKeys.delete(event.code);
     sendKeyCommand(event.code, 'release');
   }
