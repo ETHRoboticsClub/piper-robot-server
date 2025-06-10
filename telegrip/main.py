@@ -117,20 +117,25 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         elif self.path == '/api/config':
             self.handle_config_get_request()
         elif self.path == '/' or self.path == '/index.html':
-            # Serve main page
-            self.serve_file('index.html', 'text/html')
+            # Serve main page from web-ui directory
+            self.serve_file('web-ui/index.html', 'text/html')
         elif self.path.endswith('.css'):
-            self.serve_file(self.path[1:], 'text/css')
+            # Serve CSS files from web-ui directory
+            self.serve_file(f'web-ui{self.path}', 'text/css')
         elif self.path.endswith('.js'):
-            self.serve_file(self.path[1:], 'application/javascript')
+            # Serve JS files from web-ui directory
+            self.serve_file(f'web-ui{self.path}', 'application/javascript')
         elif self.path.endswith('.ico'):
             self.serve_file(self.path[1:], 'image/x-icon')
         elif self.path.endswith(('.jpg', '.jpeg')):
-            self.serve_file(self.path[1:], 'image/jpeg')
+            # Serve image files from web-ui directory
+            self.serve_file(f'web-ui{self.path}', 'image/jpeg')
         elif self.path.endswith('.png'):
-            self.serve_file(self.path[1:], 'image/png')
+            # Serve image files from web-ui directory
+            self.serve_file(f'web-ui{self.path}', 'image/png')
         elif self.path.endswith('.gif'):
-            self.serve_file(self.path[1:], 'image/gif')
+            # Serve image files from web-ui directory
+            self.serve_file(f'web-ui{self.path}', 'image/gif')
         else:
             self.send_error(404, "Not found")
     
