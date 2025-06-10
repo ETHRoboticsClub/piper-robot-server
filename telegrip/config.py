@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
         }
     },
     "paths": {
-        "urdf_path": "URDF/SO100_NEW/so100.urdf"
+        "urdf_path": "URDF/SO100/so100.urdf"
     },
     "gripper": {
         "open_angle": 0.0,
