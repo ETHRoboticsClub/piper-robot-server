@@ -475,6 +475,7 @@ class TelegripSystem:
         # Tasks
         self.tasks = []
         self.is_running = False
+        self.main_loop = None  # Will be set when the system starts
     
     def add_control_command(self, action: str):
         """Add a control command to the queue for processing."""
@@ -524,8 +525,13 @@ class TelegripSystem:
         def do_restart():
             try:
                 logger.info("Initiating system restart...")
-                # Schedule stop and restart
-                asyncio.create_task(self._restart_sequence())
+                # Use the stored main event loop reference to schedule the soft restart
+                if self.main_loop and not self.main_loop.is_closed():
+                    future = asyncio.run_coroutine_threadsafe(self._soft_restart_sequence(), self.main_loop)
+                    # Wait for restart to complete
+                    future.result(timeout=30.0)
+                else:
+                    logger.error("Main event loop not available for restart")
             except Exception as e:
                 logger.error(f"Error during restart: {e}")
         
@@ -533,32 +539,87 @@ class TelegripSystem:
         restart_thread = threading.Thread(target=do_restart, daemon=True)
         restart_thread.start()
     
-    async def _restart_sequence(self):
-        """Perform the actual restart sequence."""
+    async def _soft_restart_sequence(self):
+        """Perform a soft restart by reinitializing components without exiting the process."""
         try:
+            logger.info("Starting soft restart sequence...")
+            
             # Wait a moment to let the HTTP response be sent
             await asyncio.sleep(1)
             
-            # Stop all components gracefully
-            await self.stop()
+            # Cancel all tasks
+            for task in self.tasks:
+                task.cancel()
             
-            # Wait a bit more to ensure clean shutdown
-            await asyncio.sleep(2)
+            # Wait for tasks to complete with timeout
+            if self.tasks:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*self.tasks, return_exceptions=True), 
+                        timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Some tasks did not complete within timeout")
             
-            # Restart the process
-            logger.info("Restarting process...")
-            python = sys.executable
-            os.execl(python, python, *sys.argv)
+            # Stop components in reverse order
+            await self.control_loop.stop()
+            await self.keyboard_listener.stop()
+            await self.vr_server.stop()
+            # Don't stop HTTPS server - keep it running for the UI
+            
+            # Wait a moment for cleanup
+            await asyncio.sleep(1)
+            
+            # Reload configuration from file but preserve command-line overrides
+            from .config import get_config_data
+            file_config = get_config_data()
+            logger.info("Configuration reloaded from file")
+            
+            # Keep the existing configuration object to preserve command-line arguments
+            # Just update specific values that might have changed in the config file
+            
+            # Recreate components with existing configuration
+            self.command_queue = asyncio.Queue()
+            self.control_commands_queue = queue.Queue(maxsize=10)
+            
+            # Create new components
+            self.vr_server = VRWebSocketServer(self.command_queue, self.config)
+            self.keyboard_listener = KeyboardListener(self.command_queue, self.config)
+            self.control_loop = ControlLoop(self.command_queue, self.config, self.control_commands_queue)
+            
+            # Set up cross-references
+            self.control_loop.keyboard_listener = self.keyboard_listener
+            
+            # Clear old tasks
+            self.tasks = []
+            
+            # Start VR WebSocket server
+            await self.vr_server.start()
+            
+            # Start keyboard listener
+            await self.keyboard_listener.start()
+            
+            # Start control loop
+            control_task = asyncio.create_task(self.control_loop.start())
+            self.tasks.append(control_task)
+            
+            # Start control command processor
+            command_processor_task = asyncio.create_task(self._run_command_processor())
+            self.tasks.append(command_processor_task)
+            
+            logger.info("System restart completed successfully")
             
         except Exception as e:
-            logger.error(f"Error during restart sequence: {e}")
-            # If execl fails, exit and let external process manager restart
-            sys.exit(1)
+            logger.error(f"Error during soft restart sequence: {e}")
+            raise
     
     async def start(self):
         """Start all system components."""
         try:
             self.is_running = True
+            
+            # Store reference to the main event loop for restart functionality
+            self.main_loop = asyncio.get_event_loop()
             
             # Start HTTPS server
             await self.https_server.start()
@@ -579,8 +640,26 @@ class TelegripSystem:
             
             logger.info("All system components started successfully")
             
-            # Wait for tasks to complete
-            await asyncio.gather(*self.tasks)
+            # Main loop that handles restarts
+            while self.is_running:
+                try:
+                    # Wait for tasks to complete
+                    await asyncio.gather(*self.tasks)
+                    # If we get here, all tasks completed normally (shouldn't happen in normal operation)
+                    break
+                except asyncio.CancelledError:
+                    # Tasks were cancelled - check if it's due to restart
+                    if self.is_running:
+                        # System is restarting, wait for restart to complete
+                        await asyncio.sleep(1)
+                        # Continue the loop to wait for new tasks
+                        continue
+                    else:
+                        # Normal shutdown
+                        break
+                except Exception as e:
+                    logger.error(f"Error in main task loop: {e}")
+                    break
             
         except Exception as e:
             logger.error(f"Error starting teleoperation system: {e}")
@@ -748,13 +827,21 @@ async def main():
             logger.info("Received interrupt signal")
         else:
             print("\n🛑 Shutting down...")
+    except asyncio.CancelledError:
+        # Handle cancelled error (often from restart scenarios)
+        if log_level <= logging.INFO:
+            logger.info("System tasks cancelled")
     except Exception as e:
         if log_level <= logging.INFO:
             logger.error(f"System error: {e}")
         else:
             print(f"❌ Error: {e}")
     finally:
-        await system.stop()
+        try:
+            await system.stop()
+        except asyncio.CancelledError:
+            # Ignore cancelled errors during shutdown
+            pass
         if log_level > logging.INFO:
             print("✅ Shutdown complete.")
 
@@ -765,6 +852,9 @@ def main_cli():
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nShutdown complete.")
+    except asyncio.CancelledError:
+        # Handle cancelled error from restart scenarios  
+        pass
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         sys.exit(1)

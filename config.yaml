@@ -22,7 +22,7 @@ network:
   https_port: 8443
   websocket_port: 8442
 paths:
-  urdf_path: URDF/SO_5DOF_ARM100_8j/urdf/so100.urdf
+  urdf_path: URDF/SO100/urdf/so100.urdf
 robot:
   left_arm:
     enabled: true
