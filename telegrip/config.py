@@ -166,19 +166,7 @@ URDF_TO_INTERNAL_NAME_MAP = {
 }
 
 # --- PyBullet Configuration ---
-END_EFFECTOR_LINK_NAME = "gripper"
-
-# Lerobot joint angle compensation for updated lerobot version
-# These compensations account for changes in joint angle definitions/calibration
-# in the newer lerobot version
-LEROBOT_ANGLE_COMPENSATION = {
-    "shoulder_pan": {"sign": 1, "offset": 0},      # Joint angle changes to be determined
-    "shoulder_lift": {"sign": 1, "offset": 0},     # Joint angle changes to be determined  
-    "elbow_flex": {"sign": 1, "offset": 0},        # Joint angle changes to be determined
-    "wrist_flex": {"sign": 1, "offset": 0},        # Joint angle changes to be determined
-    "wrist_roll": {"sign": 1, "offset": 0},        # Joint angle changes to be determined
-    "gripper": {"sign": 1, "offset": 0},           # Joint angle changes to be determined
-}
+END_EFFECTOR_LINK_NAME = "Fixed_Jaw_tip"
 
 # --- Keyboard Control ---
 POS_STEP = 0.01  # meters

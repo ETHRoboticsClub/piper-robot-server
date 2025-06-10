@@ -95,8 +95,8 @@ class RobotInterface:
         self.max_general_errors = 8  # Allow more general errors before full disconnection
         
         # Initial positions for safe shutdown - restored original values
-        self.initial_left_arm = np.array([2, 185, 175, 72, 4, 0])
-        self.initial_right_arm = np.array([2, 185, 175, 72, -4, 0])
+        self.initial_left_arm = np.array([0, -100, 100, 60, 0, 0])
+        self.initial_right_arm = np.array([0, -100, 100, 60, 0, 0])
     
     def setup_robot_configs(self) -> Tuple[SO100FollowerConfig, SO100FollowerConfig]:
         """Create robot configurations for both arms."""

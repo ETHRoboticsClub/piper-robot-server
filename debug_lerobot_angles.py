@@ -156,22 +156,6 @@ def test_angle_compensation():
         print(f"  Left compensated:  {np.array(compensated_left)}")
         print(f"  Right compensated: {np.array(compensated_right)}")
 
-def interactive_compensation_tuner():
-    """Interactive tool to manually tune compensation values."""
-    print("=" * 60)
-    print("INTERACTIVE COMPENSATION TUNER")
-    print("=" * 60)
-    print("This tool helps you manually tune compensation values.")
-    print("Modify the values in LEROBOT_ANGLE_COMPENSATION in telegrip/config.py")
-    print("and restart telegrip to see the effects.")
-    print()
-    
-    from telegrip.config import LEROBOT_ANGLE_COMPENSATION
-    
-    print("Current compensation settings:")
-    for joint_name, compensation in LEROBOT_ANGLE_COMPENSATION.items():
-        print(f"  {joint_name}: sign={compensation['sign']}, offset={compensation['offset']}")
-
 def main():
     """Main function to run different debug modes."""
     print("LEROBOT ANGLE DEBUG TOOL")
@@ -179,20 +163,15 @@ def main():
     print("Choose an option:")
     print("1. Read current robot state")
     print("2. Test angle compensation strategies")
-    print("3. Show current compensation settings")
     print()
     
     try:
-        choice = input("Enter choice (1-3): ").strip()
+        choice = input("Enter choice (1-2): ").strip()
         
         if choice == "1":
             print_current_robot_state()
         elif choice == "2":
             test_angle_compensation()
-        elif choice == "3":
-            interactive_compensation_tuner()
-        else:
-            print("Invalid choice")
             
     except KeyboardInterrupt:
         print("\nExiting...")

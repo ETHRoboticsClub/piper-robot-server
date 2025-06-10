@@ -365,7 +365,7 @@ class VRWebSocketServer(BaseInputProvider):
             
             # The Z-component of the rotation vector represents rotation around Z-axis (roll)
             z_rotation_rad = rotvec[2]
-            z_rotation_deg = np.degrees(z_rotation_rad)
+            z_rotation_deg = -np.degrees(z_rotation_rad)
             
             return z_rotation_deg
         except Exception as e:
