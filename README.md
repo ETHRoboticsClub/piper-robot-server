@@ -6,7 +6,8 @@ An open source teleoperation control system for the [SO100 robot arm](https://gi
 
 *Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm.*
 
-https://github.com/user-attachments/assets/2dd84705-1640-4bba-b02b-68213ec9ca17
+https://github.com/user-attachments/assets/e21168b5-e9b4-4c83-ab4d-a15cb470d11b
+
 
 *telegrip operation of two SO-100 arms using a Quest 3 headset*
 
