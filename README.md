@@ -1,6 +1,6 @@
 # telegrip - SO100 Robot Arm Teleoperation System
 
-An open source teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboard with shared inverse kinematics, 3D visualization and a web UI.
+An open source teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboards with shared inverse kinematics, 3D visualization and a web UI.
 
 <img src="telegrip_instructions.jpg" alt="VR Controller Instructions" width="400">
 
