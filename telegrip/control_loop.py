@@ -251,10 +251,7 @@ class ControlLoop:
                 success = self.robot_interface.engage()
                 if success:
                     logger.info("🔌 Robot motors ENGAGED via API")
-                    
-                    # Sync keyboard targets to current robot position (simple one-time sync)
-                    if self.keyboard_listener and hasattr(self.keyboard_listener, 'sync_targets_to_current_position'):
-                        self.keyboard_listener.sync_targets_to_current_position()
+                    # No need to sync keyboard targets - unified system handles this automatically
                 else:
                     logger.error("❌ Failed to engage robot motors")
             else:
@@ -343,28 +340,44 @@ class ControlLoop:
         """Execute a control goal."""
         arm_state = self.left_arm if goal.arm == "left" else self.right_arm
         
+        # Handle special reset signal from keyboard idle timeout
+        if (goal.metadata and goal.metadata.get("reset_target_to_current", False)):
+            if self.robot_interface and arm_state.mode == ControlMode.POSITION_CONTROL:
+                # Reset target position to current robot position
+                current_position = self.robot_interface.get_current_end_effector_position(goal.arm)
+                current_angles = self.robot_interface.get_arm_angles(goal.arm)
+                
+                arm_state.target_position = current_position.copy()
+                arm_state.goal_position = current_position.copy()
+                arm_state.origin_position = current_position.copy()
+                arm_state.current_wrist_roll = current_angles[WRIST_ROLL_INDEX]
+                arm_state.current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
+                arm_state.origin_wrist_roll_angle = current_angles[WRIST_ROLL_INDEX]
+                arm_state.origin_wrist_flex_angle = current_angles[WRIST_FLEX_INDEX]
+                
+                logger.info(f"🔄 {goal.arm.upper()} arm: Target position reset to current robot position (idle timeout)")
+            return
+        
         # Handle mode changes (only if mode is specified)
         if goal.mode is not None and goal.mode != arm_state.mode:
             if goal.mode == ControlMode.POSITION_CONTROL:
-                # Activate position control
+                # Activate position control - always reset target to current position
                 arm_state.mode = ControlMode.POSITION_CONTROL
                 
-                # Set origin position for relative movement
                 if self.robot_interface:
                     current_position = self.robot_interface.get_current_end_effector_position(goal.arm)
-                    arm_state.origin_position = current_position
                     current_angles = self.robot_interface.get_arm_angles(goal.arm)
+                    
+                    # Reset everything to current position (like VR grip press)
+                    arm_state.target_position = current_position.copy()
+                    arm_state.goal_position = current_position.copy()
+                    arm_state.origin_position = current_position.copy()
+                    arm_state.current_wrist_roll = current_angles[WRIST_ROLL_INDEX]
+                    arm_state.current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
                     arm_state.origin_wrist_roll_angle = current_angles[WRIST_ROLL_INDEX]
                     arm_state.origin_wrist_flex_angle = current_angles[WRIST_FLEX_INDEX]
-                    
-                    # Initialize target position to current position if not already set
-                    if arm_state.target_position is None:
-                        arm_state.target_position = current_position.copy()
-                        arm_state.goal_position = current_position.copy()
-                        arm_state.current_wrist_roll = current_angles[WRIST_ROLL_INDEX]
-                        arm_state.current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
                 
-                logger.info(f"🔒 {goal.arm.upper()} arm: Position control ACTIVATED")
+                logger.info(f"🔒 {goal.arm.upper()} arm: Position control ACTIVATED (target reset to current position)")
                 
             elif goal.mode == ControlMode.IDLE:
                 # Deactivate position control
@@ -377,34 +390,40 @@ class ControlLoop:
                 
                 logger.info(f"🔓 {goal.arm.upper()} arm: Position control DEACTIVATED")
         
-        # Handle position control
+        # Handle position control - both VR and keyboard now work the same way (absolute offset from origin)
         if goal.target_position is not None and arm_state.mode == ControlMode.POSITION_CONTROL:
             if goal.metadata and goal.metadata.get("relative_position", False):
-                # Relative position from VR controller
+                # Both VR and keyboard send absolute offset from robot origin position
                 if arm_state.origin_position is not None:
                     arm_state.target_position = arm_state.origin_position + goal.target_position
                     arm_state.goal_position = arm_state.target_position.copy()
+                else:
+                    # No origin set yet, use current position as base
+                    if self.robot_interface:
+                        current_position = self.robot_interface.get_current_end_effector_position(goal.arm)
+                        arm_state.target_position = current_position + goal.target_position
+                        arm_state.goal_position = arm_state.target_position.copy()
             else:
-                # Absolute position from keyboard
+                # Absolute position (legacy - should not be used anymore)
                 arm_state.target_position = goal.target_position.copy()
                 arm_state.goal_position = goal.target_position.copy()
             
-            # Handle wrist roll
+            # Handle wrist movements - both VR and keyboard send absolute offsets from origin
             if goal.wrist_roll_deg is not None:
                 if goal.metadata and goal.metadata.get("relative_position", False):
-                    # Relative wrist roll from VR
+                    # Both VR and keyboard send absolute wrist angle relative to origin
                     arm_state.current_wrist_roll = arm_state.origin_wrist_roll_angle + goal.wrist_roll_deg
                 else:
-                    # Absolute wrist roll from keyboard
+                    # Absolute wrist roll (legacy)
                     arm_state.current_wrist_roll = goal.wrist_roll_deg
             
-            # Handle wrist flex
+            # Handle wrist flex - both VR and keyboard send absolute offsets from origin
             if goal.wrist_flex_deg is not None:
                 if goal.metadata and goal.metadata.get("relative_position", False):
-                    # Relative wrist flex from VR
+                    # Both VR and keyboard send absolute wrist angle relative to origin
                     arm_state.current_wrist_flex = arm_state.origin_wrist_flex_angle + goal.wrist_flex_deg
                 else:
-                    # Absolute wrist flex from keyboard
+                    # Absolute wrist flex (legacy)
                     arm_state.current_wrist_flex = goal.wrist_flex_deg
         
         # Handle gripper control (independent of mode)

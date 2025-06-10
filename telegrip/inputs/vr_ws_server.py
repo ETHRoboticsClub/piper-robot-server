@@ -222,7 +222,7 @@ class VRWebSocketServer(BaseInputProvider):
         # Handle grip button for arm movement control
         if grip_active:
             if not controller.grip_active:
-                # Grip just activated - set origin
+                # Grip just activated - set origin and reset target position
                 controller.grip_active = True
                 controller.origin_position = position.copy()
                 
@@ -239,9 +239,19 @@ class VRWebSocketServer(BaseInputProvider):
                 controller.z_axis_rotation = 0.0
                 controller.x_axis_rotation = 0.0
                 
-                # TODO: Get current robot end effector position for origin
-                # This would require communication with the robot interface
-                logger.info(f"🔒 {hand.upper()} grip activated - controlling {hand} arm")
+                # Send reset signal to control loop to reset target position to current robot position
+                reset_goal = ControlGoal(
+                    arm=hand,
+                    mode=ControlMode.POSITION_CONTROL,  # Keep in position control
+                    target_position=None,  # Special signal
+                    metadata={
+                        "source": f"vr_grip_reset_{hand}",
+                        "reset_target_to_current": True  # Signal to reset target to current position
+                    }
+                )
+                await self.send_goal(reset_goal)
+                
+                logger.info(f"🔒 {hand.upper()} grip activated - controlling {hand} arm (target reset to current position)")
             
             # Compute target position
             if controller.origin_position:

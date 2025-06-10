@@ -12,7 +12,7 @@ from pynput import keyboard
 import threading
 
 from .base import BaseInputProvider, ControlGoal, ControlMode
-from ..config import TelegripConfig, POS_STEP, ANGLE_STEP, GRIPPER_STEP
+from ..config import TelegripConfig, POS_STEP, ANGLE_STEP, GRIPPER_STEP, WRIST_ROLL_INDEX, WRIST_FLEX_INDEX
 
 logger = logging.getLogger(__name__)
 
@@ -31,31 +31,37 @@ class KeyboardListener(BaseInputProvider):
         self.listener = None
         self.listener_thread = None
         
-        # Control state for both arms
+        # Control state for both arms (VR-like behavior)
         self.left_arm_state = {
-            "target_position": None,  # Will be initialized from current robot position
-            "target_wrist_roll": 0.0,
-            "target_wrist_flex": 0.0,
+            "origin_position": None,  # Like VR grip origin
+            "origin_wrist_roll": 0.0,
+            "origin_wrist_flex": 0.0,
+            "current_offset": np.zeros(3),  # Current offset from origin
+            "current_wrist_roll_offset": 0.0,
+            "current_wrist_flex_offset": 0.0,
             "delta_pos": np.zeros(3),
             "delta_wrist_roll": 0.0,
             "delta_wrist_flex": 0.0,
             "position_control_active": False,
             "gripper_closed": False,
-            "last_key_time": 0.0,  # Track when keys were last pressed
-            "any_key_pressed": False  # Track if any movement key is currently pressed
+            "last_key_time": 0.0,
+            "any_key_pressed": False
         }
         
         self.right_arm_state = {
-            "target_position": None,  # Will be initialized from current robot position
-            "target_wrist_roll": 0.0,
-            "target_wrist_flex": 0.0,
+            "origin_position": None,  # Like VR grip origin
+            "origin_wrist_roll": 0.0,
+            "origin_wrist_flex": 0.0,
+            "current_offset": np.zeros(3),  # Current offset from origin
+            "current_wrist_roll_offset": 0.0,
+            "current_wrist_flex_offset": 0.0,
             "delta_pos": np.zeros(3),
             "delta_wrist_roll": 0.0,
             "delta_wrist_flex": 0.0,
             "position_control_active": False,
             "gripper_closed": False,
-            "last_key_time": 0.0,  # Track when keys were last pressed
-            "any_key_pressed": False  # Track if any movement key is currently pressed
+            "last_key_time": 0.0,
+            "any_key_pressed": False
         }
         
         # Idle timeout for repositioning target (in seconds)
@@ -69,7 +75,7 @@ class KeyboardListener(BaseInputProvider):
     def is_enabled(self) -> bool:
         """Check if keyboard control is enabled."""
         return self.is_running
-    
+
     async def start(self):
         """Start the keyboard listener."""
         if not self.config.enable_keyboard:
@@ -132,90 +138,53 @@ class KeyboardListener(BaseInputProvider):
             logger.info("  ESC: Exit")
             logger.info("")
             logger.info("Note: Position control is automatically activated when you press")
-            logger.info("      movement keys. Tab/Enter are only needed for manual toggle.")
+            logger.info("      movement keys. Idle for 1 second to reset target position.")
             logger.info("="*60)
             logger.info(f"Left arm position control: {'ACTIVE' if self.left_arm_state['position_control_active'] else 'INACTIVE'}")
             logger.info(f"Right arm position control: {'ACTIVE' if self.right_arm_state['position_control_active'] else 'INACTIVE'}")
         else:
             # In quiet mode, just show that keyboard is ready
             pass
-    
-    def _initialize_arm_position(self, arm: str):
-        """Initialize target position from current robot position when activating control."""
-        if not self.robot_interface:
-            # Fallback to default position if no robot interface
-            default_position = np.array([0.2, 0.0, 0.15])
-            logger.warning(f"No robot interface available, using default position for {arm} arm: {default_position}")
-            return default_position
-        
-        try:
-            # Get current end effector position
-            current_position = self.robot_interface.get_current_end_effector_position(arm)
-            logger.info(f"Initialized {arm} arm keyboard control at current position: {current_position.round(3)}")
-            return current_position.copy()
-        except Exception as e:
-            # Fallback to default position on error
-            default_position = np.array([0.2, 0.0, 0.15])
-            logger.warning(f"Failed to get current {arm} arm position: {e}. Using default: {default_position}")
-            return default_position
-    
-    def _initialize_arm_wrist_roll(self, arm: str):
-        """Initialize target wrist roll from current robot angle when activating control."""
-        if not self.robot_interface:
-            logger.warning(f"No robot interface available, using default wrist roll for {arm} arm: 0.0°")
-            return 0.0
-        
-        try:
-            # Get current wrist roll angle
-            current_angles = self.robot_interface.get_arm_angles(arm)
-            from ..config import WRIST_ROLL_INDEX
-            current_wrist_roll = current_angles[WRIST_ROLL_INDEX]
-            logger.info(f"Initialized {arm} arm wrist roll at current angle: {current_wrist_roll:.1f}°")
-            return current_wrist_roll
-        except Exception as e:
-            logger.warning(f"Failed to get current {arm} arm wrist roll: {e}. Using default: 0.0°")
-            return 0.0
-    
-    def _initialize_arm_wrist_flex(self, arm: str):
-        """Initialize target wrist flex from current robot angle when activating control."""
-        if not self.robot_interface:
-            logger.warning(f"No robot interface available, using default wrist flex for {arm} arm: 0.0°")
-            return 0.0
-        
-        try:
-            # Get current wrist flex angle
-            current_angles = self.robot_interface.get_arm_angles(arm)
-            from ..config import WRIST_FLEX_INDEX
-            current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
-            logger.info(f"Initialized {arm} arm wrist flex at current angle: {current_wrist_flex:.1f}°")
-            return current_wrist_flex
-        except Exception as e:
-            logger.warning(f"Failed to get current {arm} arm wrist flex: {e}. Using default: 0.0°")
-            return 0.0
-    
-    def _sync_target_to_current_position(self, arm: str):
-        """Sync the target position to the robot's current position."""
+
+    def _set_keyboard_origin(self, arm: str):
+        """Set origin position for keyboard control (like VR grip press)."""
         arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
         
-        if not arm_state["position_control_active"]:
-            return
-        
-        try:
-            # Get current position and angles from robot
-            current_position = self._initialize_arm_position(arm)
-            current_wrist_roll = self._initialize_arm_wrist_roll(arm)
-            current_wrist_flex = self._initialize_arm_wrist_flex(arm)
-            
-            # Update target to match current
-            arm_state["target_position"] = current_position
-            arm_state["target_wrist_roll"] = current_wrist_roll
-            arm_state["target_wrist_flex"] = current_wrist_flex
-            
-            logger.debug(f"Synced {arm} arm target to current position: {current_position.round(3)}")
-            
-        except Exception as e:
-            logger.warning(f"Failed to sync {arm} arm target position: {e}")
-
+        if self.robot_interface:
+            try:
+                # Get current robot position and angles as origin
+                current_position = self.robot_interface.get_current_end_effector_position(arm)
+                current_angles = self.robot_interface.get_arm_angles(arm)
+                
+                arm_state["origin_position"] = current_position.copy()
+                arm_state["origin_wrist_roll"] = current_angles[WRIST_ROLL_INDEX]
+                arm_state["origin_wrist_flex"] = current_angles[WRIST_FLEX_INDEX]
+                
+                # Reset current offsets
+                arm_state["current_offset"] = np.zeros(3)
+                arm_state["current_wrist_roll_offset"] = 0.0
+                arm_state["current_wrist_flex_offset"] = 0.0
+                
+                logger.info(f"🎮 {arm.upper()} arm keyboard origin set at position: {current_position.round(3)}")
+                
+                # Send reset signal to control loop (like VR grip press)
+                reset_goal = ControlGoal(
+                    arm=arm,
+                    mode=ControlMode.POSITION_CONTROL,  # Keep in position control
+                    target_position=None,  # Special signal
+                    metadata={
+                        "source": f"keyboard_grip_reset_{arm}",
+                        "reset_target_to_current": True  # Signal to reset target to current position
+                    }
+                )
+                try:
+                    self.command_queue.put_nowait(reset_goal)
+                except:
+                    pass  # Queue might be full, ignore
+                
+            except Exception as e:
+                logger.error(f"Failed to set keyboard origin for {arm} arm: {e}")
+    
     def _update_key_activity(self, arm: str, is_movement_key: bool = True):
         """Update the last key activity time for an arm."""
         arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
@@ -337,10 +306,6 @@ class KeyboardListener(BaseInputProvider):
                 self.left_arm_state["position_control_active"] = not self.left_arm_state["position_control_active"]
                 
                 if self.left_arm_state["position_control_active"]:
-                    # Initialize target position from current robot position
-                    self.left_arm_state["target_position"] = self._initialize_arm_position("left")
-                    self.left_arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll("left")
-                    self.left_arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex("left")
                     logger.info("LEFT arm position control: ACTIVATED")
                 else:
                     logger.info("LEFT arm position control: DEACTIVATED")
@@ -351,10 +316,6 @@ class KeyboardListener(BaseInputProvider):
                 self.right_arm_state["position_control_active"] = not self.right_arm_state["position_control_active"]
                 
                 if self.right_arm_state["position_control_active"]:
-                    # Initialize target position from current robot position
-                    self.right_arm_state["target_position"] = self._initialize_arm_position("right")
-                    self.right_arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll("right")
-                    self.right_arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex("right")
                     logger.info("RIGHT arm position control: ACTIVATED")
                 else:
                     logger.info("RIGHT arm position control: DEACTIVATED")
@@ -444,6 +405,11 @@ class KeyboardListener(BaseInputProvider):
             self.command_queue.put_nowait(goal)
         except:
             pass  # Queue might be full, ignore
+
+    def _send_idle_reset_signal(self, arm: str):
+        """Send signal to control loop to reset target position due to idle timeout."""
+        # This acts like "grip release" - reset origin for next movement
+        self._set_keyboard_origin(arm)
     
     async def control_loop(self):
         """Main control loop that processes keyboard input and sends commands."""
@@ -453,37 +419,39 @@ class KeyboardListener(BaseInputProvider):
             try:
                 # Process both arms
                 for arm, arm_state in [("left", self.left_arm_state), ("right", self.right_arm_state)]:
-                    if arm_state["position_control_active"] and arm_state["target_position"] is not None:
+                    if arm_state["position_control_active"]:
                         
-                        # Check if we should sync target to current position (after 1 second of inactivity)
+                        # Check if we should reset origin (after 1 second of inactivity) - like VR grip release/press
                         current_time = time.time()
                         if (not arm_state["any_key_pressed"] and 
                             arm_state["last_key_time"] > 0 and 
                             current_time - arm_state["last_key_time"] >= self.idle_timeout):
                             
-                            # Sync target position to current robot position
-                            self._sync_target_to_current_position(arm)
-                            # Reset the timer to prevent continuous syncing
+                            # Reset origin like "grip release + grip press"
+                            self._send_idle_reset_signal(arm)
+                            # Reset the timer to prevent continuous signaling
                             arm_state["last_key_time"] = 0
                         
-                        # Update target state based on deltas
-                        arm_state["target_position"] += arm_state["delta_pos"]
-                        arm_state["target_wrist_roll"] += arm_state["delta_wrist_roll"]
-                        arm_state["target_wrist_flex"] += arm_state["delta_wrist_flex"]
+                        # Update current offsets based on deltas (like VR accumulates from grip origin)
+                        arm_state["current_offset"] += arm_state["delta_pos"]
+                        arm_state["current_wrist_roll_offset"] += arm_state["delta_wrist_roll"]
+                        arm_state["current_wrist_flex_offset"] += arm_state["delta_wrist_flex"]
                         
-                        # Send position control goal if there's movement or wrist rotation
+                        # Send absolute offset from origin if there's movement or wrist rotation
                         if (np.any(arm_state["delta_pos"] != 0) or 
                             arm_state["delta_wrist_roll"] != 0 or 
                             arm_state["delta_wrist_flex"] != 0):
+                            
+                            # Send absolute offset from origin (like VR)
                             goal = ControlGoal(
                                 arm=arm,
                                 mode=ControlMode.POSITION_CONTROL,
-                                target_position=arm_state["target_position"].copy(),
-                                wrist_roll_deg=arm_state["target_wrist_roll"],
-                                wrist_flex_deg=arm_state["target_wrist_flex"],
+                                target_position=arm_state["current_offset"].copy(),  # Absolute offset from origin
+                                wrist_roll_deg=arm_state["current_wrist_roll_offset"],   # Absolute offset from origin
+                                wrist_flex_deg=arm_state["current_wrist_flex_offset"],   # Absolute offset from origin
                                 metadata={
                                     "source": f"keyboard_{arm}",
-                                    "relative_position": False
+                                    "relative_position": True  # Same as VR - absolute offset from origin
                                 }
                             )
                             await self.send_goal(goal)
@@ -504,51 +472,29 @@ class KeyboardListener(BaseInputProvider):
         if not arm_state["position_control_active"]:
             # Activate position control
             arm_state["position_control_active"] = True
-            arm_state["target_position"] = self._initialize_arm_position(arm)
-            arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll(arm)
-            arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex(arm)
             logger.info(f"{arm.upper()} arm position control: AUTO-ACTIVATED")
             self._send_mode_change_goal(arm)
-        else:
-            # If already active but we haven't pressed any keys for a while, sync to current position
-            current_time = time.time()
-            if (arm_state["last_key_time"] > 0 and 
-                current_time - arm_state["last_key_time"] >= self.idle_timeout):
-                self._sync_target_to_current_position(arm)
+            
+            # Set origin like "grip press"
+            self._set_keyboard_origin(arm)
 
-    def reset_target_positions(self):
-        """Reset keyboard target positions to sync with current robot position.
+    def get_idle_status(self, arm: str) -> tuple:
+        """Get idle status for an arm (used by control loop for 1-second reset logic).
         
-        This should be called when the robot reconnects to ensure keyboard
-        movements start from the current robot position rather than old targets.
+        Returns:
+            tuple: (is_idle, time_since_last_key)
         """
-        logger.info("🎮 Resetting keyboard target positions to current robot position")
+        arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
         
-        # Reset both arms
-        for arm in ["left", "right"]:
-            arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
-            
-            if arm_state["position_control_active"]:
-                # Sync target to current robot position
-                self._sync_target_to_current_position(arm)
-                logger.info(f"🎮 {arm.upper()} arm target position reset to current robot position")
-            
-            # Reset timing to prevent immediate re-sync
-            arm_state["last_key_time"] = 0
-            arm_state["any_key_pressed"] = False
-
-    def sync_targets_to_current_position(self):
-        """Sync keyboard targets to current robot position without affecting timing.
+        if not arm_state["position_control_active"]:
+            return False, 0
         
-        This is specifically for robot reconnection - just updates targets without
-        resetting timing variables.
-        """
-        logger.info("🎮 Syncing keyboard targets to current robot position")
+        current_time = time.time()
         
-        for arm in ["left", "right"]:
-            arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
-            
-            if arm_state["position_control_active"]:
-                # Just sync the target position, don't touch timing
-                self._sync_target_to_current_position(arm)
-                logger.info(f"🎮 {arm.upper()} arm target synced to current robot position") 
+        # Check if idle (no keys pressed and some time has passed since last key)
+        is_idle = (not arm_state["any_key_pressed"] and 
+                  arm_state["last_key_time"] > 0)
+        
+        time_since_last = (current_time - arm_state["last_key_time"]) if arm_state["last_key_time"] > 0 else 0
+        
+        return is_idle, time_since_last 
