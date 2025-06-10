@@ -2,7 +2,7 @@
 
 An open source teleoperation control system for the [SO100 robot arm](https://github.com/TheRobotStudio/SO-ARM100) that supports input from VR controllers or keyboards with shared inverse kinematics, 3D visualization and a web UI.
 
-<img src="telegrip_instructions.jpg" alt="VR Controller Instructions" width="400">
+<img src="web-ui/media/telegrip_instructions.jpg" alt="VR Controller Instructions" width="400">
 
 *Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm.*
 
