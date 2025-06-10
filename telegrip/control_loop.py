@@ -251,6 +251,10 @@ class ControlLoop:
                 success = self.robot_interface.engage()
                 if success:
                     logger.info("🔌 Robot motors ENGAGED via API")
+                    
+                    # Sync keyboard targets to current robot position (simple one-time sync)
+                    if self.keyboard_listener and hasattr(self.keyboard_listener, 'sync_targets_to_current_position'):
+                        self.keyboard_listener.sync_targets_to_current_position()
                 else:
                     logger.error("❌ Failed to engage robot motors")
             else:

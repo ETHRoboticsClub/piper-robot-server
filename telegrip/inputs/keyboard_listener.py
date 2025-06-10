@@ -6,6 +6,7 @@ Supports simultaneous dual-arm control with dedicated key layouts.
 import asyncio
 import numpy as np
 import logging
+import time
 from typing import Dict
 from pynput import keyboard
 import threading
@@ -39,7 +40,9 @@ class KeyboardListener(BaseInputProvider):
             "delta_wrist_roll": 0.0,
             "delta_wrist_flex": 0.0,
             "position_control_active": False,
-            "gripper_closed": False
+            "gripper_closed": False,
+            "last_key_time": 0.0,  # Track when keys were last pressed
+            "any_key_pressed": False  # Track if any movement key is currently pressed
         }
         
         self.right_arm_state = {
@@ -50,8 +53,13 @@ class KeyboardListener(BaseInputProvider):
             "delta_wrist_roll": 0.0,
             "delta_wrist_flex": 0.0,
             "position_control_active": False,
-            "gripper_closed": False
+            "gripper_closed": False,
+            "last_key_time": 0.0,  # Track when keys were last pressed
+            "any_key_pressed": False  # Track if any movement key is currently pressed
         }
+        
+        # Idle timeout for repositioning target (in seconds)
+        self.idle_timeout = 1.0
     
     def set_robot_interface(self, robot_interface):
         """Set reference to robot interface for getting current positions."""
@@ -185,47 +193,89 @@ class KeyboardListener(BaseInputProvider):
             logger.warning(f"Failed to get current {arm} arm wrist flex: {e}. Using default: 0.0°")
             return 0.0
     
+    def _sync_target_to_current_position(self, arm: str):
+        """Sync the target position to the robot's current position."""
+        arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
+        
+        if not arm_state["position_control_active"]:
+            return
+        
+        try:
+            # Get current position and angles from robot
+            current_position = self._initialize_arm_position(arm)
+            current_wrist_roll = self._initialize_arm_wrist_roll(arm)
+            current_wrist_flex = self._initialize_arm_wrist_flex(arm)
+            
+            # Update target to match current
+            arm_state["target_position"] = current_position
+            arm_state["target_wrist_roll"] = current_wrist_roll
+            arm_state["target_wrist_flex"] = current_wrist_flex
+            
+            logger.debug(f"Synced {arm} arm target to current position: {current_position.round(3)}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to sync {arm} arm target position: {e}")
+
+    def _update_key_activity(self, arm: str, is_movement_key: bool = True):
+        """Update the last key activity time for an arm."""
+        arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
+        if is_movement_key:
+            arm_state["last_key_time"] = time.time()
+            arm_state["any_key_pressed"] = True
+
     def on_press(self, key):
         """Handle key press events."""
         try:
             # LEFT ARM CONTROLS (WASD + QE) - Fixed W/S direction
             if key.char == 'w':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_pos"][1] = -POS_STEP   # Forward (reversed sign)
             elif key.char == 's':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_pos"][1] = POS_STEP    # Backward (reversed sign)
             elif key.char == 'a':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_pos"][0] = POS_STEP    # Left (X axis)
             elif key.char == 'd':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_pos"][0] = -POS_STEP   # Right (X axis)
             elif key.char == 'q':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_pos"][2] = -POS_STEP   # Down (-Z)
             elif key.char == 'e':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_pos"][2] = POS_STEP    # Up (+Z)
             
             # RIGHT ARM CONTROLS (UIOJKL) - Fixed direction signs
             elif key.char == 'i':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_pos"][1] = -POS_STEP  # Forward (fixed sign)
             elif key.char == 'k':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_pos"][1] = POS_STEP   # Backward (fixed sign)
             elif key.char == 'j':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_pos"][0] = POS_STEP   # Left (X axis)
             elif key.char == 'l':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_pos"][0] = -POS_STEP  # Right (X axis)
             elif key.char == 'u':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_pos"][2] = -POS_STEP  # Up (fixed sign)
             elif key.char == 'o':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_pos"][2] = POS_STEP   # Down (fixed sign)
             
             # Left gripper control
@@ -237,33 +287,41 @@ class KeyboardListener(BaseInputProvider):
             # Left wrist roll
             elif key.char == 'z':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_wrist_roll"] = -ANGLE_STEP  # CCW
             elif key.char == 'x':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
             
             # Left wrist flex (pitch)
             elif key.char == 'r':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_wrist_flex"] = -ANGLE_STEP  # Flex down
             elif key.char == 't':
                 self._auto_activate_arm_if_needed("left")
+                self._update_key_activity("left")
                 self.left_arm_state["delta_wrist_flex"] = ANGLE_STEP   # Flex up
             
             # Right wrist roll
             elif key.char == 'n':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_wrist_roll"] = -ANGLE_STEP  # CCW
             elif key.char == 'm':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_wrist_roll"] = ANGLE_STEP   # CW
             
             # Right wrist flex (pitch)
             elif key.char == 'h':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_wrist_flex"] = -ANGLE_STEP  # Flex down
             elif key.char == 'y':
                 self._auto_activate_arm_if_needed("right")
+                self._update_key_activity("right")
                 self.right_arm_state["delta_wrist_flex"] = ANGLE_STEP   # Flex up
             
             # Right gripper control
@@ -313,30 +371,50 @@ class KeyboardListener(BaseInputProvider):
             # LEFT ARM - Reset deltas on key release (Y axis for W/S, X axis for A/D)
             if key.char in ('w', 's'):
                 self.left_arm_state["delta_pos"][1] = 0  # Forward/Back (Y axis)
+                self._check_if_all_keys_released("left")
             elif key.char in ('a', 'd'):
                 self.left_arm_state["delta_pos"][0] = 0  # Left/Right (X axis)
+                self._check_if_all_keys_released("left")
             elif key.char in ('q', 'e'):
                 self.left_arm_state["delta_pos"][2] = 0
+                self._check_if_all_keys_released("left")
             elif key.char in ('z', 'x'):
                 self.left_arm_state["delta_wrist_roll"] = 0
+                self._check_if_all_keys_released("left")
             elif key.char in ('r', 't'):
                 self.left_arm_state["delta_wrist_flex"] = 0
+                self._check_if_all_keys_released("left")
             
             # RIGHT ARM - Reset deltas on key release (swapped I/K and J/L axes)
             elif key.char in ('i', 'k'):
                 self.right_arm_state["delta_pos"][1] = 0  # Forward/Back (Y axis)
+                self._check_if_all_keys_released("right")
             elif key.char in ('j', 'l'):
                 self.right_arm_state["delta_pos"][0] = 0  # Left/Right (X axis)
+                self._check_if_all_keys_released("right")
             elif key.char in ('u', 'o'):
                 self.right_arm_state["delta_pos"][2] = 0  # Up/Down
+                self._check_if_all_keys_released("right")
             elif key.char in ('n', 'm'):
                 self.right_arm_state["delta_wrist_roll"] = 0
+                self._check_if_all_keys_released("right")
             elif key.char in ('h', 'y'):
                 self.right_arm_state["delta_wrist_flex"] = 0
+                self._check_if_all_keys_released("right")
         except AttributeError:
             # Handle special keys if needed (currently none for the new layout)
             pass
-    
+
+    def _check_if_all_keys_released(self, arm: str):
+        """Check if all movement keys for an arm have been released."""
+        arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
+        
+        # Check if all deltas are zero
+        if (np.all(arm_state["delta_pos"] == 0) and 
+            arm_state["delta_wrist_roll"] == 0 and 
+            arm_state["delta_wrist_flex"] == 0):
+            arm_state["any_key_pressed"] = False
+
     def _send_gripper_goal(self, arm: str):
         """Send gripper control goal to queue."""
         arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
@@ -376,6 +454,18 @@ class KeyboardListener(BaseInputProvider):
                 # Process both arms
                 for arm, arm_state in [("left", self.left_arm_state), ("right", self.right_arm_state)]:
                     if arm_state["position_control_active"] and arm_state["target_position"] is not None:
+                        
+                        # Check if we should sync target to current position (after 1 second of inactivity)
+                        current_time = time.time()
+                        if (not arm_state["any_key_pressed"] and 
+                            arm_state["last_key_time"] > 0 and 
+                            current_time - arm_state["last_key_time"] >= self.idle_timeout):
+                            
+                            # Sync target position to current robot position
+                            self._sync_target_to_current_position(arm)
+                            # Reset the timer to prevent continuous syncing
+                            arm_state["last_key_time"] = 0
+                        
                         # Update target state based on deltas
                         arm_state["target_position"] += arm_state["delta_pos"]
                         arm_state["target_wrist_roll"] += arm_state["delta_wrist_roll"]
@@ -418,4 +508,47 @@ class KeyboardListener(BaseInputProvider):
             arm_state["target_wrist_roll"] = self._initialize_arm_wrist_roll(arm)
             arm_state["target_wrist_flex"] = self._initialize_arm_wrist_flex(arm)
             logger.info(f"{arm.upper()} arm position control: AUTO-ACTIVATED")
-            self._send_mode_change_goal(arm) 
+            self._send_mode_change_goal(arm)
+        else:
+            # If already active but we haven't pressed any keys for a while, sync to current position
+            current_time = time.time()
+            if (arm_state["last_key_time"] > 0 and 
+                current_time - arm_state["last_key_time"] >= self.idle_timeout):
+                self._sync_target_to_current_position(arm)
+
+    def reset_target_positions(self):
+        """Reset keyboard target positions to sync with current robot position.
+        
+        This should be called when the robot reconnects to ensure keyboard
+        movements start from the current robot position rather than old targets.
+        """
+        logger.info("🎮 Resetting keyboard target positions to current robot position")
+        
+        # Reset both arms
+        for arm in ["left", "right"]:
+            arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
+            
+            if arm_state["position_control_active"]:
+                # Sync target to current robot position
+                self._sync_target_to_current_position(arm)
+                logger.info(f"🎮 {arm.upper()} arm target position reset to current robot position")
+            
+            # Reset timing to prevent immediate re-sync
+            arm_state["last_key_time"] = 0
+            arm_state["any_key_pressed"] = False
+
+    def sync_targets_to_current_position(self):
+        """Sync keyboard targets to current robot position without affecting timing.
+        
+        This is specifically for robot reconnection - just updates targets without
+        resetting timing variables.
+        """
+        logger.info("🎮 Syncing keyboard targets to current robot position")
+        
+        for arm in ["left", "right"]:
+            arm_state = self.left_arm_state if arm == "left" else self.right_arm_state
+            
+            if arm_state["position_control_active"]:
+                # Just sync the target position, don't touch timing
+                self._sync_target_to_current_position(arm)
+                logger.info(f"🎮 {arm.upper()} arm target synced to current robot position") 
