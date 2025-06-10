@@ -286,4 +286,4 @@ telegrip --log-level debug   # Show maximum detail for debugging
 
 ## License
 
-This project is part of the SO100 robot teleoperation research. See individual component licenses for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
