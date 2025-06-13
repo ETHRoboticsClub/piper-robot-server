@@ -732,14 +732,17 @@ def parse_arguments():
     parser.add_argument("--key", default="key.pem", help="Path to SSL private key")
     
     # Robot settings
-    parser.add_argument("--left-port", default="/dev/ttySO100red", help="Left arm serial port")
-    parser.add_argument("--right-port", default="/dev/ttySO100blue", help="Right arm serial port")
+    parser.add_argument("--config", default="config.yaml", help="Path to config file")
+    parser.add_argument("--left-port", help="Left arm serial port (overrides config file)")
+    parser.add_argument("--right-port", help="Right arm serial port (overrides config file)")
     
     return parser.parse_args()
 
 
 def create_config_from_args(args) -> TelegripConfig:
     """Create configuration object from command line arguments."""
+    # First load the config file
+    config_data = get_config_data()
     config = TelegripConfig()
     
     # Apply command line overrides
@@ -758,10 +761,12 @@ def create_config_from_args(args) -> TelegripConfig:
     config.certfile = args.cert
     config.keyfile = args.key
     
-    config.follower_ports = {
-        "left": args.left_port,
-        "right": args.right_port
-    }
+    # Handle port configuration - use command line args if provided, otherwise use config file values
+    if args.left_port or args.right_port:
+        config.follower_ports = {
+            "left": args.left_port if args.left_port else config_data["robot"]["left_arm"]["port"],
+            "right": args.right_port if args.right_port else config_data["robot"]["right_arm"]["port"]
+        }
     
     return config
 

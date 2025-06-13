@@ -24,12 +24,12 @@ DEFAULT_CONFIG = {
     "robot": {
         "left_arm": {
             "name": "Left Arm",
-            "port": "/dev/ttySO100red",
+            "port": "/dev/ttyACM0",
             "enabled": True
         },
         "right_arm": {
             "name": "Right Arm",
-            "port": "/dev/ttySO100blue", 
+            "port": "/dev/ttyACM1",
             "enabled": True
         },
         "vr_to_robot_scale": 1.0,
@@ -132,11 +132,6 @@ IK_POSITION_ERROR_THRESHOLD = _config_data["ik"]["position_error_threshold"]
 IK_HYSTERESIS_THRESHOLD = _config_data["ik"]["hysteresis_threshold"]
 IK_MOVEMENT_PENALTY_WEIGHT = _config_data["ik"]["movement_penalty_weight"]
 
-DEFAULT_FOLLOWER_PORTS = {
-    "left": _config_data["robot"]["left_arm"]["port"],
-    "right": _config_data["robot"]["right_arm"]["port"]
-}
-
 # --- Joint Configuration ---
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 NUM_JOINTS = len(JOINT_NAMES)
@@ -175,8 +170,8 @@ GRIPPER_STEP = 10.0 # degrees
 
 # --- Device Ports ---
 DEFAULT_FOLLOWER_PORTS = {
-    "left": "/dev/ttySO100red",
-    "right": "/dev/ttySO100blue"
+    "left": _config_data["robot"]["left_arm"]["port"],
+    "right": _config_data["robot"]["right_arm"]["port"]
 }
 
 @dataclass
@@ -227,8 +222,18 @@ class TelegripConfig:
     gripper_step: float = GRIPPER_STEP
     
     def __post_init__(self):
+        # Initialize follower_ports if not set
         if self.follower_ports is None:
-            self.follower_ports = DEFAULT_FOLLOWER_PORTS.copy()
+            self.follower_ports = {
+                "left": _config_data["robot"]["left_arm"]["port"],
+                "right": _config_data["robot"]["right_arm"]["port"]
+            }
+        
+        # Ensure ports are not None
+        if self.follower_ports["left"] is None:
+            self.follower_ports["left"] = "/dev/ttyACM0"
+        if self.follower_ports["right"] is None:
+            self.follower_ports["right"] = "/dev/ttyACM1"
     
     @property
     def ssl_files_exist(self) -> bool:
