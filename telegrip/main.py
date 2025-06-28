@@ -377,9 +377,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, str(e))
     
     def serve_file(self, filename, content_type):
-        """Serve a static file from the current directory."""
+        """Serve a static file from the project directory."""
+        from .utils import get_absolute_path
         try:
-            with open(filename, 'rb') as f:
+            # Convert relative path to absolute path in project directory
+            abs_path = get_absolute_path(filename)
+            
+            with open(abs_path, 'rb') as f:
                 file_content = f.read()
             
             self.send_response(200)
@@ -426,7 +430,9 @@ class HTTPSServer:
             
             # Setup SSL
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.load_cert_chain('cert.pem', 'key.pem')
+            # Get absolute paths for SSL certificates
+            cert_path, key_path = self.config.get_absolute_ssl_paths()
+            context.load_cert_chain(cert_path, key_path)
             self.httpd.socket = context.wrap_socket(self.httpd.socket, server_side=True)
             
             # Start server in a separate thread

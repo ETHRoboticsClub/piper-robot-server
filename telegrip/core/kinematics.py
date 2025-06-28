@@ -96,7 +96,8 @@ class IKSolver:
             return reference_poses
         
         try:
-            cache_file = Path(REFERENCE_POSES_FILE)
+            from ..utils import get_absolute_path
+            cache_file = get_absolute_path(REFERENCE_POSES_FILE)
             if cache_file.exists():
                 with open(cache_file, 'r') as f:
                     data = json.load(f)

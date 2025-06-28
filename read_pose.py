@@ -150,8 +150,8 @@ class PoseRecorder:
             print("❌ No poses recorded. Nothing to save.")
             return False
         
-        # Get the configured file path
-        filename = Path(REFERENCE_POSES_FILE)
+        # Get the configured file path (absolute)
+        filename = Path(self.config.get_absolute_reference_poses_path())
         
         # Create parent directory if it doesn't exist
         filename.parent.mkdir(parents=True, exist_ok=True)
@@ -181,8 +181,7 @@ def main():
     print("🤖 SO100 Reference Pose Recorder")
     print("=" * 40)
     
-    # Cache file for reference poses
-    cache_file = Path("reference_poses.json")
+    # Cache file for reference poses (will be handled by config methods)
     
     recorder = PoseRecorder()
     

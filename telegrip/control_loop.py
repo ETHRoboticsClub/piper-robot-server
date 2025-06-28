@@ -97,7 +97,7 @@ class ControlLoop:
                 from .core.visualizer import PyBulletVisualizer
                 
                 self.visualizer = PyBulletVisualizer(
-                    self.config.urdf_path, 
+                    self.config.get_absolute_urdf_path(), 
                     use_gui=self.config.enable_pybullet_gui,
                     log_level=self.config.log_level
                 )

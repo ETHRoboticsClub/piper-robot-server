@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 import numpy as np
 from pathlib import Path
+import logging
+from .utils import get_absolute_path, get_project_root
+
+logger = logging.getLogger(__name__)
 
 # Default configuration values (fallback if YAML file doesn't exist)
 DEFAULT_CONFIG = {
@@ -69,29 +73,43 @@ def load_config(config_path: str = "config.yaml") -> dict:
     """Load configuration from YAML file with fallback to defaults."""
     config = DEFAULT_CONFIG.copy()
     
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r') as f:
-                yaml_config = yaml.safe_load(f)
-                if yaml_config:
-                    # Deep merge yaml config into default config
-                    _deep_merge(config, yaml_config)
-        except Exception as e:
-            print(f"Warning: Could not load config from {config_path}: {e}")
-            print("Using default configuration")
+    # Try to load from project root first (package installation directory)
+    package_config_path = get_absolute_path(config_path)
+    
+    # Check if config exists in package directory
+    if package_config_path.exists():
+        config_file_to_use = package_config_path
+        logger.info(f"Loading config from package directory: {config_file_to_use}")
+    # Fallback to current working directory (for user-provided configs)
+    elif os.path.exists(config_path):
+        config_file_to_use = Path(config_path)
+        logger.info(f"Loading config from current directory: {config_file_to_use}")
     else:
-        print(f"Config file {config_path} not found, using defaults")
+        logger.info(f"Config file {config_path} not found in package directory ({package_config_path}) or current directory, using defaults")
+        return config
+    
+    try:
+        with open(config_file_to_use, 'r') as f:
+            yaml_config = yaml.safe_load(f)
+            if yaml_config:
+                # Deep merge yaml config into default config
+                _deep_merge(config, yaml_config)
+    except Exception as e:
+        logger.warning(f"Could not load config from {config_file_to_use}: {e}")
+        logger.info("Using default configuration")
     
     return config
 
 def save_config(config: dict, config_path: str = "config.yaml"):
-    """Save configuration to YAML file."""
+    """Save configuration to YAML file in project root."""
+    # Always save to project root directory
+    abs_config_path = get_absolute_path(config_path)
     try:
-        with open(config_path, 'w') as f:
+        with open(abs_config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, indent=2)
         return True
     except Exception as e:
-        print(f"Error saving config to {config_path}: {e}")
+        logger.error(f"Error saving config to {abs_config_path}: {e}")
         return False
 
 def _deep_merge(base: dict, update: dict):
@@ -239,7 +257,9 @@ class TelegripConfig:
     @property
     def ssl_files_exist(self) -> bool:
         """Check if SSL certificate files exist."""
-        return os.path.exists(self.certfile) and os.path.exists(self.keyfile)
+        cert_path = get_absolute_path(self.certfile)
+        key_path = get_absolute_path(self.keyfile)
+        return cert_path.exists() and key_path.exists()
     
     def ensure_ssl_certificates(self) -> bool:
         """Ensure SSL certificates exist, generating them if necessary."""
@@ -249,22 +269,40 @@ class TelegripConfig:
     @property
     def urdf_exists(self) -> bool:
         """Check if URDF file exists."""
-        return os.path.exists(self.urdf_path)
+        urdf_path = get_absolute_path(self.urdf_path)
+        return urdf_path.exists()
     
     @property
     def webapp_exists(self) -> bool:
         """Check if webapp directory exists."""
-        return os.path.exists(self.webapp_dir)
+        webapp_path = get_absolute_path(self.webapp_dir)
+        return webapp_path.exists()
+    
+    def get_absolute_urdf_path(self) -> str:
+        """Get absolute path to URDF file."""
+        return str(get_absolute_path(self.urdf_path))
+    
+    def get_absolute_reference_poses_path(self) -> str:
+        """Get absolute path to reference poses file."""
+        return str(get_absolute_path(self.reference_poses_file))
+    
+    def get_absolute_ssl_paths(self) -> tuple:
+        """Get absolute paths to SSL certificate files."""
+        cert_path = str(get_absolute_path(self.certfile))
+        key_path = str(get_absolute_path(self.keyfile))
+        return cert_path, key_path
 
 def get_config_data():
     """Get the current configuration data."""
     return _config_data.copy()
 
 def update_config_data(new_config: dict):
-    """Update the configuration data and save to file."""
+    """Update the global configuration data."""
     global _config_data
-    _deep_merge(_config_data, new_config)
-    return save_config(_config_data)
+    _config_data = new_config
+    
+    # Save to file
+    save_config(_config_data)
 
 # Global configuration instance
 config = TelegripConfig() 

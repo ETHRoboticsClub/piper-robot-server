@@ -10,20 +10,52 @@ from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
+def get_package_dir() -> Path:
+    """
+    Get the directory where the telegrip package is installed.
+    This allows us to find package files regardless of current working directory.
+    """
+    # Get the directory containing this utils.py file
+    # which is the telegrip package directory
+    return Path(__file__).parent
+
+def get_project_root() -> Path:
+    """
+    Get the project root directory (parent of the telegrip package).
+    This is where config files, SSL certificates, web-ui, URDF, etc. should be located.
+    """
+    return get_package_dir().parent
+
+def get_absolute_path(relative_path: str) -> Path:
+    """
+    Convert a relative path to an absolute path relative to the project root.
+    
+    Args:
+        relative_path: Path relative to project root
+        
+    Returns:
+        Absolute Path object
+    """
+    return get_project_root() / relative_path
+
 def generate_ssl_certificates(cert_path: str = "cert.pem", key_path: str = "key.pem") -> bool:
     """
     Automatically generate self-signed SSL certificates if they don't exist.
     
     Args:
-        cert_path: Path where to save the certificate file
-        key_path: Path where to save the private key file
+        cert_path: Path where to save the certificate file (relative to project root)
+        key_path: Path where to save the private key file (relative to project root)
         
     Returns:
         True if certificates exist or were generated successfully, False otherwise
     """
+    # Convert to absolute paths
+    cert_abs_path = get_absolute_path(cert_path)
+    key_abs_path = get_absolute_path(key_path)
+    
     # Check if certificates already exist
-    if os.path.exists(cert_path) and os.path.exists(key_path):
-        logger.info(f"SSL certificates already exist: {cert_path}, {key_path}")
+    if cert_abs_path.exists() and key_abs_path.exists():
+        logger.info(f"SSL certificates already exist: {cert_abs_path}, {key_abs_path}")
         return True
     
     logger.info("SSL certificates not found, generating self-signed certificates...")
@@ -32,8 +64,8 @@ def generate_ssl_certificates(cert_path: str = "cert.pem", key_path: str = "key.
         # Generate self-signed certificate using openssl
         cmd = [
             "openssl", "req", "-x509", "-newkey", "rsa:2048",
-            "-keyout", key_path,
-            "-out", cert_path,
+            "-keyout", str(key_abs_path),
+            "-out", str(cert_abs_path),
             "-sha256", "-days", "365", "-nodes",
             "-subj", "/C=US/ST=Test/L=Test/O=Test/OU=Test/CN=localhost"
         ]
@@ -41,10 +73,10 @@ def generate_ssl_certificates(cert_path: str = "cert.pem", key_path: str = "key.
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         
         # Set appropriate permissions (readable by owner only for security)
-        os.chmod(key_path, 0o600)
-        os.chmod(cert_path, 0o644)
+        os.chmod(key_abs_path, 0o600)
+        os.chmod(cert_abs_path, 0o644)
         
-        logger.info(f"SSL certificates generated successfully: {cert_path}, {key_path}")
+        logger.info(f"SSL certificates generated successfully: {cert_abs_path}, {key_abs_path}")
         return True
         
     except subprocess.CalledProcessError as e:
@@ -65,8 +97,8 @@ def ensure_ssl_certificates(cert_path: str = "cert.pem", key_path: str = "key.pe
     Ensure SSL certificates exist, generating them if necessary.
     
     Args:
-        cert_path: Path to certificate file
-        key_path: Path to private key file
+        cert_path: Path to certificate file (relative to project root)
+        key_path: Path to private key file (relative to project root)
         
     Returns:
         True if certificates are available, False if generation failed
