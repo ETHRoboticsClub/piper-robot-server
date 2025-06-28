@@ -74,8 +74,9 @@ telegrip
 The first time you might be asked to complete pose calibrations as shown in [this guide](https://github.com/huggingface/lerobot/blob/8cfab3882480bdde38e42d93a9752de5ed42cae2/examples/10_use_so100.md#e-calibrate). Calibration files are stored in `.cache/calibration/so100/arm_name.json`. When calibration files are found, you will be greeted with a message like 
 ```bash
 🤖 telegrip starting...
-📱 Open your VR headset browser and navigate to:
-   https://192.168.7.233:8443
+Open the UI in your browser on:
+https://192.168.7.233:8443
+Then go to the same address on your VR headset browser
 ```
 Click on or enter your address in a browser to show the UI. Visit the same address from your VR headset to enter the VR web-app. The first time you should enter robot arm port information under the settings menu (top right). Alternatively you can manually enter the details in the `config.yaml` file in the root of this repo.
 Once you see that the robot arms are found (green indicators) you can click "Connect Robot" and start controlling it by keyboard or with the VR headset.

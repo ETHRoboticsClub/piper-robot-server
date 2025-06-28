@@ -80,23 +80,28 @@ class PyBulletVisualizer:
     
     def setup(self) -> bool:
         """Initialize PyBullet and load the robot."""
-        # Determine if we should suppress output
-        should_suppress = getattr(logging, self.log_level.upper()) > logging.INFO
+        # Determine if we should suppress output (but not GUI display)
+        should_suppress_output = getattr(logging, self.log_level.upper()) > logging.INFO
         
         try:
-            if should_suppress:
-                # Use DIRECT mode in quiet mode to avoid GUI output
-                with suppress_stdout_stderr():
-                    self.physics_client = p.connect(p.DIRECT)
-            else:
-                if self.use_gui:
+            # GUI visibility is controlled by use_gui flag, not log level
+            if self.use_gui:
+                if should_suppress_output:
+                    # Suppress console output but still show GUI
+                    with suppress_stdout_stderr():
+                        self.physics_client = p.connect(p.GUI)
+                else:
                     self.physics_client = p.connect(p.GUI)
+            else:
+                if should_suppress_output:
+                    with suppress_stdout_stderr():
+                        self.physics_client = p.connect(p.DIRECT)
                 else:
                     self.physics_client = p.connect(p.DIRECT)
         except p.error as e:
             logger.warning(f"Could not connect to PyBullet: {e}")
             try:
-                if should_suppress:
+                if should_suppress_output:
                     with suppress_stdout_stderr():
                         self.physics_client = p.connect(p.DIRECT)
                 else:
@@ -109,15 +114,15 @@ class PyBulletVisualizer:
         if self.physics_client < 0:
             return False
         
-        # Configure PyBullet to reduce output
-        if should_suppress:
+        # Configure PyBullet to reduce output (only when not using GUI)
+        if should_suppress_output and not self.use_gui:
             p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
             p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, 0)
         
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -9.81)
         
-        if should_suppress:
+        if should_suppress_output:
             with suppress_stdout_stderr():
                 p.loadURDF("plane.urdf")
         else:
@@ -129,7 +134,7 @@ class PyBulletVisualizer:
             return False
         
         try:
-            if should_suppress:
+            if should_suppress_output:
                 with suppress_stdout_stderr():
                     self.robot_ids['left'] = p.loadURDF(self.urdf_path, [0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
             else:
@@ -140,7 +145,7 @@ class PyBulletVisualizer:
         
         # Load right robot 40cm away in X direction
         try:
-            if should_suppress:
+            if should_suppress_output:
                 with suppress_stdout_stderr():
                     self.robot_ids['right'] = p.loadURDF(self.urdf_path, [-0.2, 0, 0], [0, 0, 0, 1], useFixedBase=1)
             else:

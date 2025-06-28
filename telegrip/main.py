@@ -820,8 +820,9 @@ async def main():
         # Show clean startup message with HTTPS URL
         host_display = get_local_ip() if config.host_ip == "0.0.0.0" else config.host_ip
         print(f"🤖 telegrip starting...")
-        print(f"📱 Open your VR headset browser and navigate to:")
+        print(f"📱 Open the UI in your browser on:")
         print(f"   https://{host_display}:{config.https_port}")
+        print(f"📱 Then go to the same address on your VR headset browser")
         print(f"💡 Use --log-level info to see detailed output")
         print()
     
