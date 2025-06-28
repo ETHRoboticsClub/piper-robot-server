@@ -85,7 +85,9 @@ class VRWebSocketServer(BaseInputProvider):
         
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         try:
-            ssl_context.load_cert_chain(certfile=self.config.certfile, keyfile=self.config.keyfile)
+            # Get absolute paths for SSL certificates
+            cert_path, key_path = self.config.get_absolute_ssl_paths()
+            ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
             logger.info("SSL certificate and key loaded successfully for WebSocket server")
             return ssl_context
         except ssl.SSLError as e:
