@@ -615,6 +615,12 @@ class TelegripSystem:
             
             logger.info("System restart completed successfully")
             
+            # Auto-connect to robot if requested (preserve autoconnect behavior after restart)
+            if self.config.autoconnect and self.config.enable_robot:
+                logger.info("🔌 Auto-connecting to robot motors after restart...")
+                await asyncio.sleep(0.5)  # Brief delay to let components settle
+                self.add_control_command("robot_connect")
+            
         except Exception as e:
             logger.error(f"Error during soft restart sequence: {e}")
             raise
@@ -645,6 +651,12 @@ class TelegripSystem:
             self.tasks.append(command_processor_task)
             
             logger.info("All system components started successfully")
+            
+            # Auto-connect to robot if requested
+            if self.config.autoconnect and self.config.enable_robot:
+                logger.info("🔌 Auto-connecting to robot motors...")
+                await asyncio.sleep(0.5)  # Brief delay to let components settle
+                self.add_control_command("robot_connect")
             
             # Main loop that handles restarts
             while self.is_running:
@@ -723,6 +735,7 @@ def parse_arguments():
     parser.add_argument("--no-vr", action="store_true", help="Disable VR WebSocket server")
     parser.add_argument("--no-keyboard", action="store_true", help="Disable keyboard input")
     parser.add_argument("--no-https", action="store_true", help="Disable HTTPS server")
+    parser.add_argument("--autoconnect", action="store_true", help="Automatically connect to robot motors on startup")
     parser.add_argument("--log-level", default="warning", 
                        choices=["debug", "info", "warning", "error", "critical"],
                        help="Set logging level (default: warning)")
@@ -758,6 +771,7 @@ def create_config_from_args(args) -> TelegripConfig:
     config.enable_pybullet_gui = config.enable_pybullet and not args.no_viz
     config.enable_vr = not args.no_vr
     config.enable_keyboard = not args.no_keyboard
+    config.autoconnect = args.autoconnect
     config.log_level = args.log_level
     
     config.https_port = args.https_port
@@ -819,6 +833,7 @@ async def main():
         logger.info(f"  Headless mode: {'enabled' if not config.enable_pybullet_gui and config.enable_pybullet else 'disabled'}")
         logger.info(f"  VR: {'enabled' if config.enable_vr else 'disabled'}")
         logger.info(f"  Keyboard: {'enabled' if config.enable_keyboard else 'disabled'}")
+        logger.info(f"  Auto-connect: {'enabled' if config.autoconnect else 'disabled'}")
         logger.info(f"  HTTPS Port: {config.https_port}")
         logger.info(f"  WebSocket Port: {config.websocket_port}")
         logger.info(f"  Robot Ports: {config.follower_ports}")

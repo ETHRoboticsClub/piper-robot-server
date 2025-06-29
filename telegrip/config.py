@@ -218,6 +218,7 @@ class TelegripConfig:
     enable_robot: bool = True
     enable_vr: bool = True
     enable_keyboard: bool = True
+    autoconnect: bool = False
     log_level: str = "warning"
     
     # Paths

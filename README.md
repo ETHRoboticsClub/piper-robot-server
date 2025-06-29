@@ -92,6 +92,7 @@ Options:
   --no-viz          Disable PyBullet visualization (headless mode)
   --no-vr           Disable VR WebSocket server
   --no-keyboard     Disable keyboard input
+  --autoconnect     Automatically connect to robot motors on startup
   --log-level LEVEL Set logging level: debug, info, warning, error, critical (default: warning)
   --https-port PORT HTTPS server port (default: 8443)
   --ws-port PORT    WebSocket server port (default: 8442)
@@ -121,6 +122,11 @@ telegrip --no-sim
 **Headless** (no PyBullet GUI):
 ```bash
 telegrip --no-viz
+```
+
+**Auto-connect to Robot** (skip manual connection step):
+```bash
+telegrip --autoconnect
 ```
 
 ## Control Methods
