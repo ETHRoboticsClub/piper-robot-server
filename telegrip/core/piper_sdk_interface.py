@@ -9,6 +9,15 @@ except ImportError:
     print("Is the piper_sdk installed: pip install piper_sdk")
     C_PiperInterface_V2 = None  # For type checking and docs
 
+JOINT_LIMITS_RAD = {
+    "min": [-2.6179, 0.0, -2.967, -1.745, -1.22, -2.09439],
+    "max": [2.6179, 3.14, 0.0, 1.745, 1.22, 2.09439],
+}
+DEG_TO_RAD = 0.017444
+RAD_TO_DEG = 1 / DEG_TO_RAD
+GRIPPER_ANGLE_MAX = 0.07  # 70mm
+
+
 
 class PiperSDKInterface:
     def __init__(self, port: str = "can0"):
@@ -30,31 +39,21 @@ class PiperSDKInterface:
         ] + [10]  # Gripper max position in mm
 
     def set_joint_positions(self, positions):
-        # positions: list of 7 floats, first 6 are joint and 7 is gripper position
-        # postions are in -100% to 100% range, we need to map them on the min and max positions
-        # so -100% is min_pos and 100% is max_pos
-        scaled_positions = [
-            self.min_pos[i] + (self.max_pos[i] - self.min_pos[i]) * (pos + 100) / 200
-            for i, pos in enumerate(positions[:6])
-        ]
-        scaled_positions = [100.0 * pos for pos in scaled_positions]  # Adjust factor
 
-        # the gripper is from 0 to 100% range
-        scaled_positions.append(self.min_pos[6] + (self.max_pos[6] - self.min_pos[6]) * positions[6] / 100)
-        scaled_positions[6] = int(scaled_positions[6] * 10000)  # Convert to mm
+        joint_angles = []
+        for i, pos in enumerate(positions[:6]):
+            min_rad, max_rad = JOINT_LIMITS_RAD["min"][i], JOINT_LIMITS_RAD["max"][i]
+            clipped_pos = min(max(pos, min_rad), max_rad)
+            pos_deg = clipped_pos * RAD_TO_DEG
+            joint_angle = round(pos_deg * 1e3)  # Convert to millidegrees
+            joint_angles.append(joint_angle)
 
-        # joint 0, 3 and 5 are inverted
-        joint_0 = int(-scaled_positions[0])
-        joint_1 = int(scaled_positions[1])
-        joint_2 = int(scaled_positions[2])
-        joint_3 = int(-scaled_positions[3])
-        joint_4 = int(scaled_positions[4])
-        joint_5 = int(-scaled_positions[5])
-        joint_6 = int(scaled_positions[6])
+        gripper_position = min(max(positions[6], 0.0), GRIPPER_ANGLE_MAX)
+        gripper_position_int = round(gripper_position * 1e6)
 
         self.piper.MotionCtrl_2(0x01, 0x01, 100, 0x00)
-        self.piper.JointCtrl(joint_0, joint_1, joint_2, joint_3, joint_4, joint_5)
-        self.piper.GripperCtrl(joint_6, 1000, 0x01, 0)
+        self.piper.JointCtrl(*joint_angles)
+        self.piper.GripperCtrl(gripper_position_int, 1000, 0x01, 0)
 
     def get_status(self) -> Dict[str, Any]:
         joint_status = self.piper.GetArmJointMsgs()
@@ -63,12 +62,12 @@ class PiperSDKInterface:
 
         joint_state = joint_status.joint_state
         obs_dict = {
-            "joint_0.pos": (joint_state.joint_1 / 1000) * 0.017444,
-            "joint_1.pos": (joint_state.joint_2 / 1000) * 0.017444,
-            "joint_2.pos": (joint_state.joint_3 / 1000) * 0.017444,
-            "joint_3.pos": (joint_state.joint_4 / 1000) * 0.017444,
-            "joint_4.pos": (joint_state.joint_5 / 1000) * 0.017444,
-            "joint_5.pos": (joint_state.joint_6 / 1000) * 0.017444,
+            "joint_0.pos": (joint_state.joint_1 / 1000) * DEG_TO_RAD,
+            "joint_1.pos": (joint_state.joint_2 / 1000) * DEG_TO_RAD,
+            "joint_2.pos": (joint_state.joint_3 / 1000) * DEG_TO_RAD,
+            "joint_3.pos": (joint_state.joint_4 / 1000) * DEG_TO_RAD,
+            "joint_4.pos": (joint_state.joint_5 / 1000) * DEG_TO_RAD,
+            "joint_5.pos": (joint_state.joint_6 / 1000) * DEG_TO_RAD,
         }
         obs_dict.update(
             {

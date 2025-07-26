@@ -20,6 +20,7 @@ from ..config import (
 )
 from .kinematics import Arm_IK
 from .geometry import transform2pose
+from piper_control import piper_connect
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class RobotInterface:
         self.left_robot = None
         self.right_robot = None
         self.is_connected = False
-        self.is_engaged = False  # New state for motor engagement # TODO: set to False
+        self.is_engaged = True  # New state for motor engagement # TODO: set to False
         
         # Individual arm connection status
         self.left_arm_connected = False
@@ -100,13 +101,15 @@ class RobotInterface:
         """Create robot configurations for both arms."""
         
         left_config = PiperConfig(
-            port="can0"
+            port="can0",
+            cameras={}
         )
         # Set the robot name for calibration file lookup
         left_config.id = "left_follower"
         
         right_config = PiperConfig(
-            port="can1"
+            port="can1",
+            cameras={}
         )
         # Set the robot name for calibration file lookup
         right_config.id = "right_follower"
@@ -136,6 +139,7 @@ class RobotInterface:
             
             # Connect left arm
             try:
+                piper_connect.activate()
                 if should_suppress:
                     with suppress_stdout_stderr():
                         self.left_robot = Piper(left_config)
