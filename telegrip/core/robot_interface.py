@@ -64,7 +64,7 @@ class RobotInterface:
         self.left_robot = None
         self.right_robot = None
         self.is_connected = False
-        self.is_engaged = False  # New state for motor engagement
+        self.is_engaged = False  # New state for motor engagement # TODO: set to False
         
         # Individual arm connection status
         self.left_arm_connected = False
@@ -340,9 +340,9 @@ class RobotInterface:
                 logger.error("❌ Robot interface disconnected due to repeated errors")
             return False
     
-    def set_commanded_gripper(self, arm: str, closed: bool):
+    def set_gripper(self, arm: str, closed: bool):
         """Set gripper state for specified arm."""
-        angle = GRIPPER_CLOSED_ANGLE if closed else GRIPPER_OPEN_ANGLE
+        angle = 0.0 if closed else 0.07
         
         if arm == "left":
             self.left_arm_angles[6] = angle
@@ -351,7 +351,7 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
     
-    def get_commandend_arm_angles(self, arm: str) -> np.ndarray:
+    def get_arm_angles(self, arm: str) -> np.ndarray:
         """Get current joint angles for specified arm."""
         if arm == "left":
             angles = self.left_arm_angles.copy()
@@ -472,17 +472,17 @@ class RobotInterface:
         """Get connection status for specific arm based on device file existence."""
         # Only check device file existence - ignore overall robot connection status
         if arm == "left":
-            return self.left_robot.is_connected
+            return self.left_robot.is_connected if self.left_robot else False
         elif arm == "right":
-            return self.right_robot.is_connected
+            return self.right_robot.is_connected if self.right_robot else False
         else:
             return False
 
     def update_arm_connection_status(self):
         """Update individual arm connection status based on device file existence."""
         if self.is_connected:
-            self.left_arm_connected = self.left_robot.is_connected
-            self.right_arm_connected = self.right_robot.is_connected
+            self.left_arm_connected = self.left_robot.is_connected if self.left_robot else False
+            self.right_arm_connected = self.right_robot.is_connected if self.right_robot else False
     
     @property
     def status(self) -> Dict:

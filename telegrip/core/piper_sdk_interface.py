@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict
-
+import numpy as np
 try:
     from piper_sdk import C_PiperInterface_V2
 except ImportError:
@@ -63,16 +63,16 @@ class PiperSDKInterface:
 
         joint_state = joint_status.joint_state
         obs_dict = {
-            "joint_0.pos": joint_state.joint_1,
-            "joint_1.pos": joint_state.joint_2,
-            "joint_2.pos": joint_state.joint_3,
-            "joint_3.pos": joint_state.joint_4,
-            "joint_4.pos": joint_state.joint_5,
-            "joint_5.pos": joint_state.joint_6,
+            "joint_0.pos": (joint_state.joint_1 / 1000) * 0.017444,
+            "joint_1.pos": (joint_state.joint_2 / 1000) * 0.017444,
+            "joint_2.pos": (joint_state.joint_3 / 1000) * 0.017444,
+            "joint_3.pos": (joint_state.joint_4 / 1000) * 0.017444,
+            "joint_4.pos": (joint_state.joint_5 / 1000) * 0.017444,
+            "joint_5.pos": (joint_state.joint_6 / 1000) * 0.017444,
         }
         obs_dict.update(
             {
-                "joint_6.pos": gripper.gripper_state.grippers_angle,
+                "joint_6.pos": gripper.gripper_state.grippers_angle / 1000000,
             }
         )
 

@@ -15,7 +15,6 @@ from scipy.spatial.transform import Rotation as R
 
 from .base import BaseInputProvider, ControlGoal, ControlMode
 from ..config import TelegripConfig
-from ..core.kinematics import compute_relative_position
 from ..core.geometry import pose2transform, transform2pose, xyzrpy2transform
 
 logger = logging.getLogger(__name__)
@@ -186,7 +185,8 @@ class VRWebSocketServer(BaseInputProvider):
 
         assert quaternion is not None and all(k in quaternion for k in ['x', 'y', 'z', 'w']), "Quaternion data missing"
         quaternion = np.array([quaternion['x'], quaternion['y'], quaternion['z'], quaternion['w']])
-        
+        position = np.array([position['x'], position['y'], position['z']])
+
         transform = pose2transform(position, quaternion)
         transform = convert_to_robot_convention(transform)
         
@@ -222,7 +222,7 @@ class VRWebSocketServer(BaseInputProvider):
                     target_transform=None,  # Special signal
                     metadata={
                         "source": f"vr_grip_reset_{hand}",
-                        "reset_target_to_current": True  # Signal to reset target to current position
+                        "reset_target_to_zero": True  # Signal to reset target to current position
                     }
                 )
                 await self.send_goal(reset_goal)
@@ -230,7 +230,7 @@ class VRWebSocketServer(BaseInputProvider):
                 logger.info(f"🔒 {hand.upper()} grip activated - controlling {hand} arm (target reset to current position)")
             
             # Compute target position
-            if controller.origin_transform:
+            if controller.origin_transform is not None:
                 relative_transform = compute_relative_transform(transform, controller.origin_transform)
                                 
                 # Create control goal with relative transform
