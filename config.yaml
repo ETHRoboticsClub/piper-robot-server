@@ -30,7 +30,7 @@ robot:
   right_arm:
     enabled: true
     name: Right Arm
-  send_interval: 0.05
+  send_interval: 0.005
   vr_to_robot_scale: 1
 ssl:
   certfile: cert.pem
