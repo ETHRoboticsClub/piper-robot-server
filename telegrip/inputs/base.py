@@ -19,9 +19,7 @@ class ControlGoal:
     """High-level control goal message sent from input providers."""
     arm: Literal["left", "right"]
     mode: Optional[ControlMode] = None            # Control mode (None = no mode change)
-    target_position: Optional[np.ndarray] = None  # 3D position in robot coordinates
-    wrist_roll_deg: Optional[float] = None        # Wrist roll angle in degrees
-    wrist_flex_deg: Optional[float] = None        # Wrist flex (pitch) angle in degrees
+    target_transform: Optional[np.ndarray] = None  # 4x4 transform matrix
     gripper_closed: Optional[bool] = None         # Gripper state (None = no change)
     
     # Additional data for debugging/monitoring

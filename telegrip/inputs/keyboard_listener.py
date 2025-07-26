@@ -12,7 +12,7 @@ from pynput import keyboard
 import threading
 
 from .base import BaseInputProvider, ControlGoal, ControlMode
-from ..config import TelegripConfig, POS_STEP, ANGLE_STEP, GRIPPER_STEP, WRIST_ROLL_INDEX, WRIST_FLEX_INDEX
+from ..config import TelegripConfig, POS_STEP, ANGLE_STEP, GRIPPER_STEP
 
 logger = logging.getLogger(__name__)
 

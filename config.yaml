@@ -22,16 +22,14 @@ network:
   https_port: 8443
   websocket_port: 8442
 paths:
-  urdf_path: URDF/SO100/urdf/so100.urdf
+  urdf_path: URDF/Piper/piper_description.urdf
 robot:
   left_arm:
     enabled: true
     name: Left Arm
-    port: /dev/ttySO100red
   right_arm:
     enabled: true
     name: Right Arm
-    port: /dev/ttySO100blue
   send_interval: 0.05
   vr_to_robot_scale: 1
 ssl:

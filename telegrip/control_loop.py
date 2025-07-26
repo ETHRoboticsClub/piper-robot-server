@@ -10,7 +10,7 @@ import time
 import queue  # Add import for thread-safe queue
 from typing import Dict, Optional
 
-from .config import TelegripConfig, NUM_JOINTS, WRIST_FLEX_INDEX, WRIST_ROLL_INDEX, GRIPPER_INDEX
+from .config import TelegripConfig, NUM_JOINTS, GRIPPER_INDEX
 from .core.robot_interface import RobotInterface
 # PyBulletVisualizer will be imported on demand
 from .inputs.base import ControlGoal, ControlMode
@@ -24,23 +24,17 @@ class ArmState:
     def __init__(self, arm_name: str):
         self.arm_name = arm_name
         self.mode = ControlMode.IDLE
-        self.target_position = None
-        self.goal_position = None  # For visualization
-        self.origin_position = None  # Robot position when grip was activated
-        self.origin_wrist_roll_angle = 0.0
-        self.origin_wrist_flex_angle = 0.0
-        self.current_wrist_roll = 0.0
-        self.current_wrist_flex = 0.0
-        
+        self.origin_pose = None
+        self.current_pose = None
+        self.target_pose = None
+    
     def reset(self):
         """Reset arm state to idle."""
         self.mode = ControlMode.IDLE
-        self.target_position = None
-        self.goal_position = None
-        self.origin_position = None
-        self.origin_wrist_roll_angle = 0.0
-        self.origin_wrist_flex_angle = 0.0
-
+        self.origin_pose = None
+        self.current_pose = None
+        self.target_pose = None
+        
 
 class ControlLoop:
     """Main control loop that processes command queue and controls robot."""
@@ -91,37 +85,37 @@ class ControlLoop:
                 success = False
         
         # Setup PyBullet simulation, IK and visualizer
-        if self.config.enable_pybullet:
-            try:
-                # Import PyBulletVisualizer on demand
-                from .core.visualizer import PyBulletVisualizer
+        # if self.config.enable_pybullet:
+        #     try:
+        #         # Import PyBulletVisualizer on demand
+        #         from .core.visualizer import PyBulletVisualizer
                 
-                self.visualizer = PyBulletVisualizer(
-                    self.config.get_absolute_urdf_path(), 
-                    use_gui=self.config.enable_pybullet_gui,
-                    log_level=self.config.log_level
-                )
-                if not self.visualizer.setup():
-                    error_msg = "PyBullet visualizer setup failed"
-                    logger.error(error_msg)
-                    setup_errors.append(error_msg)
-                    self.visualizer = None
-                else:
-                    # Connect kinematics to robot interface
-                    joint_limits_min, joint_limits_max = self.visualizer.get_joint_limits
-                    self.robot_interface.setup_kinematics(
-                        self.visualizer.physics_client,
-                        self.visualizer.robot_ids,  # Pass both robot instances
-                        self.visualizer.joint_indices,  # Pass both joint index mappings
-                        self.visualizer.end_effector_link_indices,  # Pass both end effector indices
-                        joint_limits_min,
-                        joint_limits_max
-                    )
-            except Exception as e:
-                error_msg = f"PyBullet visualizer setup failed with exception: {e}"
-                logger.error(error_msg)
-                setup_errors.append(error_msg)
-                self.visualizer = None
+        #         self.visualizer = PyBulletVisualizer(
+        #             self.config.get_absolute_urdf_path(), 
+        #             use_gui=self.config.enable_pybullet_gui,
+        #             log_level=self.config.log_level
+        #         )
+        #         if not self.visualizer.setup():
+        #             error_msg = "PyBullet visualizer setup failed"
+        #             logger.error(error_msg)
+        #             setup_errors.append(error_msg)
+        #             self.visualizer = None
+        #         else:
+        #             # Connect kinematics to robot interface
+        #             joint_limits_min, joint_limits_max = self.visualizer.get_joint_limits
+        #             self.robot_interface.setup_kinematics(
+        #                 self.visualizer.physics_client,
+        #                 self.visualizer.robot_ids,  # Pass both robot instances
+        #                 self.visualizer.joint_indices,  # Pass both joint index mappings
+        #                 self.visualizer.end_effector_link_indices,  # Pass both end effector indices
+        #                 joint_limits_min,
+        #                 joint_limits_max
+        #             )
+        #     except Exception as e:
+        #         error_msg = f"PyBullet visualizer setup failed with exception: {e}"
+        #         logger.error(error_msg)
+        #         setup_errors.append(error_msg)
+        #         self.visualizer = None
         
         # Report all setup issues
         if setup_errors:
@@ -341,21 +335,13 @@ class ControlLoop:
         arm_state = self.left_arm if goal.arm == "left" else self.right_arm
         
         # Handle special reset signal from keyboard idle timeout
-        if (goal.metadata and goal.metadata.get("reset_target_to_current", False)):
+        if (goal.metadata and goal.metadata.get("reset_target_to_zero", False)):
             if self.robot_interface and arm_state.mode == ControlMode.POSITION_CONTROL:
-                # Reset target position to current robot position
-                current_position = self.robot_interface.get_current_end_effector_position(goal.arm)
-                current_angles = self.robot_interface.get_arm_angles(goal.arm)
+                # Reset target position to zero position
+                arm_state.target_pose = np.array([0.19, 0.0, 0.2])
+                arm_state.goal_pose = np.array([0.19, 0.0, 0.2])
                 
-                arm_state.target_position = current_position.copy()
-                arm_state.goal_position = current_position.copy()
-                arm_state.origin_position = current_position.copy()
-                arm_state.current_wrist_roll = current_angles[WRIST_ROLL_INDEX]
-                arm_state.current_wrist_flex = current_angles[WRIST_FLEX_INDEX]
-                arm_state.origin_wrist_roll_angle = current_angles[WRIST_ROLL_INDEX]
-                arm_state.origin_wrist_flex_angle = current_angles[WRIST_FLEX_INDEX]
-                
-                logger.info(f"🔄 {goal.arm.upper()} arm: Target position reset to current robot position (idle timeout)")
+                logger.info(f"🔄 {goal.arm.upper()} arm: Target position reset to zero robot position (idle timeout)")
             return
         
         # Handle mode changes (only if mode is specified)
@@ -448,26 +434,23 @@ class ControlLoop:
         
         # Update left arm (only if connected)
         if (self.left_arm.mode == ControlMode.POSITION_CONTROL and 
-            self.left_arm.target_position is not None and
+            self.left_arm.target_pose is not None and
             self.robot_interface.get_arm_connection_status("left")):
             
             # Solve IK
-            ik_solution = self.robot_interface.solve_ik("left", self.left_arm.target_position)
+            ik_solution = self.robot_interface.solve_ik("left", self.left_arm.target_pose)
             
             # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("left")[GRIPPER_INDEX]
-            self.robot_interface.update_arm_angles("left", ik_solution, 
-                                                 self.left_arm.current_wrist_flex, 
-                                                 self.left_arm.current_wrist_roll, 
-                                                 current_gripper)
+            self.robot_interface.update_arm_angles("left", ik_solution)
 
         # Update right arm (only if connected)
         if (self.right_arm.mode == ControlMode.POSITION_CONTROL and 
-            self.right_arm.target_position is not None and
+            self.right_arm.target_pose is not None and
             self.robot_interface.get_arm_connection_status("right")):
             
             # Solve IK
-            ik_solution = self.robot_interface.solve_ik("right", self.right_arm.target_position)
+            ik_solution = self.robot_interface.solve_ik("right", self.right_arm.target_pose)
             
             # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("right")[GRIPPER_INDEX]

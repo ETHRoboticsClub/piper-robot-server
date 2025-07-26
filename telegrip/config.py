@@ -28,12 +28,10 @@ DEFAULT_CONFIG = {
     "robot": {
         "left_arm": {
             "name": "Left Arm",
-            "port": "/dev/ttyACM0",
             "enabled": True
         },
         "right_arm": {
             "name": "Right Arm",
-            "port": "/dev/ttyACM1",
             "enabled": True
         },
         "vr_to_robot_scale": 1.0,
@@ -41,7 +39,7 @@ DEFAULT_CONFIG = {
     },
     "control": {
         "keyboard": {
-            "enabled": True,
+            "enabled": False,
             "pos_step": 0.01,
             "angle_step": 5.0,
             "gripper_step": 10.0
@@ -54,14 +52,14 @@ DEFAULT_CONFIG = {
         }
     },
     "paths": {
-        "urdf_path": "URDF/SO100/so100.urdf"
+        "urdf_path": "URDF/Piper/piper_description.urdf"
     },
     "gripper": {
         "open_angle": 0.0,
         "closed_angle": 45.0
     },
     "ik": {
-        "use_reference_poses": True,
+        "use_reference_poses": False,
         "reference_poses_file": "reference_poses.json",
         "position_error_threshold": 0.001,
         "hysteresis_threshold": 0.01,
@@ -151,12 +149,10 @@ IK_HYSTERESIS_THRESHOLD = _config_data["ik"]["hysteresis_threshold"]
 IK_MOVEMENT_PENALTY_WEIGHT = _config_data["ik"]["movement_penalty_weight"]
 
 # --- Joint Configuration ---
-JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
+JOINT_NAMES = ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
 NUM_JOINTS = len(JOINT_NAMES)
-NUM_IK_JOINTS = 3  # Use only first 3 joints for IK (Rotation, Pitch, Elbow)
-WRIST_FLEX_INDEX = 3
-WRIST_ROLL_INDEX = 4
-GRIPPER_INDEX = 5
+NUM_IK_JOINTS = 6
+GRIPPER_INDEX = 6
 
 # Motor configuration for SO100
 COMMON_MOTORS = {
@@ -179,18 +175,12 @@ URDF_TO_INTERNAL_NAME_MAP = {
 }
 
 # --- PyBullet Configuration ---
-END_EFFECTOR_LINK_NAME = "Fixed_Jaw_tip"
+END_EFFECTOR_LINK_NAME = "ee_link"
 
 # --- Keyboard Control ---
 POS_STEP = 0.01  # meters
 ANGLE_STEP = 5.0 # degrees
 GRIPPER_STEP = 10.0 # degrees
-
-# --- Device Ports ---
-DEFAULT_FOLLOWER_PORTS = {
-    "left": _config_data["robot"]["left_arm"]["port"],
-    "right": _config_data["robot"]["right_arm"]["port"]
-}
 
 @dataclass
 class TelegripConfig:
@@ -208,9 +198,6 @@ class TelegripConfig:
     # Robot settings
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
-    
-    # Device ports
-    follower_ports: Dict[str, str] = None
     
     # Control flags
     enable_pybullet: bool = True
@@ -241,19 +228,6 @@ class TelegripConfig:
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
     
-    def __post_init__(self):
-        # Initialize follower_ports if not set
-        if self.follower_ports is None:
-            self.follower_ports = {
-                "left": _config_data["robot"]["left_arm"]["port"],
-                "right": _config_data["robot"]["right_arm"]["port"]
-            }
-        
-        # Ensure ports are not None
-        if self.follower_ports["left"] is None:
-            self.follower_ports["left"] = "/dev/ttyACM0"
-        if self.follower_ports["right"] is None:
-            self.follower_ports["right"] = "/dev/ttyACM1"
     
     @property
     def ssl_files_exist(self) -> bool:

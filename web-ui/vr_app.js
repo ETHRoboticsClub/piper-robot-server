@@ -76,6 +76,7 @@ AFRAME.registerComponent('controller-updater', {
         updateStatus({ vrConnected: connected });
       }
       
+      
       // Also try to notify parent window if in iframe
       try {
         if (window.parent && window.parent !== window) {

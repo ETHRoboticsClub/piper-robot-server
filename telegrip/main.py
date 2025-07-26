@@ -746,7 +746,7 @@ def parse_arguments():
     parser.add_argument("--host", default="0.0.0.0", help="Host IP address")
     
     # Paths
-    parser.add_argument("--urdf", default="URDF/SO100/so100.urdf", help="Path to robot URDF file")
+    parser.add_argument("--urdf", default="URDF/Piper/piper_description.urdf", help="Path to robot URDF file")
     parser.add_argument("--webapp", default="webapp", help="Path to webapp directory")
     parser.add_argument("--cert", default="cert.pem", help="Path to SSL certificate")
     parser.add_argument("--key", default="key.pem", help="Path to SSL private key")
@@ -783,12 +783,7 @@ def create_config_from_args(args) -> TelegripConfig:
     config.certfile = args.cert
     config.keyfile = args.key
     
-    # Handle port configuration - use command line args if provided, otherwise use config file values
-    if args.left_port or args.right_port:
-        config.follower_ports = {
-            "left": args.left_port if args.left_port else config_data["robot"]["left_arm"]["port"],
-            "right": args.right_port if args.right_port else config_data["robot"]["right_arm"]["port"]
-        }
+    
     
     return config
 
@@ -836,7 +831,6 @@ async def main():
         logger.info(f"  Auto-connect: {'enabled' if config.autoconnect else 'disabled'}")
         logger.info(f"  HTTPS Port: {config.https_port}")
         logger.info(f"  WebSocket Port: {config.websocket_port}")
-        logger.info(f"  Robot Ports: {config.follower_ports}")
     else:
         # Show clean startup message with HTTPS URL
         host_display = get_local_ip() if config.host_ip == "0.0.0.0" else config.host_ip
