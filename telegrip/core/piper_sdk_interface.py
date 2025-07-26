@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict
-import numpy as np
+
 try:
     from piper_sdk import C_PiperInterface_V2
 except ImportError:
@@ -18,7 +18,6 @@ RAD_TO_DEG = 1 / DEG_TO_RAD
 GRIPPER_ANGLE_MAX = 0.07  # 70mm
 
 
-
 class PiperSDKInterface:
     def __init__(self, port: str = "can0"):
         if C_PiperInterface_V2 is None:
@@ -31,12 +30,10 @@ class PiperSDKInterface:
 
         # Get the min and max positions for each joint and gripper
         angel_status = self.piper.GetAllMotorAngleLimitMaxSpd()
-        self.min_pos = [
-            pos.min_angle_limit for pos in angel_status.all_motor_angle_limit_max_spd.motor[1:7]
-        ] + [0]
-        self.max_pos = [
-            pos.max_angle_limit for pos in angel_status.all_motor_angle_limit_max_spd.motor[1:7]
-        ] + [10]  # Gripper max position in mm
+        self.min_pos = [pos.min_angle_limit for pos in angel_status.all_motor_angle_limit_max_spd.motor[1:7]] + [0]
+        self.max_pos = [pos.max_angle_limit for pos in angel_status.all_motor_angle_limit_max_spd.motor[1:7]] + [
+            10
+        ]  # Gripper max position in mm
 
     def set_joint_positions(self, positions):
 
@@ -76,7 +73,7 @@ class PiperSDKInterface:
         )
 
         return obs_dict
-    
+
     def get_connection_status(self):
         return self.piper.get_connect_status()
 

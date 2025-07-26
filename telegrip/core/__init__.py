@@ -8,7 +8,7 @@ from .visualizer import PyBulletVisualizer
 
 __all__ = [
     "RobotInterface",
-    "IKSolver", 
+    "IKSolver",
     "ForwardKinematics",
     "PyBulletVisualizer",
-] 
+]
