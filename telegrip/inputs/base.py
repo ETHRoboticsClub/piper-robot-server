@@ -26,6 +26,7 @@ class ControlGoal:
     mode: Optional[ControlMode] = None  # Control mode (None = no mode change)
     target_transform: Optional[np.ndarray] = None  # 4x4 transform matrix
     gripper_closed: Optional[bool] = None  # Gripper state (None = no change)
+    reset_to_initial: Optional[bool] = None  # Reset to initial position
 
     # Additional data for debugging/monitoring
     metadata: Optional[Dict[str, Any]] = None

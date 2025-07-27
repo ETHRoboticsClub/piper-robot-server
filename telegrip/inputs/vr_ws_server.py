@@ -169,6 +169,10 @@ class VRWebSocketServer(BaseInputProvider):
             await self.handle_trigger_release(hand)
             return
 
+        if data.get("resetEvent"):
+            await self.handle_reset_button_release(hand)
+            return
+
         # Process single controller data
         if hand and data.get("position") and (data.get("gripActive", False) or data.get("trigger", 0) > 0.5):
             await self.process_single_controller(hand, data)
@@ -279,6 +283,17 @@ class VRWebSocketServer(BaseInputProvider):
             await self.send_goal(goal)
 
             logger.info(f"🤏 {hand.upper()} gripper CLOSED (trigger released)")
+
+    async def handle_reset_button_release(self, hand: str):
+        """Handle X button release for a controller."""
+        goal = ControlGoal(
+            arm=hand,
+            reset_to_initial=True,
+            metadata={"source": "vr_reset_button_release"},
+        )
+        await self.send_goal(goal)
+
+        logger.info(f"🔓 {hand.upper()} reset button released - going to initial position")
 
 
 def convert_to_robot_convention(transform_vr: np.ndarray) -> np.ndarray:

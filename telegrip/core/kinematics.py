@@ -238,7 +238,7 @@ class Arm_IK:
 
             is_collision = self.check_self_collision(sol_q, gripper)
             dist = self.get_dist(sol_q, target_pose[:3, 3])
-            print("dist:", dist)
+            # print("dist:", dist)
             return sol_q, tau_ff, not is_collision
 
         except Exception as e:
@@ -254,7 +254,7 @@ class Arm_IK:
         return collision
 
     def get_dist(self, q, xyz):
-        print("q:", q)
+        # print("q:", q)
         pin.forwardKinematics(self.reduced_robot.model, self.reduced_robot.data, np.concatenate([q], axis=0))
         dist = math.sqrt(
             pow((xyz[0] - self.reduced_robot.data.oMi[6].translation[0]), 2)

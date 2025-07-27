@@ -12,6 +12,7 @@ from typing import Dict, Optional
 import numpy as np
 
 from .config import GRIPPER_INDEX, TelegripConfig
+from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface
 
 # PyBulletVisualizer will be imported on demand
@@ -26,6 +27,7 @@ class ArmState:
     def __init__(self, arm_name: str):
         self.arm_name = arm_name
         self.mode = ControlMode.IDLE
+        self.initial_pose = xyzrpy2transform(0.19, 0.0, 0.2, 0, 0, 0)
         self.origin_pose = None
         self.target_pose = None
 
@@ -112,23 +114,34 @@ class ControlLoop:
         self._initialize_arm_states()
 
         # Main control loop
+        start_time = time.time()
         while self.is_running:
             try:
                 # Process command queue
+                start_time_commands = time.time()
                 await self._process_commands()
+                time_taken_commands = time.time() - start_time_commands
+                print(
+                    f"Process commands time: {time_taken_commands} seconds, which is {1 / time_taken_commands:.2f} Hz"
+                )
 
                 # Update robot (with error resilience)
+                start_time_robot = time.time()
                 self._update_robot_safely()
-
-                # Update visualization
-                if self.visualizer:
-                    self._update_visualization()
-
-                # Periodic logging
-                self._periodic_logging()
+                time_taken_robot = time.time() - start_time_robot
+                print(f"Update robot time: {time_taken_robot} seconds, which is {1 / time_taken_robot:.2f} Hz")
 
                 # Control rate
+                start_time_sleep = time.time()
                 await asyncio.sleep(self.config.send_interval)
+                time_taken_sleep = time.time() - start_time_sleep
+                print(f"Sleep time: {time_taken_sleep} seconds, which is {1 / time_taken_sleep:.2f} Hz")
+
+                time_taken = time.time() - start_time
+                print(
+                    f"Control loop time: {time_taken} seconds, which is {1 / time_taken:.2f} Hz \n =============================================="
+                )
+                start_time = time.time()
 
             except Exception as e:
                 logger.error(f"Error in control loop: {e}")
@@ -312,6 +325,12 @@ class ControlLoop:
         if goal.gripper_closed is not None and self.robot_interface:
             self.robot_interface.set_gripper(goal.arm, goal.gripper_closed)
 
+        if goal.reset_to_initial is not None and goal.reset_to_initial:
+            arm_state.mode = ControlMode.POSITION_CONTROL
+            arm_state.target_pose = arm_state.initial_pose
+            arm_state.origin_pose = arm_state.initial_pose
+            logger.info(f"🔓 {goal.arm.upper()} arm: Target position RESET to initial position")
+
     def _update_robot_safely(self):
         """Update robot with current control goals (with error handling)."""
         if not self.robot_interface:
@@ -332,7 +351,10 @@ class ControlLoop:
         if self.left_arm.mode == ControlMode.POSITION_CONTROL and self.left_arm.target_pose is not None:
 
             # Solve IK
+            start_time_ik = time.time()
             ik_solution = self.robot_interface.solve_ik("left", self.left_arm.target_pose)
+            time_taken_ik = time.time() - start_time_ik
+            print(f"IK time (left): {time_taken_ik} seconds, which is {1 / time_taken_ik:.2f} Hz")
 
             # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("left")[GRIPPER_INDEX]
@@ -342,7 +364,10 @@ class ControlLoop:
         if self.right_arm.mode == ControlMode.POSITION_CONTROL and self.right_arm.target_pose is not None:
 
             # Solve IK
+            start_time_ik = time.time()
             ik_solution = self.robot_interface.solve_ik("right", self.right_arm.target_pose)
+            time_taken_ik = time.time() - start_time_ik
+            print(f"IK time (right): {time_taken_ik} seconds, which is {1 / time_taken_ik:.2f} Hz")
 
             # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("right")[GRIPPER_INDEX]
@@ -350,7 +375,10 @@ class ControlLoop:
 
         # Send commands to robot
         if self.robot_interface.is_connected and self.robot_interface.is_engaged:
+            start_time_send = time.time()
             self.robot_interface.send_command()
+            time_taken_send = time.time() - start_time_send
+            print(f"Send time: {time_taken_send} seconds, which is {1 / time_taken_send:.2f} Hz")
 
     def _update_visualization(self):
         """Update PyBullet visualization."""

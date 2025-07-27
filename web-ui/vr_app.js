@@ -16,6 +16,8 @@ AFRAME.registerComponent('controller-updater', {
     this.rightGripDown = false;
     this.leftTriggerDown = false;
     this.rightTriggerDown = false;
+    this.leftXButtonDown = false;
+    this.rightAButtonDown = false;
 
     // --- Status reporting ---
     this.lastStatusUpdate = 0;
@@ -132,6 +134,32 @@ AFRAME.registerComponent('controller-updater', {
       }
     };
 
+    // --- Helper function to send X button release message ---
+    this.sendXButtonRelease = (hand) => {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        const releaseMessage = {
+          hand: hand,
+          xButtonReleased: true,
+          resetEvent: true
+        };
+        this.websocket.send(JSON.stringify(releaseMessage));
+        console.log(`Sent X button release (reset event) for ${hand} hand`);
+      }
+    };
+
+    // --- Helper function to send A button release message ---
+    this.sendAButtonRelease = (hand) => {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        const releaseMessage = {
+          hand: hand,
+          aButtonReleased: true,
+          resetEvent: true
+        };
+        this.websocket.send(JSON.stringify(releaseMessage));
+        console.log(`Sent A button release (reset event) for ${hand} hand`);
+      }
+    };
+
     // --- Helper function to calculate relative rotation ---
     this.calculateRelativeRotation = (currentRotation, initialRotation) => {
       return {
@@ -224,6 +252,16 @@ AFRAME.registerComponent('controller-updater', {
         this.sendGripRelease('left'); // Send grip release message
     });
 
+    this.leftHand.addEventListener('xbuttondown', (evt) => {
+        console.log('Left X Button Pressed (Reset Event)');
+        this.leftXButtonDown = true;
+    });
+    this.leftHand.addEventListener('xbuttonup', (evt) => {
+        console.log('Left X Button Released (Reset Event)');
+        this.leftXButtonDown = false;
+        this.sendXButtonRelease('left'); // Send X button release message
+    });
+
     this.rightHand.addEventListener('triggerdown', (evt) => {
         console.log('Right Trigger Pressed');
         this.rightTriggerDown = true;
@@ -262,6 +300,17 @@ AFRAME.registerComponent('controller-updater', {
         this.rightZAxisRotation = 0; // Reset Z-axis rotation
         this.sendGripRelease('right'); // Send grip release message
     });
+    // --- End Modify Event Listeners ---
+
+    this.rightHand.addEventListener('abuttondown', (evt) => {
+      console.log('Right A Button Pressed (Reset Event)');
+      this.rightAButtonDown = true;
+  });
+  this.rightHand.addEventListener('abuttonup', (evt) => {
+      console.log('Right A Button Released (Reset Event)');
+      this.rightAButtonDown = false;
+      this.sendAButtonRelease('right'); // Send A button release message
+  });
     // --- End Modify Event Listeners ---
 
   },
@@ -405,7 +454,8 @@ AFRAME.registerComponent('controller-updater', {
         position: null,
         rotation: null,
         gripActive: false,
-        trigger: 0
+        trigger: 0,
+        xButtonDown: false
     };
     
     const rightController = {
@@ -413,7 +463,8 @@ AFRAME.registerComponent('controller-updater', {
         position: null,
         rotation: null,
         gripActive: false,
-        trigger: 0
+        trigger: 0,
+        aButtonDown: false
     };
 
     // Update Left Hand Text & Collect Data
@@ -465,6 +516,7 @@ AFRAME.registerComponent('controller-updater', {
         };
         leftController.trigger = this.leftTriggerDown ? 1 : 0;
         leftController.gripActive = this.leftGripDown;
+        leftController.xButtonDown = this.leftXButtonDown;
     }
 
     // Update Right Hand Text & Collect Data
@@ -516,6 +568,7 @@ AFRAME.registerComponent('controller-updater', {
         };
         rightController.trigger = this.rightTriggerDown ? 1 : 0;
         rightController.gripActive = this.rightGripDown;
+        rightController.aButtonDown = this.rightAButtonDown;
     }
 
     // Send combined packet if WebSocket is open and at least one controller has valid data
