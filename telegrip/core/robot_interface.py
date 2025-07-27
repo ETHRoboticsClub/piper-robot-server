@@ -8,14 +8,14 @@ import logging
 import os
 import sys
 import time
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import pinocchio as pin
 from piper_control import piper_connect
 
 from ..config import NUM_JOINTS, TelegripConfig
-from .geometry import transform2pose
+from .geometry import transform2pose, xyzrpy2transform
 from .kinematics import Arm_IK
 from .piper import Piper, PiperConfig
 
@@ -132,6 +132,7 @@ class RobotInterface:
 
             # Connect left arm
             try:
+                piper_connect.find_ports()
                 piper_connect.activate()
                 if should_suppress:
                     with suppress_stdout_stderr():
@@ -226,6 +227,27 @@ class RobotInterface:
         for arm in ["left", "right"]:
             self.ik_solvers[arm] = Arm_IK(self.config.urdf_path)
         logger.info("Kinematics solvers initialized for both arms")
+
+    def get_end_effector_transform(self, arm: str) -> np.ndarray:
+        """Get end effector pose for specified arm.
+
+        Returns:
+            np.ndarray: 4x4 transform matrix.
+        """
+        if arm == "left":
+            return (
+                self.left_robot.get_end_effector_transform()
+                if self.left_robot
+                else xyzrpy2transform(0.19, 0.0, 0.2, 0.0, 0.0, 0.0)
+            )
+        elif arm == "right":
+            return (
+                self.right_robot.get_end_effector_transform()
+                if self.right_robot
+                else xyzrpy2transform(0.19, 0.0, 0.2, 0.0, 0.0, 0.0)
+            )
+        else:
+            raise ValueError(f"Invalid arm: {arm}")
 
     def solve_ik(self, arm: str, target_pose: np.ndarray) -> np.ndarray:
         """Solve inverse kinematics for specified arm."""

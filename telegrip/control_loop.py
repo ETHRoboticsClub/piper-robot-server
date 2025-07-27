@@ -12,7 +12,6 @@ from typing import Dict, Optional
 import numpy as np
 
 from .config import GRIPPER_INDEX, TelegripConfig
-from .core.geometry import pose2transform
 from .core.robot_interface import RobotInterface
 
 # PyBulletVisualizer will be imported on demand
@@ -27,7 +26,7 @@ class ArmState:
     def __init__(self, arm_name: str):
         self.arm_name = arm_name
         self.mode = ControlMode.IDLE
-        self.origin_pose = pose2transform(np.array([0.19, 0.0, 0.2]), np.array([0.0, 0.0, 0.0, 1.0]))
+        self.origin_pose = None
         self.target_pose = None
 
     def reset(self):
@@ -47,7 +46,7 @@ class ControlLoop:
         self.config = config
 
         # Components
-        self.robot_interface = None
+        self.robot_interface: Optional[RobotInterface] = None
         self.visualizer = None
         self.keyboard_listener = None  # Reference to keyboard listener for commands
 
@@ -288,7 +287,9 @@ class ControlLoop:
         if goal.mode is not None and goal.mode != arm_state.mode:
             if goal.mode == ControlMode.POSITION_CONTROL:
                 arm_state.mode = ControlMode.POSITION_CONTROL
-                arm_state.target_pose = arm_state.origin_pose.copy()
+                current_transform = self.robot_interface.get_end_effector_transform(goal.arm)
+                arm_state.target_pose = current_transform
+                arm_state.origin_pose = current_transform
                 # Activate position control - always reset target to initial pose
                 logger.info(f"🔒 {goal.arm.upper()} arm: Position control ACTIVATED (target reset to initial pose)")
 

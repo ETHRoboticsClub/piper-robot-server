@@ -3,10 +3,12 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 from lerobot.cameras import CameraConfig, make_cameras_from_configs
 from lerobot.cameras.opencv import OpenCVCameraConfig
 from lerobot.robots import Robot, RobotConfig
 
+from .geometry import xyzrpy2transform
 from .piper_sdk_interface import PiperSDKInterface
 
 
@@ -83,6 +85,16 @@ class Piper(Robot):
         for cam_key, cam in self.cameras.items():
             obs_dict[cam_key] = cam.async_read()
         return obs_dict
+
+    def get_end_effector_transform(self) -> np.ndarray:
+
+        raw_pose = self.sdk.get_end_effector_pose()
+        raw_transform = xyzrpy2transform(
+            raw_pose["x"], raw_pose["y"], raw_pose["z"], raw_pose["roll"], raw_pose["pitch"], raw_pose["yaw"]
+        )
+        link6_to_gripper_transform = xyzrpy2transform(0.0, 0.0, 0.13, 0.0, -1.57, 0.0)
+        gripper_transform = raw_transform @ link6_to_gripper_transform
+        return gripper_transform
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
         # map the action from the leader to joints for the follower

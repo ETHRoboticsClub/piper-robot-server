@@ -3,6 +3,8 @@
 import time
 from typing import Any, Dict
 
+import numpy as np
+
 try:
     from piper_sdk import C_PiperInterface_V2
 except ImportError:
@@ -74,9 +76,24 @@ class PiperSDKInterface:
 
         return obs_dict
 
+    def get_end_effector_pose(self) -> Dict[str, float]:
+        """
+        Returns the current end-effector pose as a sequence of floats.
+
+        Returns:
+        Sequence[float]: (x, y, z, roll, pitch, yaw) in meters and radians.
+        """
+        pose = self.piper.GetArmEndPoseMsgs()
+        x = pose.end_pose.X_axis * 1e-6  # Convert from mm to m
+        y = pose.end_pose.Y_axis * 1e-6
+        z = pose.end_pose.Z_axis * 1e-6
+        roll = pose.end_pose.RX_axis * 1e-3 * DEG_TO_RAD
+        pitch = pose.end_pose.RY_axis * 1e-3 * DEG_TO_RAD
+        yaw = pose.end_pose.RZ_axis * 1e-3 * DEG_TO_RAD
+        return {"x": x, "y": y, "z": z, "roll": roll, "pitch": pitch, "yaw": yaw}
+
     def get_connection_status(self):
         return self.piper.get_connect_status()
 
     def disconnect(self):
-        # No explicit disconnect
-        pass
+        self.piper.DisconnectPort()
