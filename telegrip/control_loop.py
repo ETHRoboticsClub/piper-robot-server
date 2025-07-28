@@ -114,34 +114,39 @@ class ControlLoop:
         self._initialize_arm_states()
 
         # Main control loop
-        start_time = time.time()
         while self.is_running:
             try:
+                # Start timing the entire iteration
+                iteration_start = time.time()
+
                 # Process command queue
-                start_time_commands = time.time()
+                commands_start = time.time()
                 await self._process_commands()
-                time_taken_commands = time.time() - start_time_commands
-                print(
-                    f"Process commands time: {time_taken_commands} seconds, which is {1 / time_taken_commands:.2f} Hz"
-                )
+                commands_time = time.time() - commands_start
 
                 # Update robot (with error resilience)
-                start_time_robot = time.time()
+                robot_start = time.time()
                 self._update_robot_safely()
-                time_taken_robot = time.time() - start_time_robot
-                print(f"Update robot time: {time_taken_robot} seconds, which is {1 / time_taken_robot:.2f} Hz")
+                robot_time = time.time() - robot_start
 
                 # Control rate
-                start_time_sleep = time.time()
+                sleep_start = time.time()
                 await asyncio.sleep(self.config.send_interval)
-                time_taken_sleep = time.time() - start_time_sleep
-                print(f"Sleep time: {time_taken_sleep} seconds, which is {1 / time_taken_sleep:.2f} Hz")
+                sleep_time = time.time() - sleep_start
 
-                time_taken = time.time() - start_time
+                # Calculate total and overhead
+                total_time = time.time() - iteration_start
+                overhead_time = total_time - commands_time - robot_time - sleep_time
+
+                # Single consolidated print statement
                 print(
-                    f"Control loop time: {time_taken} seconds, which is {1 / time_taken:.2f} Hz \n =============================================="
+                    f"Loop: {total_time*1000:.1f}ms ({1/total_time:.1f}Hz) | "
+                    f"Cmd: {commands_time*1000:.1f}ms | "
+                    f"Robot: {robot_time*1000:.1f}ms | "
+                    f"Sleep: {sleep_time*1000:.1f}ms | "
+                    f"Overhead: {overhead_time*1000:.1f}ms"
+                    "\n================================================================================="
                 )
-                start_time = time.time()
 
             except Exception as e:
                 logger.error(f"Error in control loop: {e}")
@@ -315,6 +320,7 @@ class ControlLoop:
 
         # Handle position control - both VR and keyboard now work the same way (absolute offset from origin)
         if goal.target_transform is not None and arm_state.mode == ControlMode.POSITION_CONTROL:
+            print("### Control Active ####")
             if goal.metadata and goal.metadata.get("relative_transform", False):
                 # Both VR and keyboard send absolute offset from robot origin position
                 arm_state.target_pose = np.dot(arm_state.origin_pose, goal.target_transform)
@@ -344,41 +350,42 @@ class ControlLoop:
 
     def _update_robot(self):
         """Update robot with current control goals."""
+        start_time_total = time.time()
+
         if not self.robot_interface:
             return
 
-        # Update left arm (only if connected)
+        # Measure all IK time together
+        start_time_ik = time.time()
+
+        # Left arm IK
         if self.left_arm.mode == ControlMode.POSITION_CONTROL and self.left_arm.target_pose is not None:
-
-            # Solve IK
-            start_time_ik = time.time()
             ik_solution = self.robot_interface.solve_ik("left", self.left_arm.target_pose)
-            time_taken_ik = time.time() - start_time_ik
-            print(f"IK time (left): {time_taken_ik} seconds, which is {1 / time_taken_ik:.2f} Hz")
-
-            # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("left")[GRIPPER_INDEX]
             self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
 
-        # Update right arm (only if connected)
+        # Right arm IK
         if self.right_arm.mode == ControlMode.POSITION_CONTROL and self.right_arm.target_pose is not None:
-
-            # Solve IK
-            start_time_ik = time.time()
             ik_solution = self.robot_interface.solve_ik("right", self.right_arm.target_pose)
-            time_taken_ik = time.time() - start_time_ik
-            print(f"IK time (right): {time_taken_ik} seconds, which is {1 / time_taken_ik:.2f} Hz")
-
-            # Update robot angles
             current_gripper = self.robot_interface.get_arm_angles("right")[GRIPPER_INDEX]
             self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
 
-        # Send commands to robot
+        ik_time = time.time() - start_time_ik
+
+        # Send commands
+        start_time_send = time.time()
         if self.robot_interface.is_connected and self.robot_interface.is_engaged:
-            start_time_send = time.time()
             self.robot_interface.send_command()
-            time_taken_send = time.time() - start_time_send
-            print(f"Send time: {time_taken_send} seconds, which is {1 / time_taken_send:.2f} Hz")
+        send_time = time.time() - start_time_send
+
+        total_time = time.time() - start_time_total
+        overhead_time = total_time - ik_time - send_time
+
+        # Print all at once to minimize timing impact
+        print(
+            f"IK: {ik_time*1000:.1f}ms, CAN: {send_time*1000:.1f}ms, "
+            f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
+        )
 
     def _update_visualization(self):
         """Update PyBullet visualization."""

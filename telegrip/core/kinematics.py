@@ -5,7 +5,7 @@ Contains forward and inverse kinematics solvers using PyBullet.
 
 import logging
 import math
-import os
+import time
 
 import casadi
 import meshcat.geometry as mg
@@ -199,12 +199,13 @@ class Arm_IK:
         self.opti.solver("ipopt", opts)
 
     def ik_fun(self, target_pose, gripper=0, motorstate=None, motorV=None):
+        start_time = time.time()
         gripper = np.array([gripper / 2.0, -gripper / 2.0])
         if motorstate is not None:
             self.init_data = motorstate
         self.opti.set_initial(self.var_q, self.init_data)
 
-        self.vis.viewer["ee_target"].set_transform(target_pose)  # for visualization
+        # self.vis.viewer["ee_target"].set_transform(target_pose)  # for visualization
 
         self.opti.set_value(self.param_tf, target_pose)
         # self.opti.set_value(self.var_q_last, self.init_data) # for smooth
@@ -225,7 +226,9 @@ class Arm_IK:
                 self.init_data = sol_q
             self.history_data = sol_q
 
-            self.vis.display(sol_q)  # for visualization
+            # self.vis.display(sol_q)  # for visualization
+            end_time = time.time()
+            print(f"IK mobile timer: {end_time - start_time} seconds")
 
             if motorV is not None:
                 v = motorV * 0.0

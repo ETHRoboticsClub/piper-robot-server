@@ -8,11 +8,10 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import pinocchio as pin
-from piper_control import piper_connect
 
 from ..config import NUM_JOINTS, TelegripConfig
 from .geometry import transform2pose, xyzrpy2transform
@@ -97,11 +96,11 @@ class RobotInterface:
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
 
-        left_config = PiperConfig(port="can0", cameras={})
+        left_config = PiperConfig(port="left_piper", cameras={})
         # Set the robot name for calibration file lookup
         left_config.id = "left_follower"
 
-        right_config = PiperConfig(port="can1", cameras={})
+        right_config = PiperConfig(port="right_piper", cameras={})
         # Set the robot name for calibration file lookup
         right_config.id = "right_follower"
 
@@ -132,8 +131,6 @@ class RobotInterface:
 
             # Connect left arm
             try:
-                piper_connect.find_ports()
-                piper_connect.activate()
                 if should_suppress:
                     with suppress_stdout_stderr():
                         self.left_robot = Piper(left_config)
