@@ -11,25 +11,27 @@ from typing import Any, Dict, Literal, Optional
 import numpy as np
 
 
-class ControlMode(Enum):
-    """Control modes for the teleoperation system."""
+class EventType(Enum):
+    """Control goal types."""
 
-    POSITION_CONTROL = "position"
-    IDLE = "idle"
+    IDLE = "idle"  # No button on vr controller pressed
+    GRIP_ACTIVE_INIT = "grip_active_init"  # Grip button pressed first time
+    GRIP_ACTIVE = "grip_active"  # Grip button held
+    GRIP_RELEASE = "grip_release"  # Grip button released
+    TRIGGER_ACTIVE = "trigger_active"  # Trigger button pressed
+    TRIGGER_RELEASE = "trigger_release"  # Trigger button released
+    RESET_BUTTON_RELEASE = "reset_button_release"  # Reset button released
 
 
 @dataclass
 class ControlGoal:
-    """High-level control goal message sent from input providers."""
+    """Control goal."""
 
-    arm: Literal["left", "right"]
-    mode: Optional[ControlMode] = None  # Control mode (None = no mode change)
-    target_transform: Optional[np.ndarray] = None  # 4x4 transform matrix
-    gripper_closed: Optional[bool] = None  # Gripper state (None = no change)
-    reset_to_initial: Optional[bool] = None  # Reset to initial position
-
-    # Additional data for debugging/monitoring
-    metadata: Optional[Dict[str, Any]] = None
+    event_type: EventType
+    arm: str
+    vr_reference_transform: Optional[np.ndarray] = None
+    vr_target_transform: Optional[np.ndarray] = None
+    gripper_closed: Optional[bool] = None
 
 
 class BaseInputProvider(ABC):

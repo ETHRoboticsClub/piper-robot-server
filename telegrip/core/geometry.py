@@ -88,3 +88,15 @@ def xyzrpy2transform(x: float, y: float, z: float, roll: float, pitch: float, ya
     transformation_matrix[3, 2] = 0
     transformation_matrix[3, 3] = 1
     return transformation_matrix
+
+
+def convert_to_robot_convention(transform_vr: np.ndarray) -> np.ndarray:
+    """Convert position and quaternion to robot convention."""
+
+    adj_mat = np.array([[0, 0, -1, 0], [-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+
+    # TODO: figure out what this weird transform is
+    r_adj = xyzrpy2transform(0, 0, 0, -np.pi, 0, -np.pi / 2)
+    transform_robot = adj_mat @ transform_vr
+    transform_robot = np.dot(transform_robot, r_adj)
+    return transform_robot
