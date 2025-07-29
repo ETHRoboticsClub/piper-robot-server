@@ -246,7 +246,7 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
 
-    def solve_ik(self, arm: str, target_pose: np.ndarray) -> np.ndarray:
+    def solve_ik(self, arm: str, target_pose: np.ndarray, visualize: bool) -> np.ndarray:
         """Solve inverse kinematics for specified arm."""
         position, quaternion = transform2pose(target_pose)
         # TODO: check if it is xyzw or wxyz
@@ -254,7 +254,7 @@ class RobotInterface:
             pin.Quaternion(quaternion[3], quaternion[0], quaternion[1], quaternion[2]),
             position,
         )
-        sol_q, tau_ff, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0)
+        sol_q, tau_ff, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
         return sol_q
 
     def update_arm_angles(self, arm: str, joint_angles: np.ndarray):

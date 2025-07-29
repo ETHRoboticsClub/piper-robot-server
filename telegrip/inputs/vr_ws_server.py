@@ -6,17 +6,16 @@ Adapted from the original vr_robot_teleop.py script.
 import asyncio
 import json
 import logging
-import math
 import ssl
-from typing import Dict, Optional, Set, Tuple
+import time
+from typing import Dict, Optional, Set
 
 import numpy as np
 import websockets
-from scipy.spatial.transform import Rotation as R
 
 from ..config import TelegripConfig
-from ..core.geometry import pose2transform, transform2pose, xyzrpy2transform
-from .base import BaseInputProvider, ControlGoal, ControlMode
+from ..core.geometry import pose2transform
+from .base import BaseInputProvider, ControlGoal, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +54,10 @@ class VRWebSocketServer(BaseInputProvider):
         self.left_controller = VRControllerState("left")
         self.right_controller = VRControllerState("right")
 
+        # Simple frequency tracking
+        self.msg_count = 0
+        self.start_time = None
+
     def setup_ssl(self) -> Optional[ssl.SSLContext]:
         """Setup SSL context for WebSocket server."""
         # Automatically generate SSL certificates if they don't exist
@@ -77,10 +80,6 @@ class VRWebSocketServer(BaseInputProvider):
 
     async def start(self):
         """Start the WebSocket server."""
-        if not self.config.enable_vr:
-            logger.info("VR WebSocket server disabled in configuration")
-            return
-
         ssl_context = self.setup_ssl()
         if ssl_context is None:
             logger.error("Failed to setup SSL for WebSocket server")
@@ -112,9 +111,23 @@ class VRWebSocketServer(BaseInputProvider):
 
         try:
             async for message in websocket:
+                start_time = time.time()
                 try:
+                    # Simple frequency tracking
+                    self.msg_count += 1
+                    if self.start_time is None:
+                        self.start_time = time.time()
+                    elif self.msg_count % 100 == 0:  # Log every 100 messages
+                        elapsed = time.time() - self.start_time
+                        freq = self.msg_count / elapsed
+                        print(f"📊 Message frequency: {freq:.1f} Hz ({self.msg_count} msgs)")
+                        self.msg_count = 0
+                        self.start_time = None
+
                     data = json.loads(message)
                     await self.process_controller_data(data)
+                    end_time = time.time()
+                    print(f"🕒 VR message processing time: {(end_time - start_time)*1000:.1f}ms")
                 except json.JSONDecodeError:
                     logger.warning(f"Received non-JSON message: {message}")
                 except Exception as e:
@@ -173,10 +186,6 @@ class VRWebSocketServer(BaseInputProvider):
             await self.handle_reset_button_release(hand)
             return
 
-        # Process single controller data
-        if hand and data.get("position") and (data.get("gripActive", False) or data.get("trigger", 0) > 0.5):
-            await self.process_single_controller(hand, data)
-
     async def process_single_controller(self, hand: str, data: Dict):
         """Process data for a single controller."""
         position = data.get("position", {})
@@ -187,9 +196,7 @@ class VRWebSocketServer(BaseInputProvider):
         assert quaternion is not None and all(k in quaternion for k in ["x", "y", "z", "w"]), "Quaternion data missing"
         quaternion = np.array([quaternion["x"], quaternion["y"], quaternion["z"], quaternion["w"]])
         position = np.array([position["x"], position["y"], position["z"]])
-
         transform = pose2transform(position, quaternion)
-        transform = convert_to_robot_convention(transform)
 
         controller = self.left_controller if hand == "left" else self.right_controller
 
@@ -201,9 +208,9 @@ class VRWebSocketServer(BaseInputProvider):
             # Send gripper control goal - do not specify mode to avoid interfering with position control
             # Reverse behavior: gripper open by default, closes when trigger pressed
             gripper_goal = ControlGoal(
+                event_type=(EventType.TRIGGER_ACTIVE if trigger_active else EventType.TRIGGER_RELEASE),
                 arm=hand,
                 gripper_closed=not trigger_active,  # Inverted: closed when trigger NOT active
-                metadata={"source": "vr_trigger"},
             )
             await self.send_goal(gripper_goal)
 
@@ -218,13 +225,8 @@ class VRWebSocketServer(BaseInputProvider):
 
                 # Send reset signal to control loop to reset target position to current robot position
                 reset_goal = ControlGoal(
+                    event_type=EventType.GRIP_ACTIVE_INIT,
                     arm=hand,
-                    mode=ControlMode.POSITION_CONTROL,  # Keep in position control
-                    target_transform=None,  # Special signal
-                    metadata={
-                        "source": f"vr_grip_reset_{hand}",
-                        "reset_target_to_zero": True,  # Signal to reset target to current position
-                    },
                 )
                 await self.send_goal(reset_goal)
 
@@ -234,18 +236,13 @@ class VRWebSocketServer(BaseInputProvider):
 
             # Compute target position
             if controller.origin_transform is not None:
-                relative_transform = compute_relative_transform(transform, controller.origin_transform)
 
                 # Create control goal with relative transform
                 goal = ControlGoal(
+                    event_type=EventType.GRIP_ACTIVE,
                     arm=hand,
-                    mode=ControlMode.POSITION_CONTROL,
-                    target_transform=relative_transform,
-                    metadata={
-                        "source": "vr_grip",
-                        "relative_transform": True,
-                        "origin_transform": controller.origin_transform.copy(),
-                    },
+                    vr_reference_transform=controller.origin_transform,
+                    vr_target_transform=transform,
                 )
                 await self.send_goal(goal)
 
@@ -262,7 +259,10 @@ class VRWebSocketServer(BaseInputProvider):
             controller.reset_grip()
 
             # Send idle goal to stop arm control
-            goal = ControlGoal(arm=hand, mode=ControlMode.IDLE, metadata={"source": "vr_grip_release"})
+            goal = ControlGoal(
+                event_type=EventType.GRIP_RELEASE,
+                arm=hand,
+            )
             await self.send_goal(goal)
 
             logger.info(f"🔓 {hand.upper()} grip released - arm control stopped")
@@ -276,9 +276,9 @@ class VRWebSocketServer(BaseInputProvider):
 
             # Send gripper closed goal - reversed behavior: gripper closes when trigger released
             goal = ControlGoal(
+                event_type=EventType.TRIGGER_RELEASE,
                 arm=hand,
                 gripper_closed=True,  # Close gripper when trigger released
-                metadata={"source": "vr_trigger_release"},
             )
             await self.send_goal(goal)
 
@@ -287,27 +287,9 @@ class VRWebSocketServer(BaseInputProvider):
     async def handle_reset_button_release(self, hand: str):
         """Handle X button release for a controller."""
         goal = ControlGoal(
+            event_type=EventType.RESET_BUTTON_RELEASE,
             arm=hand,
-            reset_to_initial=True,
-            metadata={"source": "vr_reset_button_release"},
         )
         await self.send_goal(goal)
 
         logger.info(f"🔓 {hand.upper()} reset button released - going to initial position")
-
-
-def convert_to_robot_convention(transform_vr: np.ndarray) -> np.ndarray:
-    """Convert position and quaternion to robot convention."""
-
-    adj_mat = np.array([[0, 0, -1, 0], [-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-
-    # TODO: figure out what this weird transform is
-    r_adj = xyzrpy2transform(0, 0, 0, -np.pi, 0, -np.pi / 2)
-    transform_robot = adj_mat @ transform_vr
-    transform_robot = np.dot(transform_robot, r_adj)
-    return transform_robot
-
-
-def compute_relative_transform(current_transform: np.ndarray, origin_transform: np.ndarray) -> np.ndarray:
-    """Compute relative transform from VR origin to current position."""
-    return np.linalg.inv(origin_transform) @ current_transform

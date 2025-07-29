@@ -4,11 +4,28 @@ Utility functions for the teleoperation system.
 
 import logging
 import os
+import socket
 import subprocess
 from pathlib import Path
-from typing import Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def get_local_ip():
+    """Get the local IP address of this machine."""
+    try:
+        # Connect to a remote address to determine the local IP
+        # This doesn't actually send any data
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        try:
+            # Fallback: get hostname IP
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            # Final fallback
+            return "localhost"
 
 
 def get_package_dir() -> Path:
