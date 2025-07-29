@@ -10,7 +10,7 @@ import ssl
 import threading
 
 from .config import TelegripConfig, config
-from .control_loop import control_loop
+from .control_loop import ControlLoop
 from .inputs.vr_ws_server import VRWebSocketServer
 from .utils import get_local_ip
 
@@ -140,7 +140,7 @@ class HTTPSServer:
 
             # Only log if INFO level or more verbose
             if getattr(logging, self.config.log_level.upper()) <= logging.INFO:
-                logger.info(f"HTTPS server started on {self.config.host_ip}:{self.config.https_port}")
+                logger.info(f"HTTPS server started on {self.config.host_ip}:" f"{self.config.https_port}")
 
         except Exception as e:
             logger.error(f"Failed to start HTTPS server: {e}")
@@ -161,39 +161,72 @@ async def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
+    parser.add_argument(
+        "--log-level",
+        default="info",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Set logging level",
+    )
 
     args = parser.parse_args()
+
+    # Configure logging
+    log_level = getattr(logging, args.log_level.upper())
+    logging.basicConfig(level=log_level, format="%(asctime)s - %(message)s", datefmt="%H:%M:%S")
+
     robot_enabled = not args.no_robot
     visualize = args.vis
     host_display = get_local_ip() if config.host_ip == "0.0.0.0" else config.host_ip
-    print(f"🤖 telegrip starting...")
-    print(f"📱 Open the UI in your browser on:")
-    print(f"   https://{host_display}:{config.https_port}")
-    print(f"📱 Then go to the same address on your VR headset browser")
-    print(f"💡 Use --log-level info to see detailed output")
-    print()
+    logging.info("🤖 telegrip starting...")
+    logging.info("📱 Open the UI in your browser on:")
+    logging.info(f"   https://{host_display}:{config.https_port}")
+    logging.info("📱 Then go to the same address on your VR headset browser")
+    logging.info("💡 Use --log-level info to see detailed output")
+    logging.info("")
 
-    command_queue = asyncio.Queue()
-    https_server = HTTPSServer(config)
-    vr_server = VRWebSocketServer(command_queue, config)
+    try:
+        command_queue = asyncio.Queue()
+        https_server = HTTPSServer(config)
+        vr_server = VRWebSocketServer(command_queue, config)
+        control_loop = ControlLoop(config, robot_enabled, visualize)
 
-    await https_server.start()
-    await vr_server.start()
+        await https_server.start()
+        await vr_server.start()
+        control_loop_task = asyncio.create_task(control_loop.run(command_queue))
+        await asyncio.gather(control_loop_task)
 
-    control_loop_task = asyncio.create_task(control_loop(command_queue, config, robot_enabled, visualize))
+    except KeyboardInterrupt:
+        logging.info("\n🛑 Keyboard interrupt. Shutting down...")
+    except asyncio.CancelledError:
+        logging.info("\n🛑 Task cancelled. Shutting down...")
+    except Exception as e:
+        logging.error(f"🚨 Unexpected error: {e}")
+    finally:
+        try:
+            control_loop_task.cancel()
+            try:
+                await asyncio.wait_for(asyncio.gather(control_loop_task, return_exceptions=True), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Some tasks did not complete within timeout")
+            except KeyboardInterrupt:
+                logger.warning("Cleanup interrupted, forcing shutdown")
 
-    await asyncio.gather(control_loop_task)
+            await vr_server.stop()
+            await https_server.stop()
+            await control_loop.stop()
+            logging.info("✅ Shutdown complete.")
 
-    await vr_server.stop()
-    await https_server.stop()
-    control_loop_task.cancel()
+        except KeyboardInterrupt:
+            logger.warning("Cleanup forcibly interrupted")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
 
 
 def main_cli():
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("👋 telegrip stopped")
+        logging.info("👋 telegrip stopped")
 
 
 if __name__ == "__main__":

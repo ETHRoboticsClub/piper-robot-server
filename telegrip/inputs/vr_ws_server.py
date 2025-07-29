@@ -108,26 +108,29 @@ class VRWebSocketServer(BaseInputProvider):
         client_address = websocket.remote_address
         logger.info(f"VR client connected: {client_address}")
         self.clients.add(websocket)
-
+        vr_connected = False
         try:
             async for message in websocket:
-                start_time = time.time()
+                start_time = time.perf_counter()
+                if not vr_connected:
+                    vr_connected = True
+                    logger.info("👋 VR message received")
                 try:
                     # Simple frequency tracking
                     self.msg_count += 1
                     if self.start_time is None:
-                        self.start_time = time.time()
+                        self.start_time = time.perf_counter()
                     elif self.msg_count % 100 == 0:  # Log every 100 messages
-                        elapsed = time.time() - self.start_time
+                        elapsed = time.perf_counter() - self.start_time
                         freq = self.msg_count / elapsed
-                        print(f"📊 Message frequency: {freq:.1f} Hz ({self.msg_count} msgs)")
+                        logger.debug(f"📊 Message frequency: {freq:.1f} Hz ({self.msg_count} msgs)")
                         self.msg_count = 0
                         self.start_time = None
 
                     data = json.loads(message)
                     await self.process_controller_data(data)
-                    end_time = time.time()
-                    print(f"🕒 VR message processing time: {(end_time - start_time)*1000:.1f}ms")
+                    end_time = time.perf_counter()
+                    logger.debug(f"🕒 VR message processing time: {(end_time - start_time)*1000:.1f}ms")
                 except json.JSONDecodeError:
                     logger.warning(f"Received non-JSON message: {message}")
                 except Exception as e:
@@ -214,7 +217,9 @@ class VRWebSocketServer(BaseInputProvider):
             )
             await self.send_goal(gripper_goal)
 
-            logger.info(f"🤏 {hand.upper()} gripper {'OPENED' if trigger_active else 'CLOSED'}")
+            logger.info(
+                f"🤏 {hand.upper()} trigger {'ACTIVE' if trigger_active else 'RELEASED'} - gripper {'OPENED' if trigger_active else 'CLOSED'}"
+            )
 
         # Handle grip button for arm movement control
         if grip_active:
@@ -230,9 +235,7 @@ class VRWebSocketServer(BaseInputProvider):
                 )
                 await self.send_goal(reset_goal)
 
-                logger.info(
-                    f"🔒 {hand.upper()} grip activated - controlling {hand} arm (target reset to current position)"
-                )
+                logger.info(f"🔒 {hand.upper()} grip activated - arm control enabled")
 
             # Compute target position
             if controller.origin_transform is not None:
@@ -282,7 +285,7 @@ class VRWebSocketServer(BaseInputProvider):
             )
             await self.send_goal(goal)
 
-            logger.info(f"🤏 {hand.upper()} gripper CLOSED (trigger released)")
+            logger.info(f"🤏 {hand.upper()} trigger released - gripper CLOSED")
 
     async def handle_reset_button_release(self, hand: str):
         """Handle X button release for a controller."""
