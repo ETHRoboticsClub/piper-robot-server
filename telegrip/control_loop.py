@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from typing import List
 
 import numpy as np
@@ -13,15 +14,13 @@ from .inputs.base import ControlGoal, EventType
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class ArmState:
-    """State tracking for a single robot arm."""
-
-    def __init__(self, arm_name: str):
-        self.arm_name = arm_name
-        self.initial_transform = xyzrpy2transform(0.19, 0.0, 0.2, 0, 0, 0)
-        self.origin_transform = None
-        self.target_transform = None
-        self.gripper_closed = True
+    arm_name: str
+    initial_transform: np.ndarray = xyzrpy2transform(0.19, 0.0, 0.2, 0, 0, 0)
+    origin_transform: np.ndarray | None = None
+    target_transform: np.ndarray | None = None
+    gripper_closed: bool = True
 
 
 class ControlLoop:
@@ -29,7 +28,7 @@ class ControlLoop:
 
     def __init__(self, config: TelegripConfig, robot_enabled: bool = False, visualize: bool = False):
         self.config = config
-        self.robot_interface = RobotInterface(config)
+        self.robot_interface = RobotInterface(config, robot_enabled)
         self.robot_enabled = robot_enabled
         self.visualize = visualize
 
@@ -108,8 +107,8 @@ class ControlLoop:
 
     async def run(self, command_queue: asyncio.Queue):
         """Control loop for the teleoperation system."""
-        left_arm = ArmState("left")
-        right_arm = ArmState("right")
+        left_arm = ArmState(arm_name="left")
+        right_arm = ArmState(arm_name="right")
         self.robot_interface.setup_kinematics()
         if self.robot_enabled:
             try:
@@ -128,12 +127,9 @@ class ControlLoop:
             iteration_start = time.perf_counter()
             commands_start = time.perf_counter()
             try:
-                command_count = 0
                 goals = []
                 while not command_queue.empty():
                     goals.append(command_queue.get_nowait())
-                    # simulates goal processing time
-                    command_count += 1
                 left_arm = self.update_arm_state(goals, left_arm)
                 right_arm = self.update_arm_state(goals, right_arm)
             except Exception as e:

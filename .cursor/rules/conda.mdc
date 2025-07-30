@@ -3,6 +3,6 @@ description:
 globs: 
 alwaysApply: true
 ---
-This project use the conda environment "teleop"
+This project use the micromamba environment "lerobot"
 telegrip can run by just
-conda activate teleop && telegrip
+micromamba activate lerobot && telegrip
