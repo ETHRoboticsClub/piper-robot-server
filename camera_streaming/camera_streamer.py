@@ -3,9 +3,13 @@ import logging
 import asyncio
 import cv2
 import threading
-from livekit import rtc  # type: ignore
+from dotenv import load_dotenv
+from livekit import rtc 
 
-TOKEN = os.environ.get("LIVEKIT_TOKEN")
+from camera_streaming.auth import generate_token
+
+load_dotenv("development.env")
+
 URL = os.environ.get("LIVEKIT_URL")
 
 WIDTH = 640
@@ -50,14 +54,14 @@ class VideoStreamer:
     def stop_camera_loop(self):
         self.is_running = False
         if self.cap_thread: 
-            self.cap_thread.join() # join cap worked thread back with main
+            self.cap_thread.join() # cap worker thread -> main thread
         self.cap.release()
         self.logger.info("Stopped Camera Stream")
         
     def _camera_loop(self):
         """Continuous loop to capture the camera frames and push them to the livekit track"""
-        while self.running:
-            ret, frame = self.cap.read() # blocking call (synchronous)
+        while self.is_running: 
+            ret, frame = self.cap.read() #blocking call (synchronous)
             
             if not ret:
                 print("Can't receive frame (stream end?). Exiting the camera loop ...")
@@ -72,13 +76,21 @@ class VideoStreamer:
     async def publish_track(self, room: rtc.Room):
         """Publish the video track to livekit room"""
         await room.local_participant.publish_track(self.track, self.options)
-        self.logger.info(f"Published video track to room {self.r}")
+        self.logger.info(f"Published video track to room {room.name}")  # Fixed: was self.r
 
         
-async def main(participant_name: str, cam_index: int):
+async def main(participant_name: str, cam_index: int, room_name: str = 'test_room'):
     logger = logging.getLogger(__name__)
     logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
+    
+    # Check environment variables
+    if not URL:
+        logger.error("LIVEKIT_URL environment variables must be set")
+        return
+    
     room = rtc.Room()
+    
+    lk_token = generate_token(room_name, participant_identity=participant_name)
     
     @room.on("participant_connected")
     def on_participant_connected(participant: rtc.RemoteParticipant):
@@ -93,7 +105,7 @@ async def main(participant_name: str, cam_index: int):
     streamer.start_camera_loop()
     
     try:
-        await room.connect(URL, TOKEN)
+        await room.connect(URL, lk_token)
         await streamer.publish_track(room)
         
         # keep running
@@ -107,5 +119,5 @@ async def main(participant_name: str, cam_index: int):
     
 
 if __name__ == "__main__":
-    asyncio.run(main("test_participant", 5))
+    asyncio.run(main("test_participant", DEFAULT_CAM_INDEX))
         
