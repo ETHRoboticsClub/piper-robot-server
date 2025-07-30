@@ -117,25 +117,13 @@ class RobotInterface:
             self.is_connected = True  # Mark as "connected" for testing
             return True
 
-        # Setup suppression if requested
-        should_suppress = (
-            self.config.log_level == "warning"
-            or self.config.log_level == "critical"
-            or self.config.log_level == "error"
-        )
-
         try:
             left_config, right_config = self.setup_robot_configs()
-            if not should_suppress:
-                logger.info("Connecting to robot...")
+            logger.info("Connecting to robot...")
 
-            # Connect left arm
+            # Connect left arm - always suppress low-level CAN debug output
             try:
-                if should_suppress:
-                    with suppress_stdout_stderr():
-                        self.left_robot = Piper(left_config)
-                        self.left_robot.connect()
-                else:
+                with suppress_stdout_stderr():
                     self.left_robot = Piper(left_config)
                     self.left_robot.connect()
                 self.left_arm_connected = True
@@ -144,13 +132,9 @@ class RobotInterface:
                 logger.error(f"❌ Left arm connection failed: {e}")
                 self.left_arm_connected = False
 
-            # Connect right arm
+            # Connect right arm - always suppress low-level CAN debug output
             try:
-                if should_suppress:
-                    with suppress_stdout_stderr():
-                        self.right_robot = Piper(right_config)
-                        self.right_robot.connect()
-                else:
+                with suppress_stdout_stderr():
                     self.right_robot = Piper(right_config)
                     self.right_robot.connect()
                 self.right_arm_connected = True
@@ -308,7 +292,7 @@ class RobotInterface:
             # Send commands with dictionary format - no joint direction mapping
             success = True
 
-            # Send left arm command
+            # Send left arm command - suppress low-level CAN debug output
             if self.left_robot and self.left_arm_connected:
                 try:
                     action_dict = {
@@ -320,7 +304,8 @@ class RobotInterface:
                         "joint_5.pos": float(self.left_arm_angles[5]),
                         "joint_6.pos": float(self.left_arm_angles[6]),
                     }
-                    self.left_robot.send_action(action_dict)
+                    with suppress_stdout_stderr():
+                        self.left_robot.send_action(action_dict)
                 except Exception as e:
                     logger.error(f"Error sending left arm command: {e}")
                     self.left_arm_errors += 1
@@ -329,7 +314,7 @@ class RobotInterface:
                         logger.error("❌ Left arm disconnected due to repeated errors")
                     success = False
 
-            # Send right arm command
+            # Send right arm command - suppress low-level CAN debug output
             if self.right_robot and self.right_arm_connected:
                 try:
                     action_dict = {
@@ -341,7 +326,8 @@ class RobotInterface:
                         "joint_5.pos": float(self.right_arm_angles[5]),
                         "joint_6.pos": float(self.right_arm_angles[6]),
                     }
-                    self.right_robot.send_action(action_dict)
+                    with suppress_stdout_stderr():
+                        self.right_robot.send_action(action_dict)
                 except Exception as e:
                     logger.error(f"Error sending right arm command: {e}")
                     self.right_arm_errors += 1
