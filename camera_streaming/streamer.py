@@ -96,7 +96,7 @@ class VideoStreamer:
         self.logger.info(f"Published video track to room {room.name}")  # Fixed: was self.r
 
         
-async def main(participant_name: str, cam_index: int, room_name: str = 'test_room'):
+async def main(participant_name: str, cam_index: int, room_name: str):
     logger = logging.getLogger(__name__)
     logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
     
@@ -136,5 +136,5 @@ async def main(participant_name: str, cam_index: int, room_name: str = 'test_roo
     
 
 if __name__ == "__main__":
-    asyncio.run(main("test_participant", DEFAULT_CAM_INDEX))
+    asyncio.run(main("test_participant", DEFAULT_CAM_INDEX, "test_room"))
         
