@@ -9,14 +9,12 @@ from livekit import api
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Load environment variables from the project root
-project_root = Path(__file__).parent.parent
-env_file = project_root / "development.env"
-load_dotenv(env_file)
+load_dotenv()
 
 # Get the LiveKit credentials
 LIVEKIT_API_KEY = os.getenv('LIVEKIT_API_KEY')
 LIVEKIT_API_SECRET = os.getenv('LIVEKIT_API_SECRET')
+LIVEKIT_URL = os.getenv('LIVEKIT_URL')
 
 app = Flask(__name__)
 CORS(app)
@@ -75,7 +73,7 @@ def get_subscriber_token():
         return jsonify({
             'token': token, 
             'room_name': room_name,
-            'livekit_url': os.getenv('LIVEKIT_URL')
+            'livekit_url': LIVEKIT_URL
         })
         
     except Exception as e:

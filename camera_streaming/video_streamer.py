@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 env_file = project_root / "development.env"
 load_dotenv(env_file)
 
-URL = os.environ.get("LIVEKIT_URL")
+LIVEKIT_URL = os.environ.get("LIVEKIT_URL")
 
 WIDTH = 640
 HEIGHT = 480
@@ -109,7 +109,7 @@ async def main(participant_name: str, cam_index: int, room_name: str):
     logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
     
     # Check environment variables
-    if not URL:
+    if not LIVEKIT_URL:
         logger.error("LIVEKIT_URL environment variables must be set")
         return
     
@@ -130,7 +130,7 @@ async def main(participant_name: str, cam_index: int, room_name: str):
     streamer.start_camera_loop()
     
     try:
-        await room.connect(URL, lk_token)
+        await room.connect(LIVEKIT_URL, lk_token)
         await streamer.publish_track(room)
         
         # keep running

@@ -2,7 +2,7 @@
 AFRAME.registerComponent('teleop-video-streamer', {
   schema: {
     roomName: { type: 'string', default: 'test_room' },
-    participantIdentity: { type: 'string', default: 'vr-viewer'},
+    participantIdentity: { type: 'string', default: 'vr-viewer' },
     authServerPort: { type: 'number', default: 5050 },
   },
 
@@ -218,7 +218,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
         );
       }
 
-      const authUrl = `http://${window.location.hostname}:${this.data.authServerPort}/api/subscriber-token`;
+      const authUrl = `https://${window.location.hostname}:${this.data.authServerPort}/api/subscriber-token`;
       this.logToVR(`Getting token from: ${authUrl} (VR: ${isVR})`);
 
       const response = await fetch(authUrl, {
