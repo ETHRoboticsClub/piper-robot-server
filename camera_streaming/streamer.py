@@ -19,7 +19,7 @@ URL = os.environ.get("LIVEKIT_URL")
 
 WIDTH = 640
 HEIGHT = 480
-DEFAULT_CAM_INDEX = 0  # 5 should be the external camera
+DEFAULT_CAM_INDEX = 4
 
 
 class VideoStreamer:
@@ -28,8 +28,6 @@ class VideoStreamer:
         
         self.cam_index = cam_index
         self.cap_backend = cap_backend
-        
-        self.is_running = False
         
         # Video source
         self.source = rtc.VideoSource(WIDTH, HEIGHT)
@@ -40,7 +38,7 @@ class VideoStreamer:
             source=rtc.TrackSource.SOURCE_CAMERA,
             simulcast=False,
             video_encoding=rtc.VideoEncoding(
-                max_framerate=60,
+                max_framerate=30,
                 max_bitrate=3_000_000,
             ),
             video_codec=rtc.VideoCodec.H264,
@@ -48,6 +46,12 @@ class VideoStreamer:
         
         # Camera capture
         self.cap = cv2.VideoCapture(index=self.cam_index, apiPreference=self.cap_backend)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        
+        self.is_running = False
+        self.frame_thread = None
         
         # Check if camera opened successfully
         if not self.cap.isOpened():
