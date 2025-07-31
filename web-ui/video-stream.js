@@ -1,4 +1,4 @@
-import { Room, RoomEvent } from 'livekit-client';
+
 
 // This component receives the video stream from the Python camera streamer
 AFRAME.registerComponent('teleop-video-streamer', {
@@ -35,12 +35,55 @@ AFRAME.registerComponent('teleop-video-streamer', {
     try {
       this.logToVR('Starting initialization...');
 
+      // Wait for LiveKit to be available
+      await this.waitForLiveKit();
+
       // Get token and connect
       await this.connectToRoom();
     } catch (error) {
       this.logToVR('ERROR: Failed to initialize - ' + error.message);
       console.error('Failed to initialize video streamer:', error);
     }
+  },
+  waitForLiveKit: function () {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 50; // 5 seconds max
+
+      const checkLiveKit = () => {
+        attempts++;
+
+        // Try different ways LiveKit might be available
+        const liveKit =
+          window.LiveKitClient ||
+          window.LivekitClient || // Note: lowercase 'k'
+          window.LiveKit ||
+          (window.livekit && window.livekit.LiveKitClient);
+
+        if (liveKit) {
+          console.log('LiveKit client is available:', liveKit);
+          window.LiveKitClient = liveKit; // Ensure it's available as LiveKitClient
+          resolve();
+        } else if (attempts >= maxAttempts) {
+          console.error(
+            'LiveKit client failed to load after',
+            attempts,
+            'attempts',
+          );
+          console.log(
+            'Available window properties:',
+            Object.keys(window).filter((k) => k.toLowerCase().includes('live')),
+          );
+          reject(new Error('LiveKit client not available'));
+        } else {
+          console.log(
+            `Waiting for LiveKit client... (attempt ${attempts}/${maxAttempts})`,
+          );
+          setTimeout(checkLiveKit, 100);
+        }
+      };
+      checkLiveKit();
+    });
   },
 
   createVideoElement: function () {
@@ -128,18 +171,18 @@ AFRAME.registerComponent('teleop-video-streamer', {
       const response = await this.getToken();
       const { token, livekit_url } = response;
 
-      this.room = new Room();
+      this.room = new window.LiveKitClient.Room();
       this.logToVR(`Created LiveKit room`);
 
       // Set up event listeners
       this.room
-        .on(RoomEvent.TrackSubscribed, this.handleTrackSubscribed.bind(this))
+        .on(window.LiveKitClient.RoomEvent.TrackSubscribed, this.handleTrackSubscribed.bind(this))
         .on(
-          RoomEvent.TrackUnsubscribed,
+          window.LiveKitClient.RoomEvent.TrackUnsubscribed,
           this.handleTrackUnsubscribed.bind(this),
         )
-        .on(RoomEvent.Disconnected, this.handleDisconnect.bind(this))
-        .on(RoomEvent.Connected, this.handleConnected.bind(this));
+        .on(window.LiveKitClient.RoomEvent.Disconnected, this.handleDisconnect.bind(this))
+        .on(window.LiveKitClient.RoomEvent.Connected, this.handleConnected.bind(this));
 
       // Connect to the room using the URL from the API
       this.logToVR(
