@@ -1,5 +1,3 @@
-
-
 // This component receives the video stream from the Python camera streamer
 AFRAME.registerComponent('teleop-video-streamer', {
   schema: {
@@ -107,9 +105,10 @@ AFRAME.registerComponent('teleop-video-streamer', {
     const vrLogEntity = document.createElement('a-text');
     vrLogEntity.id = 'vr-log';
     vrLogEntity.setAttribute('value', 'Debug Log:\n');
-    vrLogEntity.setAttribute('position', '0 0.5 -1');
+    vrLogEntity.setAttribute('position', '0 2 -2');
     vrLogEntity.setAttribute('align', 'center');
     vrLogEntity.setAttribute('color', '#00ff00');
+    vrLogEntity.setAttribute('scale', '0.3 0.3 0.3');
     document.querySelector('a-scene').appendChild(vrLogEntity);
   },
 
@@ -176,13 +175,22 @@ AFRAME.registerComponent('teleop-video-streamer', {
 
       // Set up event listeners
       this.room
-        .on(window.LiveKitClient.RoomEvent.TrackSubscribed, this.handleTrackSubscribed.bind(this))
+        .on(
+          window.LiveKitClient.RoomEvent.TrackSubscribed,
+          this.handleTrackSubscribed.bind(this),
+        )
         .on(
           window.LiveKitClient.RoomEvent.TrackUnsubscribed,
           this.handleTrackUnsubscribed.bind(this),
         )
-        .on(window.LiveKitClient.RoomEvent.Disconnected, this.handleDisconnect.bind(this))
-        .on(window.LiveKitClient.RoomEvent.Connected, this.handleConnected.bind(this));
+        .on(
+          window.LiveKitClient.RoomEvent.Disconnected,
+          this.handleDisconnect.bind(this),
+        )
+        .on(
+          window.LiveKitClient.RoomEvent.Connected,
+          this.handleConnected.bind(this),
+        );
 
       // Connect to the room using the URL from the API
       this.logToVR(
@@ -242,7 +250,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
   },
 
   handleTrackSubscribed: function (track, publication, participant) {
-      this.logToVR(
+    this.logToVR(
       `Track subscribed: ${track.kind} from ${participant.identity}`,
     );
 
@@ -260,9 +268,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
             this.applyVideoTexture();
           })
           .catch((err) => {
-            this.logToVR(
-              'ERROR: Video playback failed - ' + err.message,
-            );
+            this.logToVR('ERROR: Video playback failed - ' + err.message);
           });
       }, 100);
     }
