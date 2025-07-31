@@ -1,6 +1,13 @@
 # server.py
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from livekit import api
+
+# Load environment variables from the project root
+project_root = Path(__file__).parent.parent
+env_file = project_root / "development.env"
+load_dotenv(env_file)
 
 # Get the LiveKit credentials
 LIVEKIT_API_KEY = os.getenv('LIVEKIT_API_KEY')

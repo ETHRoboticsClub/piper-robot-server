@@ -1,20 +1,25 @@
 import os
 import logging
 import asyncio
+import time
 import cv2
 import threading
+from pathlib import Path
 from dotenv import load_dotenv
 from livekit import rtc 
 
 from camera_streaming.auth import generate_token
 
-load_dotenv("development.env")
+# Load environment variables from the project root
+project_root = Path(__file__).parent.parent
+env_file = project_root / "development.env"
+load_dotenv(env_file)
 
 URL = os.environ.get("LIVEKIT_URL")
 
 WIDTH = 640
 HEIGHT = 480
-DEFAULT_CAM_INDEX = 5
+DEFAULT_CAM_INDEX = 0  # 5 should be the external camera
 
 
 class VideoStreamer:
@@ -44,6 +49,10 @@ class VideoStreamer:
         # Camera capture
         self.cap = cv2.VideoCapture(index=self.cam_index, apiPreference=self.cap_backend)
         
+        # Check if camera opened successfully
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Failed to open camera at index {self.cam_index}")
+        
     def start_camera_loop(self):
         self.is_running = True
         self.cap_thread = threading.Thread(target=self._camera_loop) # independently running the camera loop
@@ -64,15 +73,19 @@ class VideoStreamer:
             ret, frame = self.cap.read() #blocking call (synchronous)
             
             if not ret:
-                print("Can't receive frame (stream end?). Exiting the camera loop ...")
-                break
+                self.logger.warning("Can't receive frame (stream end?). Retrying...")
+                time.sleep(0.1)  # Small delay before retry
+                continue
             
+            # Convert BGR to RGB and resize
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame_resized = cv2.resize(frame_rgb, (WIDTH, HEIGHT))
             
-            # push frame to livekit track
-            self.source.capture_frame(frame_resized)
-            
+            # Push frame to livekit track
+            frame_bytes = frame_resized.tobytes()
+            video_frame = rtc.VideoFrame(WIDTH, HEIGHT, rtc.VideoBufferType.RGB24, frame_bytes)
+            self.source.capture_frame(video_frame)
+
     async def publish_track(self, room: rtc.Room):
         """Publish the video track to livekit room"""
         await room.local_participant.publish_track(self.track, self.options)
