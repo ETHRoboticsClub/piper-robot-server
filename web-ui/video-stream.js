@@ -1,16 +1,23 @@
+import {Room, LocalVideoTrack, LocalAudioTrack, createLocalVideoTrack, createLocalAudioTrack} from 'livekit-client';  
+
 // This component receives the video stream from the Python camera streamer
 AFRAME.registerComponent('teleop-video-streamer', {
   schema: {
     roomName: { type: 'string', default: 'test_room' },
     participantIdentity: { type: 'string', default: '' },
-    authServerPort: { type: 'number', default: 5000 },
+    authServerPort: { type: 'number', default: 5050 },
   },
 
   init: function () {
     console.log('Teleop video streamer component initialized.');
+    console.log('User agent:', navigator.userAgent);
+    console.log('Window location:', window.location.href);
 
     this.room = null;
     this.videoElement = null;
+
+    // Create debug text display for VR
+    this.createDebugDisplay();
 
     this.roomName = this.data.roomName;
     this.participantIdentity =
@@ -25,12 +32,16 @@ AFRAME.registerComponent('teleop-video-streamer', {
 
   initializeAsync: async function () {
     try {
+      this.addDebugMessage('Starting initialization...');
+
       // Wait for LiveKit to be available
       await this.waitForLiveKit();
+      this.addDebugMessage('LiveKit loaded successfully');
 
       // Get token and connect
       await this.connectToRoom();
     } catch (error) {
+      this.addDebugMessage('ERROR: Failed to initialize - ' + error.message);
       console.error('Failed to initialize video streamer:', error);
     }
   },
@@ -92,27 +103,80 @@ AFRAME.registerComponent('teleop-video-streamer', {
     this.setupVideoTexture();
   },
 
+  createDebugDisplay: function () {
+    // Create a text element to show debug info in VR
+    this.debugText = document.createElement('a-text');
+    this.debugText.setAttribute('position', '0 0.5 0');
+    this.debugText.setAttribute('align', 'center');
+    this.debugText.setAttribute('color', '#00ff00');
+    this.debugText.setAttribute('scale', '0.5 0.5 0.5');
+    this.debugText.setAttribute(
+      'value',
+      'Video Stream Debug:\nInitializing...',
+    );
+    this.el.appendChild(this.debugText);
+
+    this.debugMessages = [];
+    this.maxDebugMessages = 8;
+  },
+
+  addDebugMessage: function (message) {
+    console.log(message); // Still log to console
+
+    // Add to debug messages array
+    this.debugMessages.push(new Date().toLocaleTimeString() + ': ' + message);
+
+    // Keep only the last N messages
+    if (this.debugMessages.length > this.maxDebugMessages) {
+      this.debugMessages.shift();
+    }
+
+    // Update the VR text display
+    if (this.debugText) {
+      this.debugText.setAttribute(
+        'value',
+        'Video Stream Debug:\n' + this.debugMessages.join('\n'),
+      );
+    }
+  },
+
   setupVideoTexture: function () {
     // Wait for video to be ready then apply as texture
     this.videoElement.addEventListener('loadeddata', () => {
-      console.log('Video data loaded, applying texture');
+      this.addDebugMessage('Video data loaded, applying texture');
       this.applyVideoTexture();
     });
 
     this.videoElement.addEventListener('playing', () => {
-      console.log('Video is playing');
+      this.addDebugMessage('Video is playing');
       this.applyVideoTexture();
     });
   },
 
   applyVideoTexture: function () {
     // Apply video as texture to the A-Frame plane
+    const dimensions = `${this.videoElement.videoWidth}x${this.videoElement.videoHeight}`;
+    this.addDebugMessage(
+      `Applying texture: ${dimensions}, ready: ${this.videoElement.readyState}, paused: ${this.videoElement.paused}`,
+    );
+
     this.el.setAttribute('material', {
       shader: 'flat',
       src: `#${this.videoElement.id}`,
       transparent: false,
     });
-    console.log('Applied video texture to A-Frame plane');
+
+    // Add visual feedback for debugging
+    if (
+      this.videoElement.videoWidth === 0 ||
+      this.videoElement.videoHeight === 0
+    ) {
+      this.addDebugMessage('WARNING: Video has no dimensions!');
+      // Set a temporary red color to indicate issues
+      this.el.setAttribute('material', { color: 'red' });
+    } else {
+      this.addDebugMessage('Video texture applied successfully');
+    }
   },
 
   connectToRoom: async function () {
@@ -122,6 +186,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
       const { token, livekit_url } = response;
 
       this.room = new LiveKitClient.Room();
+      this.addDebugMessage(`Connecting to LiveKit room: ${this.roomName}`);
 
       // Set up event listeners
       this.room
@@ -141,16 +206,31 @@ AFRAME.registerComponent('teleop-video-streamer', {
 
       // Connect to the room using the URL from the API
       await this.room.connect(livekit_url, token);
-      console.log('Connected to LiveKit room:', this.roomName);
+      this.addDebugMessage(`Connected to room: ${this.roomName}`);
     } catch (error) {
+      this.addDebugMessage(`ERROR: Failed to connect to LiveKit room ${this.roomName} - ${error.message}`);
       console.error('Failed to connect to LiveKit room:', error);
     }
   },
 
   getToken: async function () {
     try {
-      const authUrl = `http://localhost:${this.data.authServerPort}/api/token`;
-      console.log('Requesting token from:', authUrl);
+      const isVR =
+        navigator.xr &&
+        (await navigator.xr
+          .isSessionSupported('immersive-vr')
+          .catch(() => false));
+
+      let hostname = 'localhost'; // default for non-VR
+      if (isVR) {
+        hostname = window.location.hostname;
+        this.addDebugMessage(`VR detected, using hostname: ${hostname}`);
+      } else {
+        this.addDebugMessage(`Non-VR mode, using hostname: ${hostname}`);
+      }
+
+      const authUrl = `https://${hostname}:${this.data.authServerPort}/api/subscriber-token`;
+      this.addDebugMessage(`Getting token from: ${authUrl} (VR: ${isVR})`);
 
       const response = await fetch(authUrl, {
         method: 'POST',
@@ -164,40 +244,43 @@ AFRAME.registerComponent('teleop-video-streamer', {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(
+          `HTTP error! status: ${response.status}, body: ${errorText}`,
+        );
       }
 
       const data = await response.json();
       return data;
     } catch (error) {
+      this.addDebugMessage(`ERROR: Token request failed - ${error.message}`);
       console.error('Failed to get token:', error);
       throw error;
     }
   },
 
   handleTrackSubscribed: function (track, publication, participant) {
-    console.log(
-      'Track subscribed:',
-      track.kind,
-      'from participant:',
-      participant.identity,
+    this.addDebugMessage(
+      `Track subscribed: ${track.kind} from ${participant.identity}`,
     );
 
     if (track.kind === 'video') {
       // Attach video track to our video element
       track.attach(this.videoElement);
-      console.log('Video track attached to display element');
+      this.addDebugMessage('Video track attached');
 
       // Force video to play and apply texture
       setTimeout(() => {
         this.videoElement
           .play()
           .then(() => {
-            console.log('Video playback started');
+            this.addDebugMessage('Video playback started');
             this.applyVideoTexture();
           })
           .catch((err) => {
-            console.error('Failed to start video playback:', err);
+            this.addDebugMessage(
+              'ERROR: Video playback failed - ' + err.message,
+            );
           });
       }, 100);
     }
@@ -218,11 +301,11 @@ AFRAME.registerComponent('teleop-video-streamer', {
   },
 
   handleConnected: function () {
-    console.log('Connected to LiveKit room');
+    this.addDebugMessage('Connected to LiveKit room');
   },
 
   handleDisconnect: function () {
-    console.log('Disconnected from LiveKit room');
+    this.addDebugMessage('Disconnected from LiveKit room');
   },
 
   remove: function () {
