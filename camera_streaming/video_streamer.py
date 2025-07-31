@@ -49,6 +49,7 @@ class VideoStreamer:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # reduce buffering to 1 frame
         
         self.is_running = False
         self.frame_thread = None
@@ -67,7 +68,9 @@ class VideoStreamer:
     def stop_camera_loop(self):
         self.is_running = False
         if self.cap_thread: 
-            self.cap_thread.join() # cap worker thread -> main thread
+            self.cap_thread.join(timeout=2)  # Avoid hanging indefinitely
+            if self.cap_thread.is_alive():
+                self.logger.warning("Camera thread did not shut down cleanly")
         self.cap.release()
         self.logger.info("Stopped Camera Stream")
         
@@ -81,14 +84,19 @@ class VideoStreamer:
                 time.sleep(0.1)  # Small delay before retry
                 continue
             
-            # Convert BGR to RGB and resize
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_resized = cv2.resize(frame_rgb, (WIDTH, HEIGHT))
-            
-            # Push frame to livekit track
-            frame_bytes = frame_resized.tobytes()
-            video_frame = rtc.VideoFrame(WIDTH, HEIGHT, rtc.VideoBufferType.RGB24, frame_bytes)
-            self.source.capture_frame(video_frame)
+            try:
+                # Convert BGR to RGB and resize if needed
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                if frame_rgb.shape[:2] != (HEIGHT, WIDTH):
+                    frame_rgb = cv2.resize(frame_rgb, (WIDTH, HEIGHT))
+                
+                # Push frame to livekit track
+                frame_bytes = frame_rgb.tobytes()
+                video_frame = rtc.VideoFrame(WIDTH, HEIGHT, rtc.VideoBufferType.RGB24, frame_bytes)
+                self.source.capture_frame(video_frame)
+            except Exception as e:
+                self.logger.error(f"Error processing frame: {e}")
+                continue
 
     async def publish_track(self, room: rtc.Room):
         """Publish the video track to livekit room"""
@@ -133,8 +141,3 @@ async def main(participant_name: str, cam_index: int, room_name: str):
     finally:
         streamer.stop_camera_loop()
         await room.disconnect()
-    
-
-if __name__ == "__main__":
-    asyncio.run(main("test_participant", DEFAULT_CAM_INDEX, "test_room"))
-        
