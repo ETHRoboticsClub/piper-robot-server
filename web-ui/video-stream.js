@@ -214,7 +214,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
           .catch(() => false));
       if (!isVR) {
         throw new Error(
-          'VR session not detected. Camera streaming is only supported in the VR experience. ',
+          'VR session not detected. Camera streaming is only supported in the VR experience.',
         );
       }
 
