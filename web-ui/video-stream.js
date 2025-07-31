@@ -1,4 +1,4 @@
-import {Room, LocalVideoTrack, LocalAudioTrack, createLocalVideoTrack, createLocalAudioTrack} from 'livekit-client';  
+import { Room, RoomEvent } from 'livekit-client';
 
 // This component receives the video stream from the Python camera streamer
 AFRAME.registerComponent('teleop-video-streamer', {
@@ -17,7 +17,8 @@ AFRAME.registerComponent('teleop-video-streamer', {
     this.videoElement = null;
 
     // Create debug text display for VR
-    this.createDebugDisplay();
+    this.createVrLogDisplay();
+    this.logToVR('VR log display created');
 
     this.roomName = this.data.roomName;
     this.participantIdentity =
@@ -32,59 +33,14 @@ AFRAME.registerComponent('teleop-video-streamer', {
 
   initializeAsync: async function () {
     try {
-      this.addDebugMessage('Starting initialization...');
-
-      // Wait for LiveKit to be available
-      await this.waitForLiveKit();
-      this.addDebugMessage('LiveKit loaded successfully');
+      this.logToVR('Starting initialization...');
 
       // Get token and connect
       await this.connectToRoom();
     } catch (error) {
-      this.addDebugMessage('ERROR: Failed to initialize - ' + error.message);
+      this.logToVR('ERROR: Failed to initialize - ' + error.message);
       console.error('Failed to initialize video streamer:', error);
     }
-  },
-
-  waitForLiveKit: function () {
-    return new Promise((resolve, reject) => {
-      let attempts = 0;
-      const maxAttempts = 50; // 5 seconds max
-
-      const checkLiveKit = () => {
-        attempts++;
-
-        // Try different ways LiveKit might be available
-        const liveKit =
-          window.LiveKitClient ||
-          window.LivekitClient || // Note: lowercase 'k'
-          window.LiveKit ||
-          (window.livekit && window.livekit.LiveKitClient);
-
-        if (liveKit) {
-          console.log('LiveKit client is available:', liveKit);
-          window.LiveKitClient = liveKit; // Ensure it's available as LiveKitClient
-          resolve();
-        } else if (attempts >= maxAttempts) {
-          console.error(
-            'LiveKit client failed to load after',
-            attempts,
-            'attempts',
-          );
-          console.log(
-            'Available window properties:',
-            Object.keys(window).filter((k) => k.toLowerCase().includes('live')),
-          );
-          reject(new Error('LiveKit client not available'));
-        } else {
-          console.log(
-            `Waiting for LiveKit client... (attempt ${attempts}/${maxAttempts})`,
-          );
-          setTimeout(checkLiveKit, 100);
-        }
-      };
-      checkLiveKit();
-    });
   },
 
   createVideoElement: function () {
@@ -103,52 +59,39 @@ AFRAME.registerComponent('teleop-video-streamer', {
     this.setupVideoTexture();
   },
 
-  createDebugDisplay: function () {
+  createVrLogDisplay: function () {
     // Create a text element to show debug info in VR
-    this.debugText = document.createElement('a-text');
-    this.debugText.setAttribute('position', '0 0.5 0');
-    this.debugText.setAttribute('align', 'center');
-    this.debugText.setAttribute('color', '#00ff00');
-    this.debugText.setAttribute('scale', '0.5 0.5 0.5');
-    this.debugText.setAttribute(
-      'value',
-      'Video Stream Debug:\nInitializing...',
-    );
-    this.el.appendChild(this.debugText);
-
-    this.debugMessages = [];
-    this.maxDebugMessages = 8;
+    const vrLogEntity = document.createElement('a-text');
+    vrLogEntity.id = 'vr-log';
+    vrLogEntity.setAttribute('value', 'Debug Log:\n');
+    vrLogEntity.setAttribute('position', '0 0.5 -1');
+    vrLogEntity.setAttribute('align', 'center');
+    vrLogEntity.setAttribute('color', '#00ff00');
+    document.querySelector('a-scene').appendChild(vrLogEntity);
   },
 
-  addDebugMessage: function (message) {
-    console.log(message); // Still log to console
-
-    // Add to debug messages array
-    this.debugMessages.push(new Date().toLocaleTimeString() + ': ' + message);
-
-    // Keep only the last N messages
-    if (this.debugMessages.length > this.maxDebugMessages) {
-      this.debugMessages.shift();
+  logToVR: function (message) {
+    const vrLogEntity = document.querySelector('#vr-log');
+    if (vrLogEntity) {
+      const currentValue = vrLogEntity.getAttribute('value');
+      const lines = currentValue.split('\n');
+      lines.push(`${new Date().toLocaleTimeString()}: ${message}`);
+      // Keep only last 10 lines
+      if (lines.length > 11) lines.splice(1, 1);
+      vrLogEntity.setAttribute('value', lines.join('\n'));
     }
-
-    // Update the VR text display
-    if (this.debugText) {
-      this.debugText.setAttribute(
-        'value',
-        'Video Stream Debug:\n' + this.debugMessages.join('\n'),
-      );
-    }
+    console.log(message); // Also log normally
   },
 
   setupVideoTexture: function () {
     // Wait for video to be ready then apply as texture
     this.videoElement.addEventListener('loadeddata', () => {
-      this.addDebugMessage('Video data loaded, applying texture');
+      this.logToVR('Video data loaded, applying texture');
       this.applyVideoTexture();
     });
 
     this.videoElement.addEventListener('playing', () => {
-      this.addDebugMessage('Video is playing');
+      this.logToVR('Video is playing');
       this.applyVideoTexture();
     });
   },
@@ -156,7 +99,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
   applyVideoTexture: function () {
     // Apply video as texture to the A-Frame plane
     const dimensions = `${this.videoElement.videoWidth}x${this.videoElement.videoHeight}`;
-    this.addDebugMessage(
+    this.logToVR(
       `Applying texture: ${dimensions}, ready: ${this.videoElement.readyState}, paused: ${this.videoElement.paused}`,
     );
 
@@ -171,11 +114,11 @@ AFRAME.registerComponent('teleop-video-streamer', {
       this.videoElement.videoWidth === 0 ||
       this.videoElement.videoHeight === 0
     ) {
-      this.addDebugMessage('WARNING: Video has no dimensions!');
+      this.logToVR('WARNING: Video has no dimensions!');
       // Set a temporary red color to indicate issues
       this.el.setAttribute('material', { color: 'red' });
     } else {
-      this.addDebugMessage('Video texture applied successfully');
+      this.logToVR('Video texture applied successfully');
     }
   },
 
@@ -185,30 +128,29 @@ AFRAME.registerComponent('teleop-video-streamer', {
       const response = await this.getToken();
       const { token, livekit_url } = response;
 
-      this.room = new LiveKitClient.Room();
-      this.addDebugMessage(`Connecting to LiveKit room: ${this.roomName}`);
+      this.room = new Room();
+      this.logToVR(`Created LiveKit room`);
 
       // Set up event listeners
       this.room
+        .on(RoomEvent.TrackSubscribed, this.handleTrackSubscribed.bind(this))
         .on(
-          LiveKitClient.RoomEvent.TrackSubscribed,
-          this.handleTrackSubscribed.bind(this),
-        )
-        .on(
-          LiveKitClient.RoomEvent.TrackUnsubscribed,
+          RoomEvent.TrackUnsubscribed,
           this.handleTrackUnsubscribed.bind(this),
         )
-        .on(
-          LiveKitClient.RoomEvent.Disconnected,
-          this.handleDisconnect.bind(this),
-        )
-        .on(LiveKitClient.RoomEvent.Connected, this.handleConnected.bind(this));
+        .on(RoomEvent.Disconnected, this.handleDisconnect.bind(this))
+        .on(RoomEvent.Connected, this.handleConnected.bind(this));
 
       // Connect to the room using the URL from the API
+      this.logToVR(
+        `Connecting to room with livekit url: ${livekit_url} and token: ${token} (room name: ${this.roomName})`,
+      );
       await this.room.connect(livekit_url, token);
-      this.addDebugMessage(`Connected to room: ${this.roomName}`);
+      this.logToVR(`Connected to room: ${this.roomName}`);
     } catch (error) {
-      this.addDebugMessage(`ERROR: Failed to connect to LiveKit room ${this.roomName} - ${error.message}`);
+      this.logToVR(
+        `ERROR: Failed to connect to LiveKit room ${this.roomName} - ${error.message}`,
+      );
       console.error('Failed to connect to LiveKit room:', error);
     }
   },
@@ -220,17 +162,14 @@ AFRAME.registerComponent('teleop-video-streamer', {
         (await navigator.xr
           .isSessionSupported('immersive-vr')
           .catch(() => false));
-
-      let hostname = 'localhost'; // default for non-VR
-      if (isVR) {
-        hostname = window.location.hostname;
-        this.addDebugMessage(`VR detected, using hostname: ${hostname}`);
-      } else {
-        this.addDebugMessage(`Non-VR mode, using hostname: ${hostname}`);
+      if (!isVR) {
+        throw new Error(
+          'VR session not detected. Camera streaming is only supported in the VR experience. ',
+        );
       }
 
-      const authUrl = `https://${hostname}:${this.data.authServerPort}/api/subscriber-token`;
-      this.addDebugMessage(`Getting token from: ${authUrl} (VR: ${isVR})`);
+      const authUrl = `https://${window.location.hostname}:${this.data.authServerPort}/api/subscriber-token`;
+      this.logToVR(`Getting token from: ${authUrl} (VR: ${isVR})`);
 
       const response = await fetch(authUrl, {
         method: 'POST',
@@ -253,32 +192,32 @@ AFRAME.registerComponent('teleop-video-streamer', {
       const data = await response.json();
       return data;
     } catch (error) {
-      this.addDebugMessage(`ERROR: Token request failed - ${error.message}`);
+      this.logToVR(`ERROR: Token request failed - ${error.message}`);
       console.error('Failed to get token:', error);
       throw error;
     }
   },
 
   handleTrackSubscribed: function (track, publication, participant) {
-    this.addDebugMessage(
+      this.logToVR(
       `Track subscribed: ${track.kind} from ${participant.identity}`,
     );
 
     if (track.kind === 'video') {
       // Attach video track to our video element
       track.attach(this.videoElement);
-      this.addDebugMessage('Video track attached');
+      this.logToVR('Video track attached');
 
       // Force video to play and apply texture
       setTimeout(() => {
         this.videoElement
           .play()
           .then(() => {
-            this.addDebugMessage('Video playback started');
+            this.logToVR('Video playback started');
             this.applyVideoTexture();
           })
           .catch((err) => {
-            this.addDebugMessage(
+            this.logToVR(
               'ERROR: Video playback failed - ' + err.message,
             );
           });
@@ -301,11 +240,11 @@ AFRAME.registerComponent('teleop-video-streamer', {
   },
 
   handleConnected: function () {
-    this.addDebugMessage('Connected to LiveKit room');
+    this.logToVR('Connected to LiveKit room');
   },
 
   handleDisconnect: function () {
-    this.addDebugMessage('Disconnected from LiveKit room');
+    this.logToVR('Disconnected from LiveKit room');
   },
 
   remove: function () {
