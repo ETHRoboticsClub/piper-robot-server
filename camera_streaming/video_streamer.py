@@ -19,7 +19,8 @@ LIVEKIT_URL = os.environ.get("LIVEKIT_URL")
 
 WIDTH = 640
 HEIGHT = 480
-DEFAULT_CAM_INDEX = 4
+# Default camera index. This can be overridden by setting the CAMERA_INDEX environment variable.
+DEFAULT_CAM_INDEX = int(os.environ.get("CAMERA_INDEX", 4))
 
 
 class VideoStreamer:
