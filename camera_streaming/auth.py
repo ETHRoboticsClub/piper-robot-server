@@ -1,4 +1,4 @@
-# server.py
+# auth.py - Authentication and token generation for LiveKit
 import os
 import ssl
 import argparse
