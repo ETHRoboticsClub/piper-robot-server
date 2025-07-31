@@ -1,5 +1,7 @@
 # server.py
 import os
+import ssl
+import argparse
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -56,7 +58,7 @@ def generate_token(room_name: str, participant_identity=None, display_name=None,
 
     return token.to_jwt()
 
-@app.route('/api/token', methods=['POST'])
+@app.route('/api/subscriber-token', methods=['POST'])
 def get_subscriber_token():
     """API endpoint to get a LiveKit token for the A-Frame frontend"""
     try:
@@ -78,7 +80,42 @@ def get_subscriber_token():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
+def get_ssl_context(cert_path="cert.pem", key_path="key.pem"):
+    """Create SSL context using the specified certificate files."""
+    try:
+        # Convert to absolute paths relative to project root
+        project_root = Path(__file__).parent.parent
+        cert_abs_path = project_root / cert_path
+        key_abs_path = project_root / key_path
+        
+        if not cert_abs_path.exists() or not key_abs_path.exists():
+            print(f"SSL certificates not found: {cert_abs_path}, {key_abs_path}")
+            return None
+            
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(str(cert_abs_path), str(key_abs_path))
+        return context
+    except Exception as e:
+        print(f"Error loading SSL certificates: {e}")
+        return None
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    parser = argparse.ArgumentParser(description='LiveKit Auth Server')
+    parser.add_argument('--port', type=int, default=5050, help='Port to run the server on')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--https', action='store_true', help='Use HTTPS')
+    parser.add_argument('--cert', default='cert.pem', help='SSL certificate file')
+    parser.add_argument('--key', default='key.pem', help='SSL private key file')
+    
+    args = parser.parse_args()
+    
+    if args.https:
+        ssl_context = get_ssl_context(args.cert, args.key)
+        if ssl_context:
+            app.run(debug=True, port=args.port, host=args.host, ssl_context=ssl_context)
+        else:
+            print("Failed to load SSL certificates, falling back to HTTP")
+            app.run(debug=True, port=args.port, host=args.host)
+    else:
+        app.run(debug=True, port=args.port, host=args.host) 
