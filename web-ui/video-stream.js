@@ -6,13 +6,12 @@ AFRAME.registerComponent('teleop-video-streamer', {
     authServerPort: { type: 'number', default: 5000 },
   },
 
-  init: async function () {
+  init: function () {
     console.log('Teleop video streamer component initialized.');
 
     this.room = null;
     this.videoElement = null;
 
-    // Get room name from component attributes or use default from streamer.py
     this.roomName = this.data.roomName;
     this.participantIdentity =
       this.data.participantIdentity || `viewer-${Date.now()}`;
@@ -20,11 +19,20 @@ AFRAME.registerComponent('teleop-video-streamer', {
     // Create video element for the stream
     this.createVideoElement();
 
-    // Wait for LiveKit to be available
-    await this.waitForLiveKit();
+    // Start async initialization
+    this.initializeAsync();
+  },
 
-    // Get token and connect
-    await this.connectToRoom();
+  initializeAsync: async function () {
+    try {
+      // Wait for LiveKit to be available
+      await this.waitForLiveKit();
+
+      // Get token and connect
+      await this.connectToRoom();
+    } catch (error) {
+      console.error('Failed to initialize video streamer:', error);
+    }
   },
 
   waitForLiveKit: function () {
@@ -218,8 +226,19 @@ AFRAME.registerComponent('teleop-video-streamer', {
   },
 
   remove: function () {
+    // Clean up LiveKit room connection
     if (this.room) {
       this.room.disconnect();
+      this.room = null;
+    }
+
+    // Clean up video element
+    if (this.videoElement) {
+      // Remove video element from DOM
+      if (this.videoElement.parentNode) {
+        this.videoElement.parentNode.removeChild(this.videoElement);
+      }
+      this.videoElement = null;
     }
   },
 });
