@@ -101,7 +101,7 @@ class VideoStreamer:
     async def publish_track(self, room: rtc.Room):
         """Publish the video track to livekit room"""
         await room.local_participant.publish_track(self.track, self.options)
-        self.logger.info(f"Published video track to room {room.name}")  # Fixed: was self.r
+        self.logger.info(f"Published video track to room {room.name}")
 
         
 async def main(participant_name: str, cam_index: int, room_name: str):
