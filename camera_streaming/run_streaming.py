@@ -18,9 +18,12 @@ def setup_logging():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-def start_auth_server(port=5000):
+def start_auth_server(port=5050, use_https=True):
     """Start the Flask auth server in background"""
-    cmd = [sys.executable, "-m", "flask", "--app", "camera_streaming.auth", "run", "--port", str(port)]
+    if use_https:
+        cmd = [sys.executable, "camera_streaming/auth.py", "--port", str(port), "--https"]
+    else:
+        cmd = [sys.executable, "-m", "flask", "--app", "camera_streaming.auth", "run", "--port", str(port)]
     env = dict(os.environ)
     env["FLASK_ENV"] = "development"
     return subprocess.Popen(cmd, env=env)
@@ -30,21 +33,27 @@ async def main():
     parser.add_argument("--camera-index", type=int, default=4, help="Camera index to use")
     parser.add_argument("--room", default="test_room", help="LiveKit room name")
     parser.add_argument("--participant", default="camera-streamer", help="Participant name")
-    parser.add_argument("--auth-port", type=int, default=5000, help="Auth server port")
+    parser.add_argument("--auth-port", type=int, default=5050, help="Auth server port")
     parser.add_argument("--auth-only", action="store_true", help="Only run auth server")
+    parser.add_argument("--https", action="store_true", default=True, help="Use HTTPS for auth server")
+    parser.add_argument("--http", action="store_true", help="Use HTTP for auth server (overrides --https)")
     
     args = parser.parse_args()
     setup_logging()
     
     logger = logging.getLogger(__name__)
     
+    # Determine protocol - default to HTTPS unless --http is specified
+    use_https = args.https and not args.http
+    
     # Start auth server
-    logger.info(f"Starting Flask auth server on port {args.auth_port}...")
-    auth_process = start_auth_server(args.auth_port)
+    protocol = "https" if use_https else "http"
+    logger.info(f"Starting Flask auth server on {protocol}://localhost:{args.auth_port}...")
+    auth_process = start_auth_server(args.auth_port, use_https)
     time.sleep(2)  # Give server time to start
     
     if args.auth_only:
-        logger.info(f"Auth server running on http://localhost:{args.auth_port}")
+        logger.info(f"Auth server running on {protocol}://localhost:{args.auth_port}")
         logger.info("Open web-ui/video-example.html in your browser")
         try:
             auth_process.wait()
