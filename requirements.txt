@@ -9,6 +9,10 @@ pybullet
 websockets
 pynput
 lerobot[feetech]
+flask
+flask-cors
+python-dotenv
+livekit
 # For development
 pytest
 black

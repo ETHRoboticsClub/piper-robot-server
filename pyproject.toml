@@ -19,6 +19,9 @@ dependencies = [
     "pybullet",
     "scipy",
     "pyyaml",
+    "livekit",
+    "opencv-python",
+    "python-dotenv",
 ]
 
 requires-python = ">=3.8"
@@ -40,7 +43,7 @@ Homepage = "https://github.com/your-username/vr_so100_teleoperation"
 Repository = "https://github.com/your-username/vr_so100_teleoperation"
 
 [tool.setuptools]
-packages = ["telegrip"] 
+packages = ["telegrip", "camera_streaming"] 
 
 [tool.black]
 line-length = 120
