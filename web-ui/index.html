@@ -7,24 +7,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script
-    src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"
-    onload="console.log('LiveKit script loaded')"
-    onerror="console.error('Failed to load LiveKit script')"
-  ></script>
-  <script>
-    // Debug LiveKit loading
-    window.addEventListener('load', () => {
-      console.log(
-        'Window loaded. LiveKit available:',
-        typeof LiveKitClient !== 'undefined',
-      );
-      console.log(
-        'Available globals:',
-        Object.keys(window).filter((k) => k.includes('Live')),
-      );
-    });
-  </script>
-    <script src="vr_app.js" defer></script>
+      src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"
+      onload="console.log('LiveKit script loaded')"
+      onerror="console.error('Failed to load LiveKit script')"
+    ></script>
+    <script>
+      // Debug LiveKit loading
+      window.addEventListener('load', () => {
+        console.log(
+          'Window loaded. LiveKit available:',
+          typeof LiveKitClient !== 'undefined',
+        );
+        console.log(
+          'Available globals:',
+          Object.keys(window).filter((k) => k.includes('Live')),
+        );
+      });
+    </script>
+    <script src="controllers.js" defer></script>
     <script src="interface.js" defer></script>
     <script src="video-stream.js"></script>
     <link rel="stylesheet" href="styles.css" />
