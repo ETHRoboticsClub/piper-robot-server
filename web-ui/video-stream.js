@@ -1,8 +1,8 @@
 // This component receives the video stream from the Python camera streamer
 AFRAME.registerComponent('teleop-video-streamer', {
   schema: {
+    roomName: { type: 'string', default: 'robot-vr-teleop-room' },
     participantIdentity: { type: 'string', default: 'vr-teleop-viewer' },
-    authServerPort: { type: 'number', default: 5050 },
     debug: { type: 'boolean', default: false },
   },
 
@@ -11,7 +11,6 @@ AFRAME.registerComponent('teleop-video-streamer', {
     console.log('User agent:', navigator.userAgent);
     console.log('Window location:', window.location.href);
 
-    this.room = null;
     this.videoElement = null;
 
     // Create debug text display for VR
@@ -24,19 +23,16 @@ AFRAME.registerComponent('teleop-video-streamer', {
     this.createVideoElement();
 
     // Start async initialization
-    window.LiveKitUtils.asyncRoomConnect(this.data.participantIdentity);
+    window.LiveKitUtils.asyncRoomConnect(
+      this,
+      this.data.roomName,
+      this.data.participantIdentity,
+    );
   },
 
   remove: function () {
-    // Clean up LiveKit room connection
-    if (this.room) {
-      this.room.disconnect();
-      this.room = null;
-    }
-
     // Clean up video element
     if (this.videoElement) {
-      // Remove video element from DOM
       if (this.videoElement.parentNode) {
         this.videoElement.parentNode.removeChild(this.videoElement);
       }
