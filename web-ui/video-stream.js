@@ -4,6 +4,7 @@ AFRAME.registerComponent('teleop-video-streamer', {
     roomName: { type: 'string', default: 'test_room' },
     participantIdentity: { type: 'string', default: 'vr-viewer' },
     authServerPort: { type: 'number', default: 5050 },
+    debug: { type: 'boolean', default: false },
   },
 
   init: function () {
@@ -15,8 +16,10 @@ AFRAME.registerComponent('teleop-video-streamer', {
     this.videoElement = null;
 
     // Create debug text display for VR
-    this.createVrLogDisplay();
-    this.logToVR('VR log display created');
+    if (this.data.debug) {
+      this.createVrLogDisplay();
+      this.logToVR('VR log display created');
+    }
 
     this.roomName = this.data.roomName;
     this.participantIdentity = this.data.participantIdentity;
@@ -112,16 +115,18 @@ AFRAME.registerComponent('teleop-video-streamer', {
   },
 
   logToVR: function (message) {
-    const vrLogEntity = document.querySelector('#vr-log');
-    if (vrLogEntity) {
-      const currentValue = vrLogEntity.getAttribute('value');
-      const lines = currentValue.split('\n');
-      lines.push(`${new Date().toLocaleTimeString()}: ${message}`);
-      // Keep only last 10 lines
-      if (lines.length > 11) lines.splice(1, 1);
-      vrLogEntity.setAttribute('value', lines.join('\n'));
+    if (this.data.debug) {
+      const vrLogEntity = document.querySelector('#vr-log');
+      if (vrLogEntity) {
+        const currentValue = vrLogEntity.getAttribute('value');
+        const lines = currentValue.split('\n');
+        lines.push(`${new Date().toLocaleTimeString()}: ${message}`);
+        // Keep only last 10 lines
+        if (lines.length > 11) lines.splice(1, 1);
+        vrLogEntity.setAttribute('value', lines.join('\n'));
+      }
+      console.log(message); // Also log normally
     }
-    console.log(message); // Also log normally
   },
 
   setupVideoTexture: function () {
