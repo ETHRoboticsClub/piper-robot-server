@@ -3,7 +3,6 @@ import logging
 import os
 import threading
 import time
-from pathlib import Path
 
 import cv2
 from dotenv import load_dotenv
@@ -22,7 +21,7 @@ HEIGHT = 480
 DEFAULT_CAM_INDEX = int(os.getenv("CAMERA_INDEX", 6))
 
 
-class VideoStreamer:
+class CameraStreamer:
     def __init__(self, cam_index: int, cap_backend: int = cv2.CAP_V4L2, cam_name="robot0-birds-eye"):
         self.logger = logging.getLogger(__name__)
 
@@ -58,14 +57,14 @@ class VideoStreamer:
         if not self.cap.isOpened():
             raise RuntimeError(f"Failed to open camera at index {self.cam_index}")
 
-    def start_camera_loop(self):
+    def _start_camera_loop(self):
         self.is_running = True
         self.cap_thread = threading.Thread(target=self._camera_loop)  # independently running the camera loop
         self.cap_thread.daemon = True
         self.cap_thread.start()
         self.logger.info(f"Started camera capture loop for camera {self.cam_index}")
 
-    def stop_camera_loop(self):
+    def _stop_camera_loop(self):
         self.is_running = False
         if self.cap_thread:
             self.cap_thread.join(timeout=2)  # Avoid hanging indefinitely
@@ -98,48 +97,44 @@ class VideoStreamer:
                 self.logger.error(f"Error processing frame: {e}")
                 continue
 
-    async def publish_track(self, room: rtc.Room):
+    async def _publish_track(self, room: rtc.Room):
         """Publish the video track to livekit room"""
         await room.local_participant.publish_track(self.track, self.options)
         self.logger.info(f"Published video track to room {room.name}")
+        
+    async def stream_camera(self, participant_name: str, room_name: str):
+        self.logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
 
+        # Check environment variables
+        if not LIVEKIT_URL:
+            self.logger.error("LIVEKIT_URL environment variables must be set")
+            return
 
-async def main(participant_name: str, cam_index: int, room_name: str):
-    logger = logging.getLogger(__name__)
-    logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
+        self.room = rtc.Room()
 
-    # Check environment variables
-    if not LIVEKIT_URL:
-        logger.error("LIVEKIT_URL environment variables must be set")
-        return
+        lk_token = generate_token(room_name, participant_identity=participant_name)
+        
+        @self.room.on("participant_connected")
+        def on_participant_connected(participant: rtc.RemoteParticipant):
+            self.logger.info(f"Participant connected {participant.sid}, {participant.identity}")
 
-    room = rtc.Room()
+        # track_subscribed is emitted whenever the local participant is subscribed to a new track
+        @self.room.on("track_subscribed")
+        def on_track_subscribed(
+            track: rtc.Track, publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant
+        ):
+            self.logger.info("track subscribed: %s", publication.sid)
 
-    lk_token = generate_token(room_name, participant_identity=participant_name)
+        self._start_camera_loop()
 
-    @room.on("participant_connected")
-    def on_participant_connected(participant: rtc.RemoteParticipant):
-        logger.info(f"Participant connected {participant.sid}, {participant.identity}")
+        try:
+            await self.room.connect(LIVEKIT_URL, lk_token)
+            await self._publish_track(self.room)
 
-    # track_subscribed is emitted whenever the local participant is subscribed to a new track
-    @room.on("track_subscribed")
-    def on_track_subscribed(
-        track: rtc.Track, publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant
-    ):
-        logger.info("track subscribed: %s", publication.sid)
-
-    streamer = VideoStreamer(cam_index=cam_index)
-    streamer.start_camera_loop()
-
-    try:
-        await room.connect(LIVEKIT_URL, lk_token)
-        await streamer.publish_track(room)
-
-        # keep running
-        while True:
-            await asyncio.sleep(1)  # livekit room stay alive signal
-    except KeyboardInterrupt:
-        logger.info("KeyboardInterrupt, shutting down")
-    finally:
-        streamer.stop_camera_loop()
-        await room.disconnect()
+            while True:
+                await asyncio.sleep(1)  # livekit room stay alive signal
+        except KeyboardInterrupt:
+            self.logger.info("KeyboardInterrupt, shutting down")
+        finally:
+            self._stop_camera_loop()
+            await self.room.disconnect()

@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from camera_streaming.video_streamer import main as streamer_main
+from camera_streaming.camera_streamer import CameraStreamer
 
 
 def setup_logging():
@@ -64,7 +64,8 @@ async def main():
 
     try:
         logger.info(f"Starting camera streamer (camera {args.camera_index}, room {args.room})")
-        await streamer_main(args.participant, args.camera_index, args.room)
+        streamer = CameraStreamer(args.camera_index)
+        await streamer.stream_camera(args.participant, args.room)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:
