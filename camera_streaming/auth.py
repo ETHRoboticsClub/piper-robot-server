@@ -19,7 +19,7 @@ LIVEKIT_URL = os.getenv('LIVEKIT_URL')
 app = Flask(__name__)
 CORS(app)
 
-def generate_token(room_name: str, participant_identity=None, display_name=None, ttl_minutes=60):
+def generate_token(room_name: str, participant_identity: str, canPublish=False, ttl_minutes=60, display_name=None):
     """
     Generate a LiveKit access token for room access.
     
@@ -31,10 +31,7 @@ def generate_token(room_name: str, participant_identity=None, display_name=None,
     
     Returns:
         JWT token string
-    """
-
-    if not participant_identity:
-       participant_identity = f"python-user-{room_name}"
+    """ 
        
     if not display_name:
         display_name = participant_identity
@@ -50,26 +47,29 @@ def generate_token(room_name: str, participant_identity=None, display_name=None,
     .with_grants(api.VideoGrants(
         room_join=True,
         room=room_name,
-        can_publish=True,
+        can_publish=canPublish,
         can_subscribe=True,
     ))
 
     return token.to_jwt()
 
-@app.route('/api/subscriber-token', methods=['POST'])
-def get_subscriber_token():
+@app.route('/api/get-token', methods=['POST'])
+def get_token():
     """API endpoint to get a LiveKit token for the A-Frame frontend"""
     try:
         data = request.get_json() or {}
         room_name = data.get('room_name')
-        
-        if not room_name:
-            return jsonify({'error': 'room_name is required'}), 400
-            
         participant_identity = data.get('participant_identity')
+        canPublish = data.get('canPublish', False)
         ttl_minutes = data.get('ttl', 60)  # Default 1 hour
         
-        token = generate_token(room_name, participant_identity, ttl_minutes=ttl_minutes)
+        if not room_name: 
+            return jsonify({'error': 'room_name is required'}), 400
+        
+        if not participant_identity:
+            return jsonify({'error': 'participant_identity is required'}), 400
+        
+        token = generate_token(room_name, participant_identity, canPublish, ttl_minutes=ttl_minutes)
         return jsonify({
             'token': token, 
             'room_name': room_name,

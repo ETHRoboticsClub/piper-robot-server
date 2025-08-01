@@ -1,6 +1,13 @@
 // Wait for A-Frame scene to load
 
 AFRAME.registerComponent('controller-updater', {
+  schema: {
+    roomName: { type: 'string', default: 'robot-vr-room' },
+    participantIdentity: { type: 'string', default: 'vr-controllers'},
+    authServerPort: { type: 'number', default: 5050 },
+    debug: { type: 'boolean', default: false },
+  },
+
   init: function () {
     console.log("Controller updater component initialized.");
     // Controllers are enabled
@@ -10,8 +17,7 @@ AFRAME.registerComponent('controller-updater', {
     this.leftHandInfoText = document.querySelector('#leftHandInfo');
     this.rightHandInfoText = document.querySelector('#rightHandInfo');
 
-    // --- WebSocket Setup ---
-    this.websocket = null;
+    // --- Controller State ---
     this.leftGripDown = false;
     this.rightGripDown = false;
     this.leftTriggerDown = false;
@@ -35,41 +41,9 @@ AFRAME.registerComponent('controller-updater', {
     this.leftZAxisRotation = 0;
     this.rightZAxisRotation = 0;
 
-    // --- Get hostname dynamically ---
-    const serverHostname = window.location.hostname;
-    const websocketPort = 8442; // Make sure this matches controller_server.py
-    const websocketUrl = `wss://${serverHostname}:${websocketPort}`;
-    console.log(`Attempting WebSocket connection to: ${websocketUrl}`);
-    // !!! IMPORTANT: Replace 'YOUR_LAPTOP_IP' with the actual IP address of your laptop !!!
-    // const websocketUrl = 'ws://YOUR_LAPTOP_IP:8442';
-    try {
-      this.websocket = new WebSocket(websocketUrl);
-      this.websocket.onopen = (event) => {
-        console.log(`WebSocket connected to ${websocketUrl}`);
-        this.reportVRStatus(true);
-      };
-      this.websocket.onerror = (event) => {
-        // More detailed error logging
-        console.error(`WebSocket Error: Event type: ${event.type}`, event);
-        this.reportVRStatus(false);
-      };
-      this.websocket.onclose = (event) => {
-        console.log(`WebSocket disconnected from ${websocketUrl}. Clean close: ${event.wasClean}, Code: ${event.code}, Reason: '${event.reason}'`);
-        // Attempt to log specific error if available (might be limited by browser security)
-        if (!event.wasClean) {
-          console.error('WebSocket closed unexpectedly.');
-        }
-        this.websocket = null; // Clear the reference
-        this.reportVRStatus(false);
-      };
-      this.websocket.onmessage = (event) => {
-        console.log(`WebSocket message received: ${event.data}`); // Log any messages from server
-      };
-    } catch (error) {
-        console.error(`Failed to create WebSocket connection to ${websocketUrl}:`, error);
-        this.reportVRStatus(false);
-    }
-    // --- End WebSocket Setup ---
+    // set up text encoder and decoder
+    this.encoder = new TextEncoder();
+    this.decoder = new TextDecoder();
 
     // --- VR Status Reporting Function ---
     this.reportVRStatus = (connected) => {
@@ -112,52 +86,45 @@ AFRAME.registerComponent('controller-updater', {
 
     // --- Helper function to send grip release message ---
     this.sendGripRelease = (hand) => {
-      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-        const releaseMessage = {
-          hand: hand,
-          gripReleased: true
-        };
-        this.websocket.send(JSON.stringify(releaseMessage));
-        console.log(`Sent grip release for ${hand} hand`);
-      }
+      // encode gripper release message
+      const releaseMessage = {
+        hand: hand,
+        gripReleased: true
+      };
+      this.sendMessageToControlServer(releaseMessage);
+      console.log(`Sent grip release for ${hand} hand`);
     };
 
     // --- Helper function to send trigger release message ---
     this.sendTriggerRelease = (hand) => {
-      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         const releaseMessage = {
           hand: hand,
           triggerReleased: true
         };
-        this.websocket.send(JSON.stringify(releaseMessage));
+        this.sendMessageToControlServer(releaseMessage);
         console.log(`Sent trigger release for ${hand} hand`);
-      }
     };
 
     // --- Helper function to send X button release message ---
     this.sendXButtonRelease = (hand) => {
-      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         const releaseMessage = {
           hand: hand,
           xButtonReleased: true,
           resetEvent: true
         };
-        this.websocket.send(JSON.stringify(releaseMessage));
+        this.sendMessageToControlServer(releaseMessage);
         console.log(`Sent X button release (reset event) for ${hand} hand`);
-      }
     };
 
     // --- Helper function to send A button release message ---
     this.sendAButtonRelease = (hand) => {
-      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         const releaseMessage = {
           hand: hand,
           aButtonReleased: true,
           resetEvent: true
         };
-        this.websocket.send(JSON.stringify(releaseMessage));
+        this.sendMessageToControlServer(releaseMessage);
         console.log(`Sent A button release (reset event) for ${hand} hand`);
-      }
     };
 
     // --- Helper function to calculate relative rotation ---
@@ -313,6 +280,15 @@ AFRAME.registerComponent('controller-updater', {
   });
     // --- End Modify Event Listeners ---
 
+  },
+
+  sendMessageToControlServer: function(message) {
+    const strData = JSON.stringify(message);
+    const encodedData = this.encoder.encode(strData);
+    this.room.localParticipant.publishData(encodedData, {
+      reliable: true,
+      destinationIdentities: ['control-server']
+    });
   },
 
   createAxisIndicators: function() {
@@ -571,8 +547,7 @@ AFRAME.registerComponent('controller-updater', {
         rightController.aButtonDown = this.rightAButtonDown;
     }
 
-    // Send combined packet if WebSocket is open and at least one controller has valid data
-    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+    // Send combined packet if at least one controller has valid data
         const hasValidLeft = leftController.position && (leftController.position.x !== 0 || leftController.position.y !== 0 || leftController.position.z !== 0);
         const hasValidRight = rightController.position && (rightController.position.x !== 0 || rightController.position.y !== 0 || rightController.position.z !== 0);
         
@@ -582,8 +557,7 @@ AFRAME.registerComponent('controller-updater', {
                 leftController: leftController,
                 rightController: rightController
             };
-            this.websocket.send(JSON.stringify(dualControllerData));
-        }
+        this.sendMessageToControlServer(dualControllerData);
     }
   }
 });
