@@ -1,12 +1,12 @@
 """
 Input providers for the teleoperation system.
-Contains VR WebSocket server and keyboard listener implementations.
+Contains keyboard listener implementations.
 """
 
 from .base import ControlGoal
-from .vr_ws_server import VRWebSocketServer
+from .vr_controllers import VRControllerInputProvider
 
 __all__ = [
-    "VRWebSocketServer",
+    "VRControllerInputProvider",
     "ControlGoal",
 ]

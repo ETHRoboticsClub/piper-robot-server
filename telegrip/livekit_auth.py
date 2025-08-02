@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-
+from telegrip.config import config
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -136,10 +136,14 @@ class LiveKitAuthServer:
         def get_token(payload: dict) -> JSONResponse:
             return self._get_token(payload)
         
+        @self.app.get('/api/livekit-config')
+        def get_livekit_config() -> JSONResponse:
+            return JSONResponse(config.__dict__, status_code=200)
+        
         @self.app.post('/api/shutdown')
         def shutdown() -> JSONResponse:
             return self.stop()
-
+        
     def _run_server(self, host: str, port: int, cert: str, key: str) -> None:
         """Internal entry point executed in the subprocess to run uvicorn."""
         ssl_certfile = cert if cert and Path(cert).is_file() else None

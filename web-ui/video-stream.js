@@ -1,11 +1,5 @@
 // This component receives the video stream from the Python camera streamer
-AFRAME.registerComponent('teleop-video-streamer', {
-  schema: {
-    roomName: { type: 'string', default: 'robot-vr-teleop-room' },
-    participantIdentity: { type: 'string', default: 'vr-teleop-viewer' },
-    debug: { type: 'boolean', default: false },
-  },
-
+AFRAME.registerComponent('teleop-video-stream', {
   init: function () {
     console.log('Teleop video streamer component initialized.');
     console.log('User agent:', navigator.userAgent);
@@ -13,21 +7,37 @@ AFRAME.registerComponent('teleop-video-streamer', {
 
     this.videoElement = null;
 
+    // Create video element for the stream
+    this.createVideoElement();
+
+    // Load config and initialize asynchronously
+    this.initializeAsyncWithConfig();
+  },
+
+  initializeAsyncWithConfig: async function () {
+    // defaults, if loading from backend fails
+    let roomName = 'robot-vr-teleop-room';
+    let participantIdentity = 'vr-viewer';
+    let debug = false;
+
+    try {
+      const config = await window.LiveKitUtils.loadLiveKitConfig();
+      roomName = config.livekit_room;
+      participantIdentity = config.vr_viewer_participant;
+      debug = config.vr_viewer_debug;
+      console.log('Loaded LiveKit config from backend:', config);
+    } catch (error) {
+      console.warn('Failed to load LiveKit config, using defaults:', error);
+    }
+
     // Create debug text display for VR
-    if (this.data.debug) {
+    if (debug) {
       window.LiveKitUtils.createVrLogDisplay();
       window.LiveKitUtils.logToVR('VR log display created');
     }
 
-    // Create video element for the stream
-    this.createVideoElement();
-
     // connect to livekit room
-    window.LiveKitUtils.asyncRoomConnect(
-      this,
-      this.data.roomName,
-      this.data.participantIdentity,
-    );
+    window.LiveKitUtils.asyncRoomConnect(this, roomName, participantIdentity);
   },
 
   // --- LiveKit Event Handlers ---

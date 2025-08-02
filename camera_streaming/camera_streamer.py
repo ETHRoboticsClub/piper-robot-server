@@ -26,6 +26,8 @@ class CameraStreamer:
         self.logger = logging.getLogger(__name__)
         
         self._proc: Optional[mp.Process] = None
+        self.is_running = False
+        self.cam_loop_task: Optional[asyncio.Task] = None
 
         # Camera index and backend
         self.cam_index = cam_index
@@ -56,9 +58,6 @@ class CameraStreamer:
         # LiveKit room placeholder (set when start() is called)
         self.room = None
 
-        self.is_running = False
-        self.cam_loop_task = None
-
         # Check if camera opened successfully
         if not self.cap.isOpened():
             raise RuntimeError(f"Failed to open camera at index {self.cam_index}")
@@ -76,7 +75,8 @@ class CameraStreamer:
                 await self.cam_loop_task # wait for the loop to finish
             except asyncio.CancelledError:
                 pass
-        self.cap.release()
+        if self.cap:
+            self.cap.release()
         self.logger.info("Stopped Camera Stream")
 
     async def _camera_loop(self):
@@ -141,19 +141,36 @@ class CameraStreamer:
         except KeyboardInterrupt:
             self.logger.info("KeyboardInterrupt, shutting down")
         finally:
-            self._stop_camera_loop()
+            await self._stop_camera_loop()
             await self.room.disconnect()
 
-    async def start(self, room_name: str, participant_name: str):
+    def _publisher_entry(self, room_name: str, participant_name: str):
+        """Synchronous entry point, running camera publisher in asyncio event loop"""
+        asyncio.run(self._run_camera_publisher(room_name, participant_name))
+
+    def start(self, room_name: str, participant_name: str):
         if self._proc and self._proc.is_alive():
             self.logger.info("Camera streamer already running")
             return
         
-        self._proc = mp.Process(target=self._run_camera_publisher, args=(room_name, participant_name), daemon=True)
+        self._proc = mp.Process(
+            target=self._publisher_entry,
+            args=(room_name, participant_name),
+            daemon=True,
+        )
         self._proc.start()
-        self.logger.info("Camera streamer started")
+        self.logger.info("Camera streamer started (pid=%s)", self._proc.pid)
 
-    async def stop(self):
-        self.logger.info("Disconnecting from LiveKit room")
-        if self.room:
-            await self.room.disconnect()
+    def stop(self, timeout: float = 5.0):
+        """Terminate the camera streamer process if running."""
+        if not self._proc:
+            return
+        self.logger.info("Stopping camera streamer (pid=%s)...", self._proc.pid)
+        if self._proc.is_alive():
+            self._proc.terminate()
+            self._proc.join(timeout)
+            if self._proc.is_alive():
+                self.logger.warning("Camera streamer did not stop within %.1fs, killing", timeout)
+                self._proc.kill()
+                self._proc.join()
+        self._proc = None

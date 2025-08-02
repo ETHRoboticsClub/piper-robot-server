@@ -5,10 +5,7 @@ The main entry point for the teleoperation system.
 import argparse
 import asyncio
 import logging
-import multiprocessing as mp
 
-
-from typing import Optional
 from camera_streaming.camera_streamer import CameraStreamer
 from telegrip.config import config
 from telegrip.control_loop import ControlLoop
@@ -77,16 +74,13 @@ async def main():
         logger.info("Starting auth server...")
         auth_server.start() 
         logger.info("Starting camera streamer...")
-        camera_streamer.start(room_name, "vr-teleop-viewer")
+        camera_streamer.start(room_name, config.camera_streamer_participant)
         
         logger.info("Starting control loop...")
-        await _run_control_process(room_name, "vr-teleop-viewer", robot_enabled, visualize)
+        await _run_control_process(room_name=room_name, participant_name=config.controller_participant, robot_enabled=robot_enabled, visualize=visualize)
         
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down...")
-        auth_server.stop()
-        camera_streamer.stop()
-        logger.info("All processes stopped")
     
     finally:
         logger.info("Shutting down...")

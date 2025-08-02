@@ -1,14 +1,8 @@
 // Wait for A-Frame scene to load
 
-AFRAME.registerComponent('controller-updater', {
-  schema: {
-    roomName: { type: 'string', default: 'robot-vr-teleop-room' },
-    participantIdentity: { type: 'string', default: 'vr-controller-commands'},
-    debug: { type: 'boolean', default: false },
-  },
-
+AFRAME.registerComponent('controlles', {
   init: function () {
-    console.log("Controller updater component initialized.");
+    console.log('Controller updater component initialized.');
     // Controllers are enabled
 
     this.leftHand = document.querySelector('#leftHand');
@@ -44,12 +38,8 @@ AFRAME.registerComponent('controller-updater', {
     this.encoder = new TextEncoder();
     this.decoder = new TextDecoder();
 
-    // connect to livekit room
-    window.LiveKitUtils.asyncRoomConnect(
-      this,
-      this.data.roomName,
-      this.data.participantIdentity,
-    );
+    // Load config and initialize asynchronously
+    this.initializeAsyncWithConfig();
 
     // --- VR Status Reporting Function ---
     this.reportVRStatus = (connected) => {
@@ -57,34 +47,46 @@ AFRAME.registerComponent('controller-updater', {
       if (typeof updateStatus === 'function') {
         updateStatus({ vrConnected: connected });
       }
-      
+
       // Also try to notify parent window if in iframe
       try {
         if (window.parent && window.parent !== window) {
-          window.parent.postMessage({
-            type: 'vr_status',
-            connected: connected
-          }, '*');
+          window.parent.postMessage(
+            {
+              type: 'vr_status',
+              connected: connected,
+            },
+            '*',
+          );
         }
       } catch (e) {
         // Ignore cross-origin errors
       }
     };
 
-    if (!this.leftHand || !this.rightHand || !this.leftHandInfoText || !this.rightHandInfoText) {
-      console.error("Controller or text entities not found!");
+    if (
+      !this.leftHand ||
+      !this.rightHand ||
+      !this.leftHandInfoText ||
+      !this.rightHandInfoText
+    ) {
+      console.error('Controller or text entities not found!');
       // Check which specific elements are missing
-      if (!this.leftHand) console.error("Left hand entity not found");
-      if (!this.rightHand) console.error("Right hand entity not found");
-      if (!this.leftHandInfoText) console.error("Left hand info text not found");
-      if (!this.rightHandInfoText) console.error("Right hand info text not found");
+      if (!this.leftHand) console.error('Left hand entity not found');
+      if (!this.rightHand) console.error('Right hand entity not found');
+      if (!this.leftHandInfoText)
+        console.error('Left hand info text not found');
+      if (!this.rightHandInfoText)
+        console.error('Right hand info text not found');
       return;
     }
 
     // Apply initial rotation to combined text elements
     const textRotation = '-90 0 0'; // Rotate -90 degrees around X-axis
-    if (this.leftHandInfoText) this.leftHandInfoText.setAttribute('rotation', textRotation);
-    if (this.rightHandInfoText) this.rightHandInfoText.setAttribute('rotation', textRotation);
+    if (this.leftHandInfoText)
+      this.leftHandInfoText.setAttribute('rotation', textRotation);
+    if (this.rightHandInfoText)
+      this.rightHandInfoText.setAttribute('rotation', textRotation);
 
     // --- Create axis indicators ---
     this.createAxisIndicators();
@@ -94,7 +96,7 @@ AFRAME.registerComponent('controller-updater', {
       // encode gripper release message
       const releaseMessage = {
         hand: hand,
-        gripReleased: true
+        gripReleased: true,
       };
       this.sendMessageToControlServer(releaseMessage);
       console.log(`Sent grip release for ${hand} hand`);
@@ -102,34 +104,34 @@ AFRAME.registerComponent('controller-updater', {
 
     // --- Helper function to send trigger release message ---
     this.sendTriggerRelease = (hand) => {
-        const releaseMessage = {
-          hand: hand,
-          triggerReleased: true
-        };
-        this.sendMessageToControlServer(releaseMessage);
-        console.log(`Sent trigger release for ${hand} hand`);
+      const releaseMessage = {
+        hand: hand,
+        triggerReleased: true,
+      };
+      this.sendMessageToControlServer(releaseMessage);
+      console.log(`Sent trigger release for ${hand} hand`);
     };
 
     // --- Helper function to send X button release message ---
     this.sendXButtonRelease = (hand) => {
-        const releaseMessage = {
-          hand: hand,
-          xButtonReleased: true,
-          resetEvent: true
-        };
-        this.sendMessageToControlServer(releaseMessage);
-        console.log(`Sent X button release (reset event) for ${hand} hand`);
+      const releaseMessage = {
+        hand: hand,
+        xButtonReleased: true,
+        resetEvent: true,
+      };
+      this.sendMessageToControlServer(releaseMessage);
+      console.log(`Sent X button release (reset event) for ${hand} hand`);
     };
 
     // --- Helper function to send A button release message ---
     this.sendAButtonRelease = (hand) => {
-        const releaseMessage = {
-          hand: hand,
-          aButtonReleased: true,
-          resetEvent: true
-        };
-        this.sendMessageToControlServer(releaseMessage);
-        console.log(`Sent A button release (reset event) for ${hand} hand`);
+      const releaseMessage = {
+        hand: hand,
+        aButtonReleased: true,
+        resetEvent: true,
+      };
+      this.sendMessageToControlServer(releaseMessage);
+      console.log(`Sent A button release (reset event) for ${hand} hand`);
     };
 
     // --- Helper function to calculate relative rotation ---
@@ -137,7 +139,7 @@ AFRAME.registerComponent('controller-updater', {
       return {
         x: currentRotation.x - initialRotation.x,
         y: currentRotation.y - initialRotation.y,
-        z: currentRotation.z - initialRotation.z
+        z: currentRotation.z - initialRotation.z,
       };
     };
 
@@ -145,146 +147,184 @@ AFRAME.registerComponent('controller-updater', {
     this.calculateZAxisRotation = (currentQuaternion, initialQuaternion) => {
       // Calculate relative quaternion (from initial to current)
       const relativeQuat = new THREE.Quaternion();
-      relativeQuat.multiplyQuaternions(currentQuaternion, initialQuaternion.clone().invert());
-      
+      relativeQuat.multiplyQuaternions(
+        currentQuaternion,
+        initialQuaternion.clone().invert(),
+      );
+
       // Get the controller's current forward direction (local Z-axis in world space)
       const forwardDirection = new THREE.Vector3(0, 0, 1);
       forwardDirection.applyQuaternion(currentQuaternion);
-      
+
       // Convert relative quaternion to axis-angle representation
       const angle = 2 * Math.acos(Math.abs(relativeQuat.w));
-      
+
       // Handle case where there's no rotation (avoid division by zero)
       if (angle < 0.0001) {
         return 0;
       }
-      
+
       // Get the rotation axis
       const sinHalfAngle = Math.sqrt(1 - relativeQuat.w * relativeQuat.w);
       const rotationAxis = new THREE.Vector3(
         relativeQuat.x / sinHalfAngle,
         relativeQuat.y / sinHalfAngle,
-        relativeQuat.z / sinHalfAngle
+        relativeQuat.z / sinHalfAngle,
       );
-      
+
       // Project the rotation axis onto the forward direction to get the component
       // of rotation around the forward axis
       const projectedComponent = rotationAxis.dot(forwardDirection);
-      
+
       // The rotation around the forward axis is the angle times the projection
       const forwardRotation = angle * projectedComponent;
-      
+
       // Convert to degrees and handle the sign properly
       let degrees = THREE.MathUtils.radToDeg(forwardRotation);
-      
+
       // Normalize to -180 to +180 range to avoid sudden jumps
       while (degrees > 180) degrees -= 360;
       while (degrees < -180) degrees += 360;
-      
+
       return degrees;
     };
 
     // --- Modify Event Listeners ---
     this.leftHand.addEventListener('triggerdown', (evt) => {
-        console.log('Left Trigger Pressed');
-        this.leftTriggerDown = true;
+      console.log('Left Trigger Pressed');
+      this.leftTriggerDown = true;
     });
     this.leftHand.addEventListener('triggerup', (evt) => {
-        console.log('Left Trigger Released');
-        this.leftTriggerDown = false;
-        this.sendTriggerRelease('left'); // Send trigger release message
+      console.log('Left Trigger Released');
+      this.leftTriggerDown = false;
+      this.sendTriggerRelease('left'); // Send trigger release message
     });
     this.leftHand.addEventListener('gripdown', (evt) => {
-        console.log('Left Grip Pressed');
-        this.leftGripDown = true; // Set grip state
-        
-        // Store initial rotation for relative tracking
-        if (this.leftHand.object3D.visible) {
-          const leftRotEuler = this.leftHand.object3D.rotation;
-          this.leftGripInitialRotation = {
-            x: THREE.MathUtils.radToDeg(leftRotEuler.x),
-            y: THREE.MathUtils.radToDeg(leftRotEuler.y),
-            z: THREE.MathUtils.radToDeg(leftRotEuler.z)
-          };
-          
-          // Store initial quaternion for Z-axis rotation tracking
-          this.leftGripInitialQuaternion = this.leftHand.object3D.quaternion.clone();
-          
-          console.log('Left grip initial rotation:', this.leftGripInitialRotation);
-          console.log('Left grip initial quaternion:', this.leftGripInitialQuaternion);
-        }
+      console.log('Left Grip Pressed');
+      this.leftGripDown = true; // Set grip state
+
+      // Store initial rotation for relative tracking
+      if (this.leftHand.object3D.visible) {
+        const leftRotEuler = this.leftHand.object3D.rotation;
+        this.leftGripInitialRotation = {
+          x: THREE.MathUtils.radToDeg(leftRotEuler.x),
+          y: THREE.MathUtils.radToDeg(leftRotEuler.y),
+          z: THREE.MathUtils.radToDeg(leftRotEuler.z),
+        };
+
+        // Store initial quaternion for Z-axis rotation tracking
+        this.leftGripInitialQuaternion =
+          this.leftHand.object3D.quaternion.clone();
+
+        console.log(
+          'Left grip initial rotation:',
+          this.leftGripInitialRotation,
+        );
+        console.log(
+          'Left grip initial quaternion:',
+          this.leftGripInitialQuaternion,
+        );
+      }
     });
-    this.leftHand.addEventListener('gripup', (evt) => { // Add gripup listener
-        console.log('Left Grip Released');
-        this.leftGripDown = false; // Reset grip state
-        this.leftGripInitialRotation = null; // Reset initial rotation
-        this.leftGripInitialQuaternion = null; // Reset initial quaternion
-        this.leftRelativeRotation = { x: 0, y: 0, z: 0 }; // Reset relative rotation
-        this.leftZAxisRotation = 0; // Reset Z-axis rotation
-        this.sendGripRelease('left'); // Send grip release message
+    this.leftHand.addEventListener('gripup', (evt) => {
+      // Add gripup listener
+      console.log('Left Grip Released');
+      this.leftGripDown = false; // Reset grip state
+      this.leftGripInitialRotation = null; // Reset initial rotation
+      this.leftGripInitialQuaternion = null; // Reset initial quaternion
+      this.leftRelativeRotation = { x: 0, y: 0, z: 0 }; // Reset relative rotation
+      this.leftZAxisRotation = 0; // Reset Z-axis rotation
+      this.sendGripRelease('left'); // Send grip release message
     });
 
     this.leftHand.addEventListener('xbuttondown', (evt) => {
-        console.log('Left X Button Pressed (Reset Event)');
-        this.leftXButtonDown = true;
+      console.log('Left X Button Pressed (Reset Event)');
+      this.leftXButtonDown = true;
     });
     this.leftHand.addEventListener('xbuttonup', (evt) => {
-        console.log('Left X Button Released (Reset Event)');
-        this.leftXButtonDown = false;
-        this.sendXButtonRelease('left'); // Send X button release message
+      console.log('Left X Button Released (Reset Event)');
+      this.leftXButtonDown = false;
+      this.sendXButtonRelease('left'); // Send X button release message
     });
 
     this.rightHand.addEventListener('triggerdown', (evt) => {
-        console.log('Right Trigger Pressed');
-        this.rightTriggerDown = true;
+      console.log('Right Trigger Pressed');
+      this.rightTriggerDown = true;
     });
     this.rightHand.addEventListener('triggerup', (evt) => {
-        console.log('Right Trigger Released');
-        this.rightTriggerDown = false;
-        this.sendTriggerRelease('right'); // Send trigger release message
+      console.log('Right Trigger Released');
+      this.rightTriggerDown = false;
+      this.sendTriggerRelease('right'); // Send trigger release message
     });
     this.rightHand.addEventListener('gripdown', (evt) => {
-        console.log('Right Grip Pressed');
-        this.rightGripDown = true; // Set grip state
-        
-        // Store initial rotation for relative tracking
-        if (this.rightHand.object3D.visible) {
-          const rightRotEuler = this.rightHand.object3D.rotation;
-          this.rightGripInitialRotation = {
-            x: THREE.MathUtils.radToDeg(rightRotEuler.x),
-            y: THREE.MathUtils.radToDeg(rightRotEuler.y),
-            z: THREE.MathUtils.radToDeg(rightRotEuler.z)
-          };
-          
-          // Store initial quaternion for Z-axis rotation tracking
-          this.rightGripInitialQuaternion = this.rightHand.object3D.quaternion.clone();
-          
-          console.log('Right grip initial rotation:', this.rightGripInitialRotation);
-          console.log('Right grip initial quaternion:', this.rightGripInitialQuaternion);
-        }
+      console.log('Right Grip Pressed');
+      this.rightGripDown = true; // Set grip state
+
+      // Store initial rotation for relative tracking
+      if (this.rightHand.object3D.visible) {
+        const rightRotEuler = this.rightHand.object3D.rotation;
+        this.rightGripInitialRotation = {
+          x: THREE.MathUtils.radToDeg(rightRotEuler.x),
+          y: THREE.MathUtils.radToDeg(rightRotEuler.y),
+          z: THREE.MathUtils.radToDeg(rightRotEuler.z),
+        };
+
+        // Store initial quaternion for Z-axis rotation tracking
+        this.rightGripInitialQuaternion =
+          this.rightHand.object3D.quaternion.clone();
+
+        console.log(
+          'Right grip initial rotation:',
+          this.rightGripInitialRotation,
+        );
+        console.log(
+          'Right grip initial quaternion:',
+          this.rightGripInitialQuaternion,
+        );
+      }
     });
-    this.rightHand.addEventListener('gripup', (evt) => { // Add gripup listener
-        console.log('Right Grip Released');
-        this.rightGripDown = false; // Reset grip state
-        this.rightGripInitialRotation = null; // Reset initial rotation
-        this.rightGripInitialQuaternion = null; // Reset initial quaternion
-        this.rightRelativeRotation = { x: 0, y: 0, z: 0 }; // Reset relative rotation
-        this.rightZAxisRotation = 0; // Reset Z-axis rotation
-        this.sendGripRelease('right'); // Send grip release message
+    this.rightHand.addEventListener('gripup', (evt) => {
+      // Add gripup listener
+      console.log('Right Grip Released');
+      this.rightGripDown = false; // Reset grip state
+      this.rightGripInitialRotation = null; // Reset initial rotation
+      this.rightGripInitialQuaternion = null; // Reset initial quaternion
+      this.rightRelativeRotation = { x: 0, y: 0, z: 0 }; // Reset relative rotation
+      this.rightZAxisRotation = 0; // Reset Z-axis rotation
+      this.sendGripRelease('right'); // Send grip release message
     });
     // --- End Modify Event Listeners ---
 
     this.rightHand.addEventListener('abuttondown', (evt) => {
       console.log('Right A Button Pressed (Reset Event)');
       this.rightAButtonDown = true;
-  });
-  this.rightHand.addEventListener('abuttonup', (evt) => {
+    });
+    this.rightHand.addEventListener('abuttonup', (evt) => {
       console.log('Right A Button Released (Reset Event)');
       this.rightAButtonDown = false;
       this.sendAButtonRelease('right'); // Send A button release message
-  });
+    });
     // --- End Modify Event Listeners ---
+  },
 
+  initializeAsyncWithConfig: async function () {
+    // defaults, if loading from backend fails
+    let roomName = 'robot-vr-teleop-room';
+    let participantIdentity = 'vr-controller-commands';
+    let debug = false;
+
+    try {
+      const config = await window.LiveKitUtils.loadLiveKitConfig();
+      roomName = config.livekit_room;
+      participantIdentity = config.controller_participant;
+      debug = config.vr_viewer_debug;
+      console.log('Loaded LiveKit config from backend:', config);
+    } catch (error) {
+      console.warn('Failed to load LiveKit config, using defaults:', error);
+    }
+
+    // connect to livekit room
+    window.LiveKitUtils.asyncRoomConnect(this, roomName, participantIdentity);
   },
 
   // --- LiveKit Event Handlers ---
@@ -309,18 +349,18 @@ AFRAME.registerComponent('controller-updater', {
   },
   // --- End LiveKit Event Handlers ---
 
-  sendMessageToControlServer: function(message) {
+  sendMessageToControlServer: function (message) {
     const strData = JSON.stringify(message);
     const encodedData = this.encoder.encode(strData);
     window.LiveKitUtils.room.localParticipant.publishData(encodedData, {
       reliable: true,
-      destinationIdentities: ['control-server']
+      destinationIdentities: ['control-server'],
     });
   },
 
-  createAxisIndicators: function() {
+  createAxisIndicators: function () {
     // Create XYZ axis indicators for both controllers
-    
+
     // Left Controller Axes
     // X-axis (Red)
     const leftXAxis = document.createElement('a-cylinder');
@@ -435,7 +475,9 @@ AFRAME.registerComponent('controller-updater', {
     rightZTip.setAttribute('rotation', '90 0 0');
     this.rightHand.appendChild(rightZTip);
 
-    console.log('XYZ axis indicators created for both controllers (RGB for XYZ)');
+    console.log(
+      'XYZ axis indicators created for both controllers (RGB for XYZ)',
+    );
   },
 
   tick: function () {
@@ -453,246 +495,289 @@ AFRAME.registerComponent('controller-updater', {
 
     // Collect data from both controllers
     const leftController = {
-        hand: 'left',
-        position: null,
-        rotation: null,
-        gripActive: false,
-        trigger: 0,
-        xButtonDown: false
+      hand: 'left',
+      position: null,
+      rotation: null,
+      gripActive: false,
+      trigger: 0,
+      xButtonDown: false,
     };
-    
+
     const rightController = {
-        hand: 'right',
-        position: null,
-        rotation: null,
-        gripActive: false,
-        trigger: 0,
-        aButtonDown: false
+      hand: 'right',
+      position: null,
+      rotation: null,
+      gripActive: false,
+      trigger: 0,
+      aButtonDown: false,
     };
 
     // Update Left Hand Text & Collect Data
     if (this.leftHand.object3D.visible) {
-        const leftPos = this.leftHand.object3D.position;
-        const leftRotEuler = this.leftHand.object3D.rotation; // Euler angles in radians
-        // Convert to degrees without offset
-        const leftRotX = THREE.MathUtils.radToDeg(leftRotEuler.x);
-        const leftRotY = THREE.MathUtils.radToDeg(leftRotEuler.y);
-        const leftRotZ = THREE.MathUtils.radToDeg(leftRotEuler.z);
+      const leftPos = this.leftHand.object3D.position;
+      const leftRotEuler = this.leftHand.object3D.rotation; // Euler angles in radians
+      // Convert to degrees without offset
+      const leftRotX = THREE.MathUtils.radToDeg(leftRotEuler.x);
+      const leftRotY = THREE.MathUtils.radToDeg(leftRotEuler.y);
+      const leftRotZ = THREE.MathUtils.radToDeg(leftRotEuler.z);
 
-        // Calculate relative rotation if grip is held
-        if (this.leftGripDown && this.leftGripInitialRotation) {
-          this.leftRelativeRotation = this.calculateRelativeRotation(
-            { x: leftRotX, y: leftRotY, z: leftRotZ },
-            this.leftGripInitialRotation
+      // Calculate relative rotation if grip is held
+      if (this.leftGripDown && this.leftGripInitialRotation) {
+        this.leftRelativeRotation = this.calculateRelativeRotation(
+          { x: leftRotX, y: leftRotY, z: leftRotZ },
+          this.leftGripInitialRotation,
+        );
+
+        // Calculate Z-axis rotation using quaternions
+        if (this.leftGripInitialQuaternion) {
+          this.leftZAxisRotation = this.calculateZAxisRotation(
+            this.leftHand.object3D.quaternion,
+            this.leftGripInitialQuaternion,
           );
-          
-          // Calculate Z-axis rotation using quaternions
-          if (this.leftGripInitialQuaternion) {
-            this.leftZAxisRotation = this.calculateZAxisRotation(
-              this.leftHand.object3D.quaternion,
-              this.leftGripInitialQuaternion
-            );
-          }
-          
-          console.log('Left relative rotation:', this.leftRelativeRotation);
-          console.log('Left Z-axis rotation:', this.leftZAxisRotation.toFixed(1), 'degrees');
         }
 
-        // Create display text including relative rotation when grip is held
-        let combinedLeftText = `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(2)} ${leftPos.z.toFixed(2)}\\nRot: ${leftRotX.toFixed(0)} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`;
-        if (this.leftGripDown && this.leftGripInitialRotation) {
-          combinedLeftText += `\\nZ-Rot: ${this.leftZAxisRotation.toFixed(1)}°`;
-        }
+        console.log('Left relative rotation:', this.leftRelativeRotation);
+        console.log(
+          'Left Z-axis rotation:',
+          this.leftZAxisRotation.toFixed(1),
+          'degrees',
+        );
+      }
 
-        if (this.leftHandInfoText) {
-            this.leftHandInfoText.setAttribute('value', combinedLeftText);
-        }
+      // Create display text including relative rotation when grip is held
+      let combinedLeftText = `Pos: ${leftPos.x.toFixed(2)} ${leftPos.y.toFixed(
+        2,
+      )} ${leftPos.z.toFixed(2)}\\nRot: ${leftRotX.toFixed(
+        0,
+      )} ${leftRotY.toFixed(0)} ${leftRotZ.toFixed(0)}`;
+      if (this.leftGripDown && this.leftGripInitialRotation) {
+        combinedLeftText += `\\nZ-Rot: ${this.leftZAxisRotation.toFixed(1)}°`;
+      }
 
-        // Collect left controller data
-        leftController.position = { x: leftPos.x, y: leftPos.y, z: leftPos.z };
-        leftController.rotation = { x: leftRotX, y: leftRotY, z: leftRotZ };
-        leftController.quaternion = { 
-          x: this.leftHand.object3D.quaternion.x, 
-          y: this.leftHand.object3D.quaternion.y, 
-          z: this.leftHand.object3D.quaternion.z, 
-          w: this.leftHand.object3D.quaternion.w 
-        };
-        leftController.trigger = this.leftTriggerDown ? 1 : 0;
-        leftController.gripActive = this.leftGripDown;
-        leftController.xButtonDown = this.leftXButtonDown;
+      if (this.leftHandInfoText) {
+        this.leftHandInfoText.setAttribute('value', combinedLeftText);
+      }
+
+      // Collect left controller data
+      leftController.position = { x: leftPos.x, y: leftPos.y, z: leftPos.z };
+      leftController.rotation = { x: leftRotX, y: leftRotY, z: leftRotZ };
+      leftController.quaternion = {
+        x: this.leftHand.object3D.quaternion.x,
+        y: this.leftHand.object3D.quaternion.y,
+        z: this.leftHand.object3D.quaternion.z,
+        w: this.leftHand.object3D.quaternion.w,
+      };
+      leftController.trigger = this.leftTriggerDown ? 1 : 0;
+      leftController.gripActive = this.leftGripDown;
+      leftController.xButtonDown = this.leftXButtonDown;
     }
 
     // Update Right Hand Text & Collect Data
     if (this.rightHand.object3D.visible) {
-        const rightPos = this.rightHand.object3D.position;
-        const rightRotEuler = this.rightHand.object3D.rotation; // Euler angles in radians
-        // Convert to degrees without offset
-        const rightRotX = THREE.MathUtils.radToDeg(rightRotEuler.x);
-        const rightRotY = THREE.MathUtils.radToDeg(rightRotEuler.y);
-        const rightRotZ = THREE.MathUtils.radToDeg(rightRotEuler.z);
+      const rightPos = this.rightHand.object3D.position;
+      const rightRotEuler = this.rightHand.object3D.rotation; // Euler angles in radians
+      // Convert to degrees without offset
+      const rightRotX = THREE.MathUtils.radToDeg(rightRotEuler.x);
+      const rightRotY = THREE.MathUtils.radToDeg(rightRotEuler.y);
+      const rightRotZ = THREE.MathUtils.radToDeg(rightRotEuler.z);
 
-        // Calculate relative rotation if grip is held
-        if (this.rightGripDown && this.rightGripInitialRotation) {
-          this.rightRelativeRotation = this.calculateRelativeRotation(
-            { x: rightRotX, y: rightRotY, z: rightRotZ },
-            this.rightGripInitialRotation
+      // Calculate relative rotation if grip is held
+      if (this.rightGripDown && this.rightGripInitialRotation) {
+        this.rightRelativeRotation = this.calculateRelativeRotation(
+          { x: rightRotX, y: rightRotY, z: rightRotZ },
+          this.rightGripInitialRotation,
+        );
+
+        // Calculate Z-axis rotation using quaternions
+        if (this.rightGripInitialQuaternion) {
+          this.rightZAxisRotation = this.calculateZAxisRotation(
+            this.rightHand.object3D.quaternion,
+            this.rightGripInitialQuaternion,
           );
-          
-          // Calculate Z-axis rotation using quaternions
-          if (this.rightGripInitialQuaternion) {
-            this.rightZAxisRotation = this.calculateZAxisRotation(
-              this.rightHand.object3D.quaternion,
-              this.rightGripInitialQuaternion
-            );
-          }
-          
-          console.log('Right relative rotation:', this.rightRelativeRotation);
-          console.log('Right Z-axis rotation:', this.rightZAxisRotation.toFixed(1), 'degrees');
         }
 
-        // Create display text including relative rotation when grip is held
-        let combinedRightText = `Pos: ${rightPos.x.toFixed(2)} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(2)}\\nRot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(0)} ${rightRotZ.toFixed(0)}`;
-        if (this.rightGripDown && this.rightGripInitialRotation) {
-          combinedRightText += `\\nZ-Rot: ${this.rightZAxisRotation.toFixed(1)}°`;
-        }
+        console.log('Right relative rotation:', this.rightRelativeRotation);
+        console.log(
+          'Right Z-axis rotation:',
+          this.rightZAxisRotation.toFixed(1),
+          'degrees',
+        );
+      }
 
-        if (this.rightHandInfoText) {
-            this.rightHandInfoText.setAttribute('value', combinedRightText);
-        }
+      // Create display text including relative rotation when grip is held
+      let combinedRightText = `Pos: ${rightPos.x.toFixed(
+        2,
+      )} ${rightPos.y.toFixed(2)} ${rightPos.z.toFixed(
+        2,
+      )}\\nRot: ${rightRotX.toFixed(0)} ${rightRotY.toFixed(
+        0,
+      )} ${rightRotZ.toFixed(0)}`;
+      if (this.rightGripDown && this.rightGripInitialRotation) {
+        combinedRightText += `\\nZ-Rot: ${this.rightZAxisRotation.toFixed(1)}°`;
+      }
 
-        // Collect right controller data
-        rightController.position = { x: rightPos.x, y: rightPos.y, z: rightPos.z };
-        rightController.rotation = { x: rightRotX, y: rightRotY, z: rightRotZ };
-        rightController.quaternion = { 
-          x: this.rightHand.object3D.quaternion.x, 
-          y: this.rightHand.object3D.quaternion.y, 
-          z: this.rightHand.object3D.quaternion.z, 
-          w: this.rightHand.object3D.quaternion.w 
-        };
-        rightController.trigger = this.rightTriggerDown ? 1 : 0;
-        rightController.gripActive = this.rightGripDown;
-        rightController.aButtonDown = this.rightAButtonDown;
+      if (this.rightHandInfoText) {
+        this.rightHandInfoText.setAttribute('value', combinedRightText);
+      }
+
+      // Collect right controller data
+      rightController.position = {
+        x: rightPos.x,
+        y: rightPos.y,
+        z: rightPos.z,
+      };
+      rightController.rotation = { x: rightRotX, y: rightRotY, z: rightRotZ };
+      rightController.quaternion = {
+        x: this.rightHand.object3D.quaternion.x,
+        y: this.rightHand.object3D.quaternion.y,
+        z: this.rightHand.object3D.quaternion.z,
+        w: this.rightHand.object3D.quaternion.w,
+      };
+      rightController.trigger = this.rightTriggerDown ? 1 : 0;
+      rightController.gripActive = this.rightGripDown;
+      rightController.aButtonDown = this.rightAButtonDown;
     }
 
     // Send combined packet if at least one controller has valid data
-        const hasValidLeft = leftController.position && (leftController.position.x !== 0 || leftController.position.y !== 0 || leftController.position.z !== 0);
-        const hasValidRight = rightController.position && (rightController.position.x !== 0 || rightController.position.y !== 0 || rightController.position.z !== 0);
-        
-        if (hasValidLeft || hasValidRight) {
-            const dualControllerData = {
-                timestamp: Date.now(),
-                leftController: leftController,
-                rightController: rightController
-            };
-        this.sendMessageToControlServer(dualControllerData);
-    }
-  }
-});
+    const hasValidLeft =
+      leftController.position &&
+      (leftController.position.x !== 0 ||
+        leftController.position.y !== 0 ||
+        leftController.position.z !== 0);
+    const hasValidRight =
+      rightController.position &&
+      (rightController.position.x !== 0 ||
+        rightController.position.y !== 0 ||
+        rightController.position.z !== 0);
 
+    if (hasValidLeft || hasValidRight) {
+      const dualControllerData = {
+        timestamp: Date.now(),
+        leftController: leftController,
+        rightController: rightController,
+      };
+      this.sendMessageToControlServer(dualControllerData);
+    }
+  },
+});
 
 // Add the component to the scene after it's loaded
 document.addEventListener('DOMContentLoaded', (event) => {
-    const scene = document.querySelector('a-scene');
+  const scene = document.querySelector('a-scene');
 
-    if (scene) {
-        // Listen for controller connection events
-        scene.addEventListener('controllerconnected', (evt) => {
-            console.log('Controller CONNECTED:', evt.detail.name, evt.detail.component.data.hand);
-        });
-        scene.addEventListener('controllerdisconnected', (evt) => {
-            console.log('Controller DISCONNECTED:', evt.detail.name, evt.detail.component.data.hand);
-        });
+  if (scene) {
+    // Listen for controller connection events
+    scene.addEventListener('controllerconnected', (evt) => {
+      console.log(
+        'Controller CONNECTED:',
+        evt.detail.name,
+        evt.detail.component.data.hand,
+      );
+    });
+    scene.addEventListener('controllerdisconnected', (evt) => {
+      console.log(
+        'Controller DISCONNECTED:',
+        evt.detail.name,
+        evt.detail.component.data.hand,
+      );
+    });
 
-        // Add controller-updater component when scene is loaded (A-Frame manages session)
-        if (scene.hasLoaded) {
-            scene.setAttribute('controller-updater', '');
-            console.log("controller-updater component added immediately.");
-        } else {
-            scene.addEventListener('loaded', () => {
-                scene.setAttribute('controller-updater', '');
-                console.log("controller-updater component added after scene loaded.");
-            });
-        }
+    // Add controller-updater component when scene is loaded (A-Frame manages session)
+    if (scene.hasLoaded) {
+      scene.setAttribute('controller-updater', '');
+      console.log('controller-updater component added immediately.');
     } else {
-        console.error('A-Frame scene not found!');
+      scene.addEventListener('loaded', () => {
+        scene.setAttribute('controller-updater', '');
+        console.log('controller-updater component added after scene loaded.');
+      });
     }
+  } else {
+    console.error('A-Frame scene not found!');
+  }
 
-    // Add controller tracking button logic
-    addControllerTrackingButton();
+  // Add controller tracking button logic
+  addControllerTrackingButton();
 });
 
 function addControllerTrackingButton() {
-    if (navigator.xr) {
-        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            if (supported) {
-                // Create Start Controller Tracking button
-                const startButton = document.createElement('button');
-                startButton.id = 'start-tracking-button';
-                startButton.textContent = 'Start Controller Tracking';
-                startButton.style.position = 'fixed';
-                startButton.style.top = '50%';
-                startButton.style.left = '50%';
-                startButton.style.transform = 'translate(-50%, -50%)';
-                startButton.style.padding = '20px 40px';
-                startButton.style.fontSize = '20px';
-                startButton.style.fontWeight = 'bold';
-                startButton.style.backgroundColor = '#4CAF50';
-                startButton.style.color = 'white';
-                startButton.style.border = 'none';
-                startButton.style.borderRadius = '8px';
-                startButton.style.cursor = 'pointer';
-                startButton.style.zIndex = '9999';
-                startButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
-                startButton.style.transition = 'all 0.3s ease';
+  if (navigator.xr) {
+    navigator.xr
+      .isSessionSupported('immersive-ar')
+      .then((supported) => {
+        if (supported) {
+          // Create Start Controller Tracking button
+          const startButton = document.createElement('button');
+          startButton.id = 'start-tracking-button';
+          startButton.textContent = 'Start Controller Tracking';
+          startButton.style.position = 'fixed';
+          startButton.style.top = '50%';
+          startButton.style.left = '50%';
+          startButton.style.transform = 'translate(-50%, -50%)';
+          startButton.style.padding = '20px 40px';
+          startButton.style.fontSize = '20px';
+          startButton.style.fontWeight = 'bold';
+          startButton.style.backgroundColor = '#4CAF50';
+          startButton.style.color = 'white';
+          startButton.style.border = 'none';
+          startButton.style.borderRadius = '8px';
+          startButton.style.cursor = 'pointer';
+          startButton.style.zIndex = '9999';
+          startButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+          startButton.style.transition = 'all 0.3s ease';
 
-                // Hover effects
-                startButton.addEventListener('mouseenter', () => {
-                    startButton.style.backgroundColor = '#45a049';
-                    startButton.style.transform = 'translate(-50%, -50%) scale(1.05)';
-                });
-                startButton.addEventListener('mouseleave', () => {
-                    startButton.style.backgroundColor = '#4CAF50';
-                    startButton.style.transform = 'translate(-50%, -50%) scale(1)';
-                });
+          // Hover effects
+          startButton.addEventListener('mouseenter', () => {
+            startButton.style.backgroundColor = '#45a049';
+            startButton.style.transform = 'translate(-50%, -50%) scale(1.05)';
+          });
+          startButton.addEventListener('mouseleave', () => {
+            startButton.style.backgroundColor = '#4CAF50';
+            startButton.style.transform = 'translate(-50%, -50%) scale(1)';
+          });
 
-                startButton.onclick = () => {
-                    console.log('Start Controller Tracking button clicked. Requesting session via A-Frame...');
-                    const sceneEl = document.querySelector('a-scene');
-                    if (sceneEl) {
-                        // Use A-Frame's enterVR to handle session start
-                        sceneEl.enterVR(true).catch((err) => {
-                            console.error('A-Frame failed to enter VR/AR:', err);
-                            alert(`Failed to start AR session via A-Frame: ${err.message}`);
-                        });
-                    } else {
-                         console.error('A-Frame scene not found for enterVR call!');
-                    }
-                };
-
-                document.body.appendChild(startButton);
-                console.log('Official "Start Controller Tracking" button added.');
-
-                // Listen for VR session events to hide/show start button
-                const sceneEl = document.querySelector('a-scene');
-                if (sceneEl) {
-                    sceneEl.addEventListener('enter-vr', () => {
-                        console.log('Entered VR - hiding start button');
-                        startButton.style.display = 'none';
-                    });
-
-                    sceneEl.addEventListener('exit-vr', () => {
-                        console.log('Exited VR - showing start button');
-                        startButton.style.display = 'block';
-                    });
-                }
-
+          startButton.onclick = () => {
+            console.log(
+              'Start Controller Tracking button clicked. Requesting session via A-Frame...',
+            );
+            const sceneEl = document.querySelector('a-scene');
+            if (sceneEl) {
+              // Use A-Frame's enterVR to handle session start
+              sceneEl.enterVR(true).catch((err) => {
+                console.error('A-Frame failed to enter VR/AR:', err);
+                alert(`Failed to start AR session via A-Frame: ${err.message}`);
+              });
             } else {
-                console.warn('immersive-ar session not supported by this browser/device.');
+              console.error('A-Frame scene not found for enterVR call!');
             }
-        }).catch((err) => {
-            console.error('Error checking immersive-ar support:', err);
-        });
-    } else {
-        console.warn('WebXR not supported by this browser.');
-    }
-} 
+          };
+
+          document.body.appendChild(startButton);
+          console.log('Official "Start Controller Tracking" button added.');
+
+          // Listen for VR session events to hide/show start button
+          const sceneEl = document.querySelector('a-scene');
+          if (sceneEl) {
+            sceneEl.addEventListener('enter-vr', () => {
+              console.log('Entered VR - hiding start button');
+              startButton.style.display = 'none';
+            });
+
+            sceneEl.addEventListener('exit-vr', () => {
+              console.log('Exited VR - showing start button');
+              startButton.style.display = 'block';
+            });
+          }
+        } else {
+          console.warn(
+            'immersive-ar session not supported by this browser/device.',
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('Error checking immersive-ar support:', err);
+      });
+  } else {
+    console.warn('WebXR not supported by this browser.');
+  }
+}

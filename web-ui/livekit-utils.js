@@ -21,6 +21,15 @@ window.LiveKitUtils = {
     }
   },
 
+  loadLiveKitConfig: async function () {
+    const response = await fetch('https://localhost:5050/api/livekit-config');
+    if (!response.ok) {
+      throw new Error('Failed to load LiveKit config');
+    }
+    const data = await response.json();
+    return data;
+  },
+
   connectToRoom: async function (
     component,
     roomName,
@@ -43,19 +52,19 @@ window.LiveKitUtils = {
       this.room
         .on(
           window.LiveKitClient.RoomEvent.TrackSubscribed,
-          component.handleTrackSubscribed,
+          component.handleTrackSubscribed.bind(component),
         )
         .on(
           window.LiveKitClient.RoomEvent.TrackUnsubscribed,
-          component.handleTrackUnsubscribed,
+          component.handleTrackUnsubscribed.bind(component),
         )
         .on(
           window.LiveKitClient.RoomEvent.Disconnected,
-          component.handleDisconnect,
+          component.handleDisconnect.bind(component),
         )
         .on(
           window.LiveKitClient.RoomEvent.Connected,
-          component.handleConnected,
+          component.handleConnected.bind(component),
         );
 
       this.logToVR(
@@ -84,7 +93,7 @@ window.LiveKitUtils = {
         );
       }
 
-      const authUrl = `https://${window.location.hostname}:${AUTH_SERVER_PORT}/api/get-token`;
+      const authUrl = `https://${window.location.hostname}:${this.AUTH_SERVER_PORT}/api/get-token`;
       this.logToVR(`Getting token from: ${authUrl} (VR: ${isVR})`);
 
       const response = await fetch(authUrl, {
@@ -169,7 +178,7 @@ window.LiveKitUtils = {
   },
 
   logToVR: function (message) {
-    if (DEBUG) {
+    if (this.DEBUG) {
       const vrLogEntity = document.querySelector('#vr-log');
       if (vrLogEntity) {
         const currentValue = vrLogEntity.getAttribute('value');

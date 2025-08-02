@@ -206,6 +206,14 @@ class TelegripConfig:
     pos_step: float = POS_STEP
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
+    
+    # LiveKit Configurations
+    livekit_room: str = "robot-vr-teleop-room"
+    camera_streamer_participant: str = "camera-streamer"
+    controller_participant: str = "vr-controller-commands"
+    vr_viewer_participant: str = "vr-viewer"
+    vr_viewer_debug: bool = True
+    
 
     @property
     def ssl_files_exist(self) -> bool:
