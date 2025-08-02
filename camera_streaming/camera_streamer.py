@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import os
-import threading
 import time
-
+from typing import Optional
+import multiprocessing as mp
 import cv2
+
 from dotenv import load_dotenv
 from livekit import rtc
 
@@ -23,7 +24,10 @@ DEFAULT_CAM_INDEX = int(os.getenv("CAMERA_INDEX", 6))
 class CameraStreamer:
     def __init__(self, cam_index: int, cap_backend: int = cv2.CAP_V4L2, cam_name="robot0-birds-eye"):
         self.logger = logging.getLogger(__name__)
+        
+        self._proc: Optional[mp.Process] = None
 
+        # Camera index and backend
         self.cam_index = cam_index
         self.cap_backend = cap_backend
 
@@ -49,8 +53,11 @@ class CameraStreamer:
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # reduce buffering to 1 frame
 
+        # LiveKit room placeholder (set when start() is called)
+        self.room = None
+
         self.is_running = False
-        self.frame_thread = None
+        self.cam_loop_task = None
 
         # Check if camera opened successfully
         if not self.cap.isOpened():
@@ -58,21 +65,21 @@ class CameraStreamer:
 
     def _start_camera_loop(self):
         self.is_running = True
-        self.cap_thread = threading.Thread(target=self._camera_loop)  # independently running the camera loop
-        self.cap_thread.daemon = True
-        self.cap_thread.start()
+        self.cam_loop_task = asyncio.create_task(self._camera_loop())
         self.logger.info(f"Started camera capture loop for camera {self.cam_index}")
 
-    def _stop_camera_loop(self):
+    async def _stop_camera_loop(self):
         self.is_running = False
-        if self.cap_thread:
-            self.cap_thread.join(timeout=2)  # Avoid hanging indefinitely
-            if self.cap_thread.is_alive():
-                self.logger.warning("Camera thread did not shut down cleanly")
+        if self.cam_loop_task:
+            self.cam_loop_task.cancel()
+            try:
+                await self.cam_loop_task # wait for the loop to finish
+            except asyncio.CancelledError:
+                pass
         self.cap.release()
         self.logger.info("Stopped Camera Stream")
 
-    def _camera_loop(self):
+    async def _camera_loop(self):
         """Continuous loop to capture the camera frames and push them to the livekit track"""
         while self.is_running:
             ret, frame = self.cap.read()  # blocking call (synchronous)
@@ -101,7 +108,7 @@ class CameraStreamer:
         await room.local_participant.publish_track(self.track, self.options)
         self.logger.info(f"Published video track to room {room.name}")
         
-    async def start(self, room_name: str, participant_name: str):
+    async def _run_camera_publisher(self, room_name: str, participant_name: str):
         self.logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
 
         # Check environment variables
@@ -111,7 +118,7 @@ class CameraStreamer:
 
         self.room = rtc.Room()
         lk_token = generate_token(room_name=room_name, participant_identity=participant_name)
-        
+
         @self.room.on("participant_connected")
         def on_participant_connected(participant: rtc.RemoteParticipant):
             self.logger.info(f"Participant connected {participant.sid}, {participant.identity}")
@@ -123,7 +130,7 @@ class CameraStreamer:
         ):
             self.logger.info("track subscribed: %s", publication.sid)
 
-        self._start_camera_loop()
+        self._start_camera_loop() # keeps sending frames to livekit
 
         try:
             await self.room.connect(LIVEKIT_URL, lk_token)
@@ -136,6 +143,15 @@ class CameraStreamer:
         finally:
             self._stop_camera_loop()
             await self.room.disconnect()
+
+    async def start(self, room_name: str, participant_name: str):
+        if self._proc and self._proc.is_alive():
+            self.logger.info("Camera streamer already running")
+            return
+        
+        self._proc = mp.Process(target=self._run_camera_publisher, args=(room_name, participant_name), daemon=True)
+        self._proc.start()
+        self.logger.info("Camera streamer started")
 
     async def stop(self):
         self.logger.info("Disconnecting from LiveKit room")

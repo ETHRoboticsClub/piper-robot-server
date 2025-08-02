@@ -14,7 +14,6 @@ from telegrip.config import TelegripConfig
 
 logger = logging.getLogger(__name__)
 
-
 class APIHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for the teleoperation API."""
 

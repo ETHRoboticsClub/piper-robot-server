@@ -5,7 +5,10 @@ The main entry point for the teleoperation system.
 import argparse
 import asyncio
 import logging
+import multiprocessing as mp
 
+
+from typing import Optional
 from camera_streaming.camera_streamer import CameraStreamer
 from telegrip.config import config
 from telegrip.control_loop import ControlLoop
@@ -15,13 +18,31 @@ from telegrip.livekit_auth import LiveKitAuthServer
 
 logger = logging.getLogger(__name__)
 
+async def _run_control_process(
+    room_name: str,
+    participant_name: str,
+    robot_enabled: bool,
+    visualize: bool
+) -> None:
+    """
+    Run the controll process (receiving, processing and sending commands to the robot)
+    """
+    command_queue = asyncio.Queue()
+    controllers = VRControllerInputProvider(command_queue, config)
+    control_loop = ControlLoop(config, robot_enabled, visualize)
+    
+    controllers_task = asyncio.create_task(controllers.start(room_name, participant_name))
+    control_loop_task = asyncio.create_task(control_loop.run(command_queue))
+
+    await asyncio.gather(controllers_task, control_loop_task)
+    
 async def main():
     parser = argparse.ArgumentParser(description="Robot Server - Tactile Robotics Teleoperation System")
 
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
-    parser.add_argument("--camera-index", type=int, help="Camera index to use")
+    parser.add_argument("--camera-index", type=int, default=0, help="Camera index to use")
     parser.add_argument("--room-name", default="robot-vr-teleop-room", help="LiveKit room name")
     parser.add_argument("--auth-port", type=int, default=5050, help="Auth server port")
     parser.add_argument(
@@ -30,8 +51,12 @@ async def main():
         choices=["debug", "info", "warning", "error", "critical"],
         help="Set logging level",
     )
-
     args = parser.parse_args()
+    
+    logging.basicConfig(level=getattr(logging, args.log_level.upper()),
+                        format="%(asctime)s - %(message)s", 
+                        datefmt="%H:%M:%S")
+    
 
     robot_enabled = not args.no_robot
     visualize = args.vis
@@ -39,88 +64,46 @@ async def main():
     room_name = args.room_name
     auth_port = args.auth_port
 
-    vr_control_task = None
-    vr_control_server = None
-    control_loop_task = None
-    control_loop = None
-    camera_streamer_task = None
-    camera_streamer = None
-    auth_server = None
+    logger.info("Initializing server components...")
     
-    # Configure logging
-    log_level = getattr(logging, args.log_level.upper())
-    logging.basicConfig(level=log_level, format="%(asctime)s - %(message)s", datefmt="%H:%M:%S")
-
-    # Start auth server
-    logger.info(f"Starting Flask auth server on https://localhost:{auth_port}...")
- 
+    # authentication ASGI server
+    auth_server = LiveKitAuthServer(port=auth_port)
+    
+    # parallel processes
+    camera_streamer = CameraStreamer(cam_index=camera_index, cam_name="robot0-birds-eye")
     
     try:
-        logger.info("Initializing server components...")
-        command_queue = asyncio.Queue()
-        
-        auth_server = LiveKitAuthServer(port=auth_port)
-        camera_streamer = CameraStreamer(camera_index)
-        vr_control_server = VRControllerInputProvider(command_queue, config)
-        control_loop = ControlLoop(config, robot_enabled, visualize)
-
-        # Starting server conponents (parallel processes)
+        # running background (daemon) processes
         logger.info("Starting auth server...")
-        auth_server_task = asyncio.create_task(auth_server.start())
+        auth_server.start() 
         logger.info("Starting camera streamer...")
-        camera_streamer_task = asyncio.create_task(camera_streamer.start(room_name, 'vr-teleop-viewer'))
-        logger.info("Starting VR controller input provider...")
-        vr_control_task = asyncio.create_task(vr_control_server.start(room_name, 'vr-teleop-viewer'))
-        logger.info("Starting control loop...")
-        control_loop_task = asyncio.create_task(control_loop.run(command_queue))
+        camera_streamer.start(room_name, "vr-teleop-viewer")
         
-        logger.info("Starting server components...")
-        await asyncio.gather(control_loop_task, vr_control_task, camera_streamer_task, auth_server_task)
-
+        logger.info("Starting control loop...")
+        await _run_control_process(room_name, "vr-teleop-viewer", robot_enabled, visualize)
+        
     except KeyboardInterrupt:
-        logging.info("\n🛑 Keyboard interrupt. Shutting down...")
-    except asyncio.CancelledError:
-        logging.info("\n🛑 Task cancelled. Shutting down...")
-    except Exception as e:
-        logging.error(f"🚨 Unexpected error: {e}")
+        logger.info("Keyboard interrupt received, shutting down...")
+        auth_server.stop()
+        camera_streamer.stop()
+        logger.info("All processes stopped")
+    
     finally:
-        try:
-            tasks_to_cancel = []
-            if camera_streamer_task:
-                camera_streamer_task.cancel()
-                tasks_to_cancel.append(camera_streamer_task)
-            if vr_control_task:
-                vr_control_task.cancel()
-                tasks_to_cancel.append(vr_control_task)
-            if control_loop_task:
-                control_loop_task.cancel()
-                tasks_to_cancel.append(control_loop_task)
-                
-            try:
-                if tasks_to_cancel:
-                    await asyncio.wait_for(asyncio.gather(*tasks_to_cancel, return_exceptions=True), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Some tasks did not complete within timeout")
-            except KeyboardInterrupt:
-                logger.warning("Cleanup interrupted, forcing shutdown")
-
-
-            if camera_streamer:
-                await camera_streamer.stop()
-            if vr_control_server:
-                await vr_control_server.stop()
-            if control_loop:
-                await control_loop.stop()
-            if auth_server:
-                auth_server.stop()
-                
-            logging.info("✅ Shutdown complete.")
-
-        except KeyboardInterrupt:
-            logger.warning("Cleanup forcibly interrupted")
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
-
+        logger.info("Shutting down...")
+        
+        # stop control loop processes (main process)
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            logger.info("Cancelling %d pending tasks", len(pending))
+            await asyncio.gather(*pending, return_exceptions=True) # let's each task run through its cancellation
+            
+        # stop external processes
+        auth_server.stop()
+        camera_streamer.stop()
+        logger.info("All processes stopped")
+        
 def main_cli():
     try:
         asyncio.run(main())
