@@ -1,9 +1,7 @@
 import asyncio
 import logging
 import os
-import time
 from typing import Optional
-import multiprocessing as mp
 import cv2
 
 from dotenv import load_dotenv
@@ -25,18 +23,21 @@ class CameraStreamer:
     def __init__(self, cam_index: int, cap_backend: int = cv2.CAP_V4L2, cam_name="robot0-birds-eye"):
         self.logger = logging.getLogger(__name__)
         
-        self._proc: Optional[mp.Process] = None
+        
         self.is_running = False
+        self._publisher_task: Optional[asyncio.Task] = None
         self.cam_loop_task: Optional[asyncio.Task] = None
 
         # Camera index and backend
         self.cam_index = cam_index
         self.cap_backend = cap_backend
+        self.cap = None
 
         # Video source
         self.source = rtc.VideoSource(WIDTH, HEIGHT)
         self.track = rtc.LocalVideoTrack.create_video_track(cam_name, self.source)
-
+        self.room = None
+        
         # Track publish options
         self.options = rtc.TrackPublishOptions(
             source=rtc.TrackSource.SOURCE_CAMERA,
@@ -48,15 +49,16 @@ class CameraStreamer:
             video_codec=rtc.VideoCodec.H264,
         )
 
-        # Camera capture
+    def _init_camera(self):
+        """Initialize camera capture - called in the correct process/thread context."""
+        if self.cap is not None:
+            return  # Already initialized
+            
         self.cap = cv2.VideoCapture(index=self.cam_index, apiPreference=self.cap_backend)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # reduce buffering to 1 frame
-
-        # LiveKit room placeholder (set when start() is called)
-        self.room = None
 
         # Check if camera opened successfully
         if not self.cap.isOpened():
@@ -81,12 +83,21 @@ class CameraStreamer:
 
     async def _camera_loop(self):
         """Continuous loop to capture the camera frames and push them to the livekit track"""
+        # Initialize camera in the correct async context
+        self._init_camera()
+        self.logger.debug(f"Camera loop starting, is_running={self.is_running}, cap.isOpened()={self.cap.isOpened()}")
+        
         while self.is_running:
-            ret, frame = self.cap.read()  # blocking call (synchronous)
+            try:
+                ret, frame = self.cap.read()  # blocking call (synchronous)
 
-            if not ret:
-                self.logger.warning("Can't receive frame (stream end?). Retrying...")
-                time.sleep(0.1)  # Small delay before retry
+                if not ret:
+                    self.logger.warning("Can't receive frame (stream end?). Retrying...")
+                    await asyncio.sleep(0.1)  # Use async sleep instead of blocking sleep
+                    continue
+            except Exception as e:
+                self.logger.error(f"Error reading from camera: {e}")
+                await asyncio.sleep(0.1)
                 continue
 
             try:
@@ -105,8 +116,13 @@ class CameraStreamer:
 
     async def _publish_track(self, room: rtc.Room):
         """Publish the video track to livekit room"""
-        await room.local_participant.publish_track(self.track, self.options)
-        self.logger.info(f"Published video track to room {room.name}")
+        try:
+            self.logger.debug(f"Publishing track {self.track.name} to room {room.name}")
+            await room.local_participant.publish_track(self.track, self.options)
+            self.logger.info(f"Published video track to room {room.name}")
+        except Exception as e:
+            self.logger.error(f"Failed to publish video track: {e}", exc_info=True)
+            raise
         
     async def _run_camera_publisher(self, room_name: str, participant_name: str):
         self.logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
@@ -116,61 +132,125 @@ class CameraStreamer:
             self.logger.error("LIVEKIT_URL environment variables must be set")
             return
 
+        self.logger.info(f"LIVEKIT_URL: {LIVEKIT_URL}")
+        self.logger.info(f"Room: {room_name}, Participant: {participant_name}")
+        
+        # Generate token with detailed logging
+        self.logger.info("Generating token with canPublish=True...")
+        try:
+            lk_token = generate_token(room_name=room_name, participant_identity=participant_name, canPublish=True)
+            self.logger.info(f"Token generated successfully. Length: {len(lk_token)}")
+            self.logger.debug(f"Token preview: {lk_token[:50]}...")
+        except Exception as e:
+            self.logger.error(f"Failed to generate token: {e}", exc_info=True)
+            return
+
+        self.logger.info("Creating LiveKit room...")
         self.room = rtc.Room()
-        lk_token = generate_token(room_name=room_name, participant_identity=participant_name)
+        
+        # Add event handlers for debugging
+        @self.room.on("connected")
+        def on_connected():
+            self.logger.info("✅ Room connected event fired")
+
+        @self.room.on("disconnected")
+        def on_disconnected(reason):
+            self.logger.warning(f"❌ Room disconnected: {reason}")
+
+        @self.room.on("connection_state_changed")
+        def on_connection_state_changed(state):
+            self.logger.info(f"🔄 Connection state changed: {state}")
 
         @self.room.on("participant_connected")
         def on_participant_connected(participant: rtc.RemoteParticipant):
-            self.logger.info(f"Participant connected {participant.sid}, {participant.identity}")
+            self.logger.info(f"👤 Participant connected {participant.sid}, {participant.identity}")
 
-        # track_subscribed is emitted whenever the local participant is subscribed to a new track
         @self.room.on("track_subscribed")
         def on_track_subscribed(
             track: rtc.Track, publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant
         ):
-            self.logger.info("track subscribed: %s", publication.sid)
+            self.logger.info(f"📺 Track subscribed: {publication.sid}")
 
-        self._start_camera_loop() # keeps sending frames to livekit
+        self.logger.info("Event handlers configured. Attempting connection...")
 
         try:
+            self.logger.info(f"🔌 Connecting to LiveKit: {LIVEKIT_URL}")
+            self.logger.info(f"🏠 Room: {room_name}")
+            self.logger.info(f"👤 Participant: {participant_name}")
+            self.logger.info("📤 Can publish: True")
+            
+            connection_start = asyncio.get_event_loop().time()
+            
+            # Connect to LiveKit room - should work now that we're in main process
             await self.room.connect(LIVEKIT_URL, lk_token)
+            
+            connection_time = asyncio.get_event_loop().time() - connection_start
+            self.logger.info(f"✅ Connected to LiveKit room {room_name} as {participant_name} (took {connection_time:.2f}s)")
+            
+            # Check room state after connection
+            self.logger.info(f"📊 Room state - Name: {self.room.name}")
+            self.logger.info(f"📊 Local participant - Identity: {self.room.local_participant.identity}, SID: {self.room.local_participant.sid}")
+            self.logger.info(f"📊 Remote participants: {len(self.room.remote_participants)}")
+            
+            self.logger.info("📤 Publishing video track...")
             await self._publish_track(self.room)
-
+            self.logger.info("✅ Video track published successfully")
+            
+            # Start camera loop for actual video streaming
+            self.logger.info("📹 Starting camera loop...")
+            self._start_camera_loop()
+            
+            # Keep connection alive
+            self.logger.info("🔄 Camera streamer running...")
             while True:
-                await asyncio.sleep(1)  # livekit room stay alive signal
+                await asyncio.sleep(5)  # Less frequent logging
+                self.logger.debug(f"💓 Connection alive - Remote participants: {len(self.room.remote_participants)}")
+                
         except KeyboardInterrupt:
-            self.logger.info("KeyboardInterrupt, shutting down")
+            self.logger.info("⌨️  KeyboardInterrupt, shutting down")
+        except Exception as e:
+            self.logger.error(f"💥 Error in camera publisher: {e}", exc_info=True)
+            # Additional debugging info
+            self.logger.error(f"🔍 Exception type: {type(e).__name__}")
+            if hasattr(e, 'args') and e.args:
+                self.logger.error(f"🔍 Exception args: {e.args}")
         finally:
+            self.logger.info("🧹 Cleaning up...")
             await self._stop_camera_loop()
-            await self.room.disconnect()
+            if self.room:
+                await self.room.disconnect()
+            self.logger.info("🏁 Camera publisher shutdown complete")
 
-    def _publisher_entry(self, room_name: str, participant_name: str):
-        """Synchronous entry point, running camera publisher in asyncio event loop"""
-        asyncio.run(self._run_camera_publisher(room_name, participant_name))
-
-    def start(self, room_name: str, participant_name: str):
-        if self._proc and self._proc.is_alive():
+    async def start(self, room_name: str, participant_name: str):
+        """Start the camera streamer as an asyncio task (no longer uses multiprocessing)."""
+        if self._publisher_task and not self._publisher_task.done():
             self.logger.info("Camera streamer already running")
             return
         
-        self._proc = mp.Process(
-            target=self._publisher_entry,
-            args=(room_name, participant_name),
-            daemon=True,
+        self.logger.info("Starting camera streamer as asyncio task...")
+        self._publisher_task = asyncio.create_task(
+            self._run_camera_publisher(room_name, participant_name)
         )
-        self._proc.start()
-        self.logger.info("Camera streamer started (pid=%s)", self._proc.pid)
+        self.logger.info("Camera streamer task started")
 
-    def stop(self, timeout: float = 5.0):
-        """Terminate the camera streamer process if running."""
-        if not self._proc:
+    async def stop(self, timeout: float = 5.0):
+        """Stop the camera streamer task."""
+        if not self._publisher_task:
             return
-        self.logger.info("Stopping camera streamer (pid=%s)...", self._proc.pid)
-        if self._proc.is_alive():
-            self._proc.terminate()
-            self._proc.join(timeout)
-            if self._proc.is_alive():
-                self.logger.warning("Camera streamer did not stop within %.1fs, killing", timeout)
-                self._proc.kill()
-                self._proc.join()
-        self._proc = None
+            
+        self.logger.info("Stopping camera streamer task...")
+        
+        # Cancel the publisher task
+        self._publisher_task.cancel()
+        
+        try:
+            await asyncio.wait_for(self._publisher_task, timeout=timeout)
+        except asyncio.CancelledError:
+            self.logger.info("Camera streamer task cancelled")
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Camera streamer task did not stop within {timeout}s")
+        except Exception as e:
+            self.logger.error(f"Error stopping camera streamer task: {e}")
+        
+        self._publisher_task = None
+        self.logger.info("Camera streamer stopped")

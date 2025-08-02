@@ -110,7 +110,7 @@ class VRControllerInputProvider(BaseInputProvider):
         # connect to livekit room
         try:
             await self.room.connect(LIVEKIT_URL, lk_token)
-            self.logger.info("Connected to LiveKit room")
+            self.logger.info(f"Connected to LiveKit room {room_name} as {participant_name}")
             while True:
                 await asyncio.sleep(1) # livekit room stay alive signal
                 self.logger.info("Livekit room stay alive signal")

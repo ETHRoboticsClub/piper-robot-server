@@ -1,6 +1,5 @@
 window.LiveKitUtils = {
   AUTH_SERVER_PORT: 5050,
-  DEBUG: false,
 
   asyncRoomConnect: async function (component, roomName, participantIdentity) {
     try {
@@ -65,6 +64,15 @@ window.LiveKitUtils = {
         .on(
           window.LiveKitClient.RoomEvent.Connected,
           component.handleConnected.bind(component),
+        )
+        .on(
+          window.LiveKitClient.RoomEvent.ParticipantConnected,
+          (participant) => {
+            this.logToVR(`Participant connected: ${participant.identity}`);
+            this.logToVR(
+              `Participant tracks: ${participant.trackPublications.size}`,
+            );
+          },
         );
 
       this.logToVR(
@@ -72,6 +80,9 @@ window.LiveKitUtils = {
       );
       await this.room.connect(livekit_url, token);
       this.logToVR(`Connected to room: ${roomName}`);
+      this.logToVR(
+        `Room connection successful - Local: ${this.room.localParticipant.identity}`,
+      );
     } catch (error) {
       this.logToVR(
         `ERROR: Failed to connect to LiveKit room ${roomName} - ${error.message}`,
@@ -178,17 +189,15 @@ window.LiveKitUtils = {
   },
 
   logToVR: function (message) {
-    if (this.DEBUG) {
-      const vrLogEntity = document.querySelector('#vr-log');
-      if (vrLogEntity) {
-        const currentValue = vrLogEntity.getAttribute('value');
-        const lines = currentValue.split('\n');
-        lines.push(`${new Date().toLocaleTimeString()}: ${message}`);
-        // Keep only last 10 lines
-        if (lines.length > 11) lines.splice(1, 1);
-        vrLogEntity.setAttribute('value', lines.join('\n'));
-      }
-      console.log(message); // Also log normally
+    const vrLogEntity = document.querySelector('#vr-log');
+    if (vrLogEntity) {
+      const currentValue = vrLogEntity.getAttribute('value');
+      const lines = currentValue.split('\n');
+      lines.push(`${new Date().toLocaleTimeString()}: ${message}`);
+      // Keep only last 10 lines
+      if (lines.length > 11) lines.splice(1, 1);
+      vrLogEntity.setAttribute('value', lines.join('\n'));
     }
+    console.log(message); // Also log normally
   },
 };

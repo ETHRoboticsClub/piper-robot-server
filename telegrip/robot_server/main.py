@@ -28,7 +28,7 @@ async def _run_control_process(
     controllers = VRControllerInputProvider(command_queue, config)
     control_loop = ControlLoop(config, robot_enabled, visualize)
     
-    controllers_task = asyncio.create_task(controllers.start(room_name, participant_name))
+    controllers_task = asyncio.create_task(controllers.start(room_name=room_name, participant_name=participant_name))
     control_loop_task = asyncio.create_task(control_loop.run(command_queue))
 
     await asyncio.gather(controllers_task, control_loop_task)
@@ -40,7 +40,6 @@ async def main():
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
     parser.add_argument("--camera-index", type=int, default=0, help="Camera index to use")
-    parser.add_argument("--room-name", default="robot-vr-teleop-room", help="LiveKit room name")
     parser.add_argument("--auth-port", type=int, default=5050, help="Auth server port")
     parser.add_argument(
         "--log-level",
@@ -58,7 +57,6 @@ async def main():
     robot_enabled = not args.no_robot
     visualize = args.vis
     camera_index = args.camera_index if args.camera_index is not None else 0
-    room_name = args.room_name
     auth_port = args.auth_port
 
     logger.info("Initializing server components...")
@@ -73,11 +71,14 @@ async def main():
         # running background (daemon) processes
         logger.info("Starting auth server...")
         auth_server.start() 
+        
         logger.info("Starting camera streamer...")
-        camera_streamer.start(room_name, config.camera_streamer_participant)
+        logger.info(f"Camera participant: {config.camera_streamer_participant}")
+        await camera_streamer.start(room_name=config.livekit_room, participant_name=config.camera_streamer_participant)
         
         logger.info("Starting control loop...")
-        await _run_control_process(room_name=room_name, participant_name=config.controller_participant, robot_enabled=robot_enabled, visualize=visualize)
+        logger.info(f"Controller participant: {config.controller_participant}")
+        await _run_control_process(room_name=config.livekit_room, participant_name=config.controller_participant, robot_enabled=robot_enabled, visualize=visualize)
         
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down...")
@@ -95,7 +96,7 @@ async def main():
             
         # stop external processes
         auth_server.stop()
-        camera_streamer.stop()
+        await camera_streamer.stop()
         logger.info("All processes stopped")
         
 def main_cli():

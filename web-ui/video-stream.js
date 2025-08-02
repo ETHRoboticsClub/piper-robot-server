@@ -1,7 +1,7 @@
 // This component receives the video stream from the Python camera streamer
 AFRAME.registerComponent('teleop-video-stream', {
   init: function () {
-    console.log('Teleop video streamer component initialized.');
+    console.log('🎥 Teleop video streamer component initialized.');
     console.log('User agent:', navigator.userAgent);
     console.log('Window location:', window.location.href);
 
@@ -21,13 +21,20 @@ AFRAME.registerComponent('teleop-video-stream', {
     let debug = false;
 
     try {
+      console.log('🔧 Loading LiveKit config from backend...');
       const config = await window.LiveKitUtils.loadLiveKitConfig();
       roomName = config.livekit_room;
       participantIdentity = config.vr_viewer_participant;
       debug = config.vr_viewer_debug;
-      console.log('Loaded LiveKit config from backend:', config);
+      console.log('✅ Loaded LiveKit config from backend:', config);
+      console.log('🏠 (for video stream) Using roomName:', roomName);
+      console.log(
+        '👤 (for video stream) Using participantIdentity:',
+        participantIdentity,
+      );
+      console.log('🐛 (for video stream) Using debug:', debug);
     } catch (error) {
-      console.warn('Failed to load LiveKit config, using defaults:', error);
+      console.warn('⚠️ Failed to load LiveKit config, using defaults:', error);
     }
 
     // Create debug text display for VR
@@ -37,6 +44,7 @@ AFRAME.registerComponent('teleop-video-stream', {
     }
 
     // connect to livekit room
+    console.log('🔌 Attempting to connect to LiveKit room...');
     window.LiveKitUtils.asyncRoomConnect(this, roomName, participantIdentity);
   },
 
@@ -82,6 +90,41 @@ AFRAME.registerComponent('teleop-video-stream', {
 
   handleConnected: function () {
     window.LiveKitUtils.logToVR('Connected to LiveKit room');
+
+    // Log current room state
+    const room = window.LiveKitUtils.room;
+    if (room) {
+      window.LiveKitUtils.logToVR(
+        `Local participant: ${room.localParticipant.identity}`,
+      );
+      window.LiveKitUtils.logToVR(
+        `Remote participants: ${room.remoteParticipants.size}`,
+      );
+
+      // Check for existing participants and their tracks (like camera-streamer)
+      room.remoteParticipants.forEach((participant) => {
+        window.LiveKitUtils.logToVR(
+          `Found existing participant: ${participant.identity}`,
+        );
+        participant.trackPublications.forEach((publication) => {
+          window.LiveKitUtils.logToVR(
+            `  - Track: ${publication.kind} (${
+              publication.source || 'unknown'
+            })`,
+          );
+          if (publication.isSubscribed && publication.track) {
+            window.LiveKitUtils.logToVR(`    Already subscribed, attaching...`);
+            if (publication.track.kind === 'video') {
+              this.handleTrackSubscribed(
+                publication.track,
+                publication,
+                participant,
+              );
+            }
+          }
+        });
+      });
+    }
   },
 
   handleDisconnect: function () {
@@ -135,22 +178,27 @@ AFRAME.registerComponent('teleop-video-stream', {
       `Applying texture: ${dimensions}, ready: ${this.videoElement.readyState}, paused: ${this.videoElement.paused}`,
     );
 
-    this.el.setAttribute('material', {
-      shader: 'flat',
-      src: `#${this.videoElement.id}`,
-      transparent: false,
-    });
-
     // Add visual feedback for debugging
     if (
       this.videoElement.videoWidth === 0 ||
       this.videoElement.videoHeight === 0
     ) {
-      window.LiveKitUtils.logToVR('WARNING: Video has no dimensions!');
+      window.LiveKitUtils.logToVR(
+        'WARNING: Video has no dimensions! Setting red placeholder.',
+      );
       // Set a temporary red color to indicate issues
-      this.el.setAttribute('material', { color: 'red' });
+      this.el.setAttribute('material', {
+        shader: 'flat',
+        color: 'red',
+        transparent: false,
+      });
     } else {
       window.LiveKitUtils.logToVR('Video texture applied successfully');
+      this.el.setAttribute('material', {
+        shader: 'flat',
+        src: `#${this.videoElement.id}`,
+        transparent: false,
+      });
     }
   },
 });
