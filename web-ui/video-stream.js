@@ -22,13 +22,62 @@ AFRAME.registerComponent('teleop-video-streamer', {
     // Create video element for the stream
     this.createVideoElement();
 
-    // Start async initialization
+    // connect to livekit room
     window.LiveKitUtils.asyncRoomConnect(
       this,
       this.data.roomName,
       this.data.participantIdentity,
     );
   },
+
+  // --- LiveKit Event Handlers ---
+  handleTrackSubscribed: function (track, publication, participant) {
+    window.LiveKitUtils.logToVR(
+      `Track subscribed: ${track.kind} from ${participant.identity}`,
+    );
+
+    if (track.kind === 'video') {
+      track.attach(this.videoElement);
+      window.LiveKitUtils.logToVR('Attached video track to video element');
+
+      // Force video to play and apply texture
+      setTimeout(() => {
+        this.videoElement
+          .play()
+          .then(() => {
+            window.LiveKitUtils.logToVR('Video playback started');
+            this.applyVideoTexture();
+          })
+          .catch((err) => {
+            window.LiveKitUtils.logToVR(
+              'ERROR: Video playback failed - ' + err.message,
+            );
+          });
+      }, 100);
+    }
+  },
+
+  handleTrackUnsubscribed: function (track, publication, participant) {
+    window.LiveKitUtils.logToVR(
+      'Track unsubscribed:',
+      track.kind,
+      'from participant:',
+      participant.identity,
+    );
+
+    if (track.kind === 'video') {
+      track.detach();
+    }
+  },
+
+  handleConnected: function () {
+    window.LiveKitUtils.logToVR('Connected to LiveKit room');
+  },
+
+  handleDisconnect: function () {
+    window.LiveKitUtils.logToVR('Disconnected from LiveKit room');
+  },
+  // --- End LiveKit Event Handlers ---
 
   remove: function () {
     // Clean up video element

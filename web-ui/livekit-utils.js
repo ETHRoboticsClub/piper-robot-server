@@ -43,19 +43,19 @@ window.LiveKitUtils = {
       this.room
         .on(
           window.LiveKitClient.RoomEvent.TrackSubscribed,
-          this.handleTrackSubscribed.bind(component),
+          component.handleTrackSubscribed,
         )
         .on(
           window.LiveKitClient.RoomEvent.TrackUnsubscribed,
-          this.handleTrackUnsubscribed.bind(component),
+          component.handleTrackUnsubscribed,
         )
         .on(
           window.LiveKitClient.RoomEvent.Disconnected,
-          this.handleDisconnect.bind(component),
+          component.handleDisconnect,
         )
         .on(
           window.LiveKitClient.RoomEvent.Connected,
-          this.handleConnected.bind(component),
+          component.handleConnected,
         );
 
       this.logToVR(
@@ -69,54 +69,6 @@ window.LiveKitUtils = {
       );
       console.error('Failed to connect to LiveKit room:', error);
     }
-  },
-
-  handleTrackSubscribed: function (track, publication, participant) {
-    window.LiveKitUtils.logToVR(
-      `Track subscribed: ${track.kind} from ${participant.identity}`,
-    );
-
-    if (track.kind === 'video') {
-      // Attach video track to our video element
-      track.attach(this.videoElement);
-      window.LiveKitUtils.logToVR('Video track attached');
-
-      // Force video to play and apply texture
-      setTimeout(() => {
-        this.videoElement
-          .play()
-          .then(() => {
-            window.LiveKitUtils.logToVR('Video playback started');
-            this.applyVideoTexture();
-          })
-          .catch((err) => {
-            window.LiveKitUtils.logToVR(
-              'ERROR: Video playback failed - ' + err.message,
-            );
-          });
-      }, 100);
-    }
-  },
-
-  handleTrackUnsubscribed: function (track, publication, participant) {
-    window.LiveKitUtils.logToVR(
-      'Track unsubscribed:',
-      track.kind,
-      'from participant:',
-      participant.identity,
-    );
-
-    if (track.kind === 'video') {
-      track.detach();
-    }
-  },
-
-  handleConnected: function () {
-    window.LiveKitUtils.logToVR('Connected to LiveKit room');
-  },
-
-  handleDisconnect: function () {
-    window.LiveKitUtils.logToVR('Disconnected from LiveKit room');
   },
 
   getToken: async function (roomName, participantIdentity, canPublish = false) {

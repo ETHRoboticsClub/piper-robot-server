@@ -2,9 +2,8 @@
 
 AFRAME.registerComponent('controller-updater', {
   schema: {
-    roomName: { type: 'string', default: 'robot-vr-room' },
-    participantIdentity: { type: 'string', default: 'vr-controllers'},
-    authServerPort: { type: 'number', default: 5050 },
+    roomName: { type: 'string', default: 'robot-vr-teleop-room' },
+    participantIdentity: { type: 'string', default: 'vr-controller-commands'},
     debug: { type: 'boolean', default: false },
   },
 
@@ -45,13 +44,19 @@ AFRAME.registerComponent('controller-updater', {
     this.encoder = new TextEncoder();
     this.decoder = new TextDecoder();
 
+    // connect to livekit room
+    window.LiveKitUtils.asyncRoomConnect(
+      this,
+      this.data.roomName,
+      this.data.participantIdentity,
+    );
+
     // --- VR Status Reporting Function ---
     this.reportVRStatus = (connected) => {
       // Update global status if available (for desktop interface)
       if (typeof updateStatus === 'function') {
         updateStatus({ vrConnected: connected });
       }
-      
       
       // Also try to notify parent window if in iframe
       try {
@@ -282,10 +287,32 @@ AFRAME.registerComponent('controller-updater', {
 
   },
 
+  // --- LiveKit Event Handlers ---
+  handleTrackSubscribed: function (track, publication, participant) {
+    window.LiveKitUtils.logToVR(
+      `Track subscribed: ${track.kind} from ${participant.identity}`,
+    );
+  },
+
+  handleTrackUnsubscribed: function (track, publication, participant) {
+    window.LiveKitUtils.logToVR(
+      `Track unsubscribed: ${track.kind} from ${participant.identity}`,
+    );
+  },
+
+  handleConnected: function () {
+    window.LiveKitUtils.logToVR('Connected to LiveKit room');
+  },
+
+  handleDisconnect: function () {
+    window.LiveKitUtils.logToVR('Disconnected from LiveKit room');
+  },
+  // --- End LiveKit Event Handlers ---
+
   sendMessageToControlServer: function(message) {
     const strData = JSON.stringify(message);
     const encodedData = this.encoder.encode(strData);
-    this.room.localParticipant.publishData(encodedData, {
+    window.LiveKitUtils.room.localParticipant.publishData(encodedData, {
       reliable: true,
       destinationIdentities: ['control-server']
     });

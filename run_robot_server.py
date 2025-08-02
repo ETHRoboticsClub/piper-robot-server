@@ -13,7 +13,6 @@ import time
 
 from camera_streaming.camera_streamer import CameraStreamer
 
-
 def setup_logging():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
@@ -32,10 +31,8 @@ def start_auth_server(port=5050, use_https=True):
 async def main():
     parser = argparse.ArgumentParser(description="Run telegrip video streaming")
     parser.add_argument("--camera-index", type=int, help="Camera index to use")
-    parser.add_argument("--room", default="robot-vr-room", help="LiveKit room name")
-    parser.add_argument("--participant", default="camera-streamer", help="Participant name")
+    parser.add_argument("--room", default="robot-vr-teleop-room", help="LiveKit room name")
     parser.add_argument("--auth-port", type=int, default=5050, help="Auth server port")
-    parser.add_argument("--auth-only", action="store_true", help="Only run auth server")
     parser.add_argument("--https", action="store_true", default=True, help="Use HTTPS for auth server")
     parser.add_argument("--http", action="store_true", help="Use HTTP for auth server (overrides --https)")
 
@@ -53,19 +50,10 @@ async def main():
     auth_process = start_auth_server(args.auth_port, use_https)
     time.sleep(2)  # Give server time to start
 
-    if args.auth_only:
-        logger.info(f"Auth server running on {protocol}://localhost:{args.auth_port}")
-        logger.info("Open web-ui/video-example.html in your browser")
-        try:
-            auth_process.wait()
-        except KeyboardInterrupt:
-            auth_process.terminate()
-        return
-
     try:
         logger.info(f"Starting camera streamer (camera {args.camera_index}, room {args.room})")
         streamer = CameraStreamer(args.camera_index)
-        await streamer.stream_camera(args.participant, args.room)
+        await streamer.stream_camera('camera-streamer', args.room)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:

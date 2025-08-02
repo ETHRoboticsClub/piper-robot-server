@@ -17,7 +17,6 @@ LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 
 WIDTH = 640
 HEIGHT = 480
-# Default camera index. This can be overridden by setting the CAMERA_INDEX environment variable.
 DEFAULT_CAM_INDEX = int(os.getenv("CAMERA_INDEX", 6))
 
 

@@ -11,7 +11,7 @@ import threading
 
 from .config import TelegripConfig, config
 from .control_loop import ControlLoop
-from .inputs.vr_ws_server import VRWebSocketServer
+from .inputs.vr_controllers import VRControllerInputProvider
 from .utils import get_local_ip
 
 logger = logging.getLogger(__name__)
@@ -187,13 +187,13 @@ async def main():
     try:
         command_queue = asyncio.Queue()
         https_server = HTTPSServer(config)
-        vr_server = VRWebSocketServer(command_queue, config)
+        vr_control_server = VRControllerInputProvider(command_queue, config)
         control_loop = ControlLoop(config, robot_enabled, visualize)
 
         await https_server.start()
-        await vr_server.start()
+        vr_control_task = asyncio.create_task(vr_control_server.start('robot-vr-teleop-room', 'vr-teleop-viewer'))
         control_loop_task = asyncio.create_task(control_loop.run(command_queue))
-        await asyncio.gather(control_loop_task)
+        await asyncio.gather(control_loop_task, vr_control_task)
 
     except KeyboardInterrupt:
         logging.info("\n🛑 Keyboard interrupt. Shutting down...")
@@ -211,7 +211,6 @@ async def main():
             except KeyboardInterrupt:
                 logger.warning("Cleanup interrupted, forcing shutdown")
 
-            await vr_server.stop()
             await https_server.stop()
             await control_loop.stop()
             logging.info("✅ Shutdown complete.")
