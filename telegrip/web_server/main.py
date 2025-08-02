@@ -1,12 +1,16 @@
+import argparse
 import http.server
 import ssl
 import threading
 import logging
 import asyncio
 import signal
-from ..config import config as global_config
+from dataclasses import replace
 
-from ..config import TelegripConfig
+from telegrip.utils import get_local_ip
+from telegrip.config import config as global_config
+
+from telegrip.config import TelegripConfig
 
 logger = logging.getLogger(__name__)
 
@@ -161,13 +165,44 @@ async def _serve_forever(server: HTTPSServer):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _graceful_shutdown)
 
-    await stop.wait()
+    await stop.wait() # keeps waiting (running the server) until "stop" value is set to true
     await server.stop()
 
 async def main() -> None:
     """Main function for the web-server."""
-    logger.info("🖥️  telegrip web-server starting on %s:%s", global_config.host_ip, global_config.https_port)
-    await _serve_forever(HTTPSServer(global_config))
+
+    parser = argparse.ArgumentParser(description="telegrip Web-UI static file server")
+    parser.add_argument("--host", default=global_config.host_ip, help="IP/interface to bind (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=global_config.https_port, help="HTTPS port (default: 8443)")
+    parser.add_argument(
+        "--log-level",
+        default=global_config.log_level,
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Logging verbosity",
+    )
+    args = parser.parse_args()
+
+    # Configure root logger *before* any further logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper()),
+        format="%(asctime)s - %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    # Build a config instance with the overrides supplied on the CLI
+    cfg: TelegripConfig = replace(
+        global_config, host_ip=args.host, https_port=args.port, log_level=args.log_level
+    )
+
+    host_display = get_local_ip() if cfg.host_ip == "0.0.0.0" else cfg.host_ip
+
+    logger.info("🖥️  telegrip web-server starting on %s:%s", host_display, cfg.https_port)
+    logger.info("📱 Open the UI in your browser on:")
+    logger.info("   https://%s:%s", host_display, cfg.https_port)
+    logger.info("📱 Then go to the same address on your VR headset browser")
+    logger.info("💡 Use --log-level info to see detailed output\n")
+
+    await _serve_forever(HTTPSServer(cfg))
     logger.info("✅ web-server shutdown complete.")
 
 def main_cli() -> None:

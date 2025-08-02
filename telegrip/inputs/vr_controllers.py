@@ -83,6 +83,12 @@ class VRControllerInputProvider(BaseInputProvider):
         
     async def start(self, room_name: str, participant_name: str):
         self.logger.info("Connecting to LiveKit room")
+        
+        # Check environment variables
+        if not LIVEKIT_URL:
+            self.logger.error("LIVEKIT_URL environment variables must be set")
+            return
+
         self.room = rtc.Room()
         lk_token = generate_token(room_name, participant_identity=participant_name)
         
@@ -113,28 +119,34 @@ class VRControllerInputProvider(BaseInputProvider):
         if self.room:
             await self.room.disconnect()
          
-    async def _handle_data_packet(self, packet: rtc.DataPacket):
-        """Handle data packet from LiveKit room."""
+    async def _handle_data_packet(self, packet: rtc.DataPacket) -> None:
+        """Handle data packet coming from LiveKit."""
+        processing_start = time.perf_counter()
         try:
-            if self.start_time is None:
-                self.start_time = time.perf_counter()
-            elif self.msg_count % 100 == 0: # Log every 100 messages
-                elapsed = time.perf_counter() - self.start_time
-                freq = self.msg_count / elapsed
-                self.logger.debug(f"📊 Message frequency: {freq:.1f} Hz ({self.msg_count} msgs)")
-                self.msg_count = 0
-                self.start_time = None
-                
-            data = json.loads(TextDecoder().decode(packet.data))
-            await self._process_controller_data(data) # data gets processed for teleop
-            end_time = time.perf_counter()
-            self.logger.debug(f"🕒 VR message processing time: {(end_time - self.start_time)*1000:.1f}ms")
+            payload = json.loads(TextDecoder().decode(packet.data))
+            await self._process_controller_data(payload)
         except json.JSONDecodeError:
             self.logger.warning(f"Received non-JSON message: {packet.data}")
+            return
         except Exception as e:
             self.logger.error(f"Error processing VR data: {e}")
+            return
         finally:
-            self.msg_count += 1
+            # update stats under lock to avoid races across parallel tasks
+            async with self._stats_lock:
+                self.msg_count += 1
+                if self.start_time is None:
+                    self.start_time = processing_start
+                elif self.msg_count % 100 == 0:
+                    elapsed = time.perf_counter() - self.start_time
+                    freq = self.msg_count / elapsed if elapsed else 0.0
+                    self.logger.debug(f"📊 Message frequency: {freq:.1f} Hz ({self.msg_count} msgs)")
+                    self.msg_count = 0
+                    self.start_time = time.perf_counter()
+            # log processing latency outside the lock – purely diagnostic
+            self.logger.debug(
+                f"🕒 VR message processing time: {(time.perf_counter() - processing_start)*1000:.1f}ms"
+            )
             
     async def _process_controller_data(self, data: Dict):
         """Process incoming VR controller data."""

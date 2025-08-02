@@ -101,7 +101,7 @@ class CameraStreamer:
         await room.local_participant.publish_track(self.track, self.options)
         self.logger.info(f"Published video track to room {room.name}")
         
-    async def stream_camera(self, participant_name: str, room_name: str):
+    async def start(self, room_name: str, participant_name: str):
         self.logger.info("=== STARTING CAMERA VIDEO STREAMER ===")
 
         # Check environment variables
@@ -110,7 +110,6 @@ class CameraStreamer:
             return
 
         self.room = rtc.Room()
-
         lk_token = generate_token(room_name, participant_identity=participant_name)
         
         @self.room.on("participant_connected")
@@ -136,4 +135,9 @@ class CameraStreamer:
             self.logger.info("KeyboardInterrupt, shutting down")
         finally:
             self._stop_camera_loop()
+            await self.room.disconnect()
+
+    async def stop(self):
+        self.logger.info("Disconnecting from LiveKit room")
+        if self.room:
             await self.room.disconnect()
