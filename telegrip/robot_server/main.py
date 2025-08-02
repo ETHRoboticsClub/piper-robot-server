@@ -5,29 +5,15 @@ The main entry point for the teleoperation system.
 import argparse
 import asyncio
 import logging
-import sys
-import os
-import subprocess
-import time
 
 from camera_streaming.camera_streamer import CameraStreamer
 from telegrip.config import config
 from telegrip.control_loop import ControlLoop
 from telegrip.inputs.vr_controllers import VRControllerInputProvider
+from telegrip.livekit_auth import LiveKitAuthServer
 
 
 logger = logging.getLogger(__name__)
-
-def start_auth_server(port=5050, use_https=True):
-    """Start the Flask auth server in background"""
-    if use_https:
-        cmd = [sys.executable, "camera_streaming/auth.py", "--port", str(port), "--https"]
-    else:
-        cmd = [sys.executable, "-m", "flask", "--app", "camera_streaming.auth", "run", "--port", str(port)]
-    env = dict(os.environ)
-    env["FLASK_ENV"] = "development"
-    return subprocess.Popen(cmd, env=env)   
-
 
 async def main():
     parser = argparse.ArgumentParser(description="Robot Server - Tactile Robotics Teleoperation System")
@@ -49,7 +35,7 @@ async def main():
 
     robot_enabled = not args.no_robot
     visualize = args.vis
-    camera_index = args.camera_index
+    camera_index = args.camera_index if args.camera_index is not None else 0
     room_name = args.room_name
     auth_port = args.auth_port
 
@@ -59,7 +45,7 @@ async def main():
     control_loop = None
     camera_streamer_task = None
     camera_streamer = None
-    auth_process = None
+    auth_server = None
     
     # Configure logging
     log_level = getattr(logging, args.log_level.upper())
@@ -73,14 +59,14 @@ async def main():
         logger.info("Initializing server components...")
         command_queue = asyncio.Queue()
         
+        auth_server = LiveKitAuthServer(port=auth_port)
         camera_streamer = CameraStreamer(camera_index)
         vr_control_server = VRControllerInputProvider(command_queue, config)
         control_loop = ControlLoop(config, robot_enabled, visualize)
 
+        # Starting server conponents (parallel processes)
         logger.info("Starting auth server...")
-        auth_process = start_auth_server(auth_port, True)
-        time.sleep(2)   
-        
+        auth_server_task = asyncio.create_task(auth_server.start())
         logger.info("Starting camera streamer...")
         camera_streamer_task = asyncio.create_task(camera_streamer.start(room_name, 'vr-teleop-viewer'))
         logger.info("Starting VR controller input provider...")
@@ -89,7 +75,7 @@ async def main():
         control_loop_task = asyncio.create_task(control_loop.run(command_queue))
         
         logger.info("Starting server components...")
-        await asyncio.gather(control_loop_task, vr_control_task, camera_streamer_task)
+        await asyncio.gather(control_loop_task, vr_control_task, camera_streamer_task, auth_server_task)
 
     except KeyboardInterrupt:
         logging.info("\n🛑 Keyboard interrupt. Shutting down...")
@@ -125,9 +111,8 @@ async def main():
                 await vr_control_server.stop()
             if control_loop:
                 await control_loop.stop()
-            if auth_process:
-                auth_process.terminate()
-                auth_process.wait()
+            if auth_server:
+                auth_server.stop()
                 
             logging.info("✅ Shutdown complete.")
 

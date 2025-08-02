@@ -8,7 +8,7 @@ import cv2
 from dotenv import load_dotenv
 from livekit import rtc
 
-from camera_streaming.auth import generate_token
+from telegrip.livekit_auth import generate_token
 
 # Load environment variables from the project root
 load_dotenv()
@@ -110,7 +110,7 @@ class CameraStreamer:
             return
 
         self.room = rtc.Room()
-        lk_token = generate_token(room_name, participant_identity=participant_name)
+        lk_token = generate_token(room_name=room_name, participant_identity=participant_name)
         
         @self.room.on("participant_connected")
         def on_participant_connected(participant: rtc.RemoteParticipant):

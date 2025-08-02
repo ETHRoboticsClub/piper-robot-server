@@ -14,10 +14,10 @@ import numpy as np
 
 from livekit import rtc
 
-from camera_streaming.auth import generate_token
+from telegrip.livekit_auth import generate_token
 
-from ..config import TelegripConfig
-from ..core.geometry import pose2transform
+from telegrip.config import TelegripConfig
+from telegrip.core.geometry import pose2transform
 from .base import BaseInputProvider, ControlGoal, EventType
 
 
@@ -71,6 +71,9 @@ class VRControllerInputProvider(BaseInputProvider):
         self.logger = logging.getLogger(__name__)   
         super().__init__(command_queue)
         self.config = config
+
+        # Track asynchronous tasks created for packet handling
+        self._data_tasks: set[asyncio.Task] = set()
         
         # Controller states
         self.left_controller = VRControllerState("left")
@@ -90,7 +93,7 @@ class VRControllerInputProvider(BaseInputProvider):
             return
 
         self.room = rtc.Room()
-        lk_token = generate_token(room_name, participant_identity=participant_name)
+        lk_token = generate_token(room_name=room_name, participant_identity=participant_name)
         
         # event handlers
         @self.room.on("participant_connected")
@@ -99,7 +102,10 @@ class VRControllerInputProvider(BaseInputProvider):
 
         @self.room.on("data_received")
         def on_data_received(data: rtc.DataPacket):
-            asyncio.create_task(self._handle_data_packet(data))
+            task = asyncio.create_task(self._handle_data_packet(data))
+            # Keep track of outstanding packet-processing tasks so we can cancel them on shutdown
+            self._data_tasks.add(task)
+            task.add_done_callback(self._data_tasks.discard)
 
         # connect to livekit room
         try:
@@ -115,8 +121,17 @@ class VRControllerInputProvider(BaseInputProvider):
             await self.room.disconnect()
         
     async def stop(self):
+        """Gracefully stop the input provider and cancel outstanding tasks."""
         self.logger.info("Disconnecting from LiveKit room")
-        if self.room:
+
+        # Cancel and wait for any in-flight packet processing tasks
+        for task in list(self._data_tasks):
+            task.cancel()
+        if self._data_tasks:
+            await asyncio.gather(*self._data_tasks, return_exceptions=True)
+        self._data_tasks.clear()
+
+        if hasattr(self, "room") and self.room:
             await self.room.disconnect()
          
     async def _handle_data_packet(self, packet: rtc.DataPacket) -> None:
