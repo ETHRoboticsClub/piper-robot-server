@@ -5,6 +5,7 @@ The main entry point for the teleoperation system.
 import argparse
 import asyncio
 import logging
+import multiprocessing as mp
 
 from camera_streaming.camera_streamer import CameraStreamer
 from telegrip.config import config
@@ -14,6 +15,19 @@ from telegrip.livekit_auth import LiveKitAuthServer
 
 
 logger = logging.getLogger(__name__)
+
+def _camera_process_wrapper(cam_index: int, room_name: str, participant_name: str):
+    """Wrapper to run camera streamer in a separate process with asyncio"""
+    async def run_camera():
+        camera_streamer = CameraStreamer(cam_index=cam_index, cam_name="robot0-birds-eye")
+        await camera_streamer.start(room_name, participant_name)
+    
+    asyncio.run(run_camera())
+
+def _control_process_wrapper(room_name: str, participant_name: str, robot_enabled: bool, visualize: bool):
+    """Wrapper to run control process in a separate process with asyncio"""
+    asyncio.run(_run_control_process(room_name, participant_name, robot_enabled, visualize))
+
 
 async def _run_control_process(
     room_name: str,
@@ -64,21 +78,26 @@ async def main():
     # authentication ASGI server
     auth_server = LiveKitAuthServer(port=auth_port)
     
-    # parallel processes
-    camera_streamer = CameraStreamer(cam_index=camera_index, cam_name="robot0-birds-eye")
-    
     try:
         # running background (daemon) processes
         logger.info("Starting auth server...")
         auth_server.start() 
         
-        logger.info("Starting camera streamer...")
+        logger.info("Starting camera streamer and control loop in parallel...")
         logger.info(f"Camera participant: {config.camera_streamer_participant}")
-        await camera_streamer.start(room_name=config.livekit_room, participant_name=config.camera_streamer_participant)
+        logger.info(f"Controller participant: {config.controllers_processing_participant}")
         
-        logger.info("Starting control loop...")
-        logger.info(f"Controller participant: {config.controller_participant}")
-        await _run_control_process(room_name=config.livekit_room, participant_name=config.controller_participant, robot_enabled=robot_enabled, visualize=visualize)
+        # run camera task as process
+        camera_process = mp.Process(target=_camera_process_wrapper, args=(camera_index, config.livekit_room, config.camera_streamer_participant))
+        camera_process.start()
+        
+        # run control loop as process
+        control_process = mp.Process(target=_control_process_wrapper, args=(config.livekit_room, config.controllers_processing_participant, robot_enabled, visualize))
+        control_process.start()
+        
+        # Wait for processes to complete
+        camera_process.join()
+        control_process.join()
         
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down...")
@@ -86,17 +105,20 @@ async def main():
     finally:
         logger.info("Shutting down...")
         
-        # stop control loop processes (main process)
-        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        for task in pending:
-            task.cancel()
-        if pending:
-            logger.info("Cancelling %d pending tasks", len(pending))
-            await asyncio.gather(*pending, return_exceptions=True) # let's each task run through its cancellation
-            
         # stop external processes
         auth_server.stop()
-        await camera_streamer.stop()
+        
+        # Terminate and wait for processes to finish
+        if 'camera_process' in locals() and camera_process.is_alive():
+            logger.info("Terminating camera process...")
+            camera_process.terminate()
+            camera_process.join(timeout=5)
+            
+        if 'control_process' in locals() and control_process.is_alive():
+            logger.info("Terminating control process...")
+            control_process.terminate() 
+            control_process.join(timeout=5)
+            
         logger.info("All processes stopped")
         
 def main_cli():
