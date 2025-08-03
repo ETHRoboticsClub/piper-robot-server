@@ -66,6 +66,7 @@ class VRControllerInputProvider(BaseInputProvider):
         self.msg_count = 0
         self.start_time = None
         self._stats_lock = asyncio.Lock()
+        self.data_packet_log_counter = 0
         
     async def start(self, room_name: str, participant_name: str):
         self.logger.info("Connecting to LiveKit room")
@@ -101,15 +102,13 @@ class VRControllerInputProvider(BaseInputProvider):
             participant_id = data.participant.identity if data.participant else "unknown"
             topic = getattr(data, 'topic', 'no-topic') if hasattr(data, 'topic') else 'no-topic'
             
-            # Log data packet reception occasionally to avoid spam
-            if not hasattr(self, '_packet_log_counter'):
-                self._packet_log_counter = 0
-            self._packet_log_counter += 1
-            
-            if self._packet_log_counter % 500 == 0:  # Log every 500th packet
-                self.logger.info(f"📨 Received data packet #{self._packet_log_counter} from {participant_id}: {len(data.data)} bytes, topic: {topic}")
+            # Log every 500th raw data packet
+            self.data_packet_log_counter += 1
+            if self.data_packet_log_counter % 500 == 0:  
+                self.logger.info(f"📨 Received data packet #{self.data_packet_log_counter} from {participant_id}: {len(data.data)} bytes, topic: {topic}")
             
             task = asyncio.create_task(self._handle_data_packet(data))
+            
             # Keep track of outstanding packet-processing tasks so we can cancel them on shutdown
             self._data_tasks.add(task)
             task.add_done_callback(self._data_tasks.discard)
@@ -153,7 +152,6 @@ class VRControllerInputProvider(BaseInputProvider):
         """Handle data packet coming from LiveKit."""
         processing_start = time.perf_counter()
         try:
-            # LiveKit gives us bytes, so we can decode directly
             payload = json.loads(packet.data.decode('utf-8'))
             await self._process_controller_data(payload)
         except json.JSONDecodeError:
