@@ -291,7 +291,7 @@ class VRControllerInputProvider(BaseInputProvider):
                 await self.send_goal(reset_goal)
                 self.logger.info(f"(VRControllerInputProvider) ✅ Sent grip init goal for {hand} arm")
 
-                logger.info(f"(VRControllerInputProvider) 🔒 {hand.upper()} grip activated - arm control enabled")
+                self.logger.info(f"(VRControllerInputProvider) 🔒 {hand.upper()} grip activated - arm control enabled")
 
             # Compute target position
             if controller.origin_transform is not None:
