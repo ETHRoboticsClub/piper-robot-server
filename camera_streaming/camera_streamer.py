@@ -141,10 +141,9 @@ class CameraStreamer:
             self.logger.error(f"Failed to generate token: {e}", exc_info=True)
             return
 
-        self.logger.info("(CameraStreamer) Creating LiveKit room...")
         self.room = rtc.Room()
         
-        # Add event handlers for debugging
+        # Add event handlers
         @self.room.on("connected")
         def on_connected():
             self.logger.info("(CameraStreamer) ✅ Connected to LiveKit room")
