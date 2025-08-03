@@ -99,7 +99,7 @@ class ControlLoop:
         total_time = time.perf_counter() - start_time_total
         overhead_time = total_time - ik_time - send_time
 
-        # Print all at once to minimize timing impact
+        # # Print all at once to minimize timing impact
         logger.debug(
             f"IK: {ik_time*1000:.1f}ms, CAN: {send_time*1000:.1f}ms, "
             f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"

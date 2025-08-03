@@ -7,12 +7,9 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-
-import numpy as np
 import yaml
 
-from .utils import get_absolute_path, get_project_root
+from .utils import get_absolute_path
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +206,15 @@ class TelegripConfig:
     pos_step: float = POS_STEP
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
+    
+    # LiveKit Configurations
+    livekit_room: str = "robot-vr-teleop-room"
+    camera_streamer_participant: str = "camera-streamer"
+    controllers_processing_participant: str = "controllers-processing"
+    controllers_publishing_participant: str = "controllers-publishing"
+    vr_viewer_participant: str = "vr-viewer"
+    vr_viewer_debug: bool = True
+    
 
     @property
     def ssl_files_exist(self) -> bool:

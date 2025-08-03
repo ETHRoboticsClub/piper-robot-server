@@ -1,21 +1,18 @@
-"""
-The main entry point for the teleoperation system.
-"""
-
 import argparse
-import asyncio
 import http.server
-import logging
 import ssl
 import threading
+import logging
+import asyncio
+import signal
+from dataclasses import replace
 
-from .config import TelegripConfig, config
-from .control_loop import ControlLoop
-from .inputs.vr_ws_server import VRWebSocketServer
-from .utils import get_local_ip
+from telegrip.utils import get_local_ip
+from telegrip.config import config as global_config
+
+from telegrip.config import TelegripConfig
 
 logger = logging.getLogger(__name__)
-
 
 class APIHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for the teleoperation API."""
@@ -153,81 +150,66 @@ class HTTPSServer:
             if self.server_thread:
                 self.server_thread.join(timeout=5)
             logger.info("HTTPS server stopped")
+            
+async def _serve_forever(server: HTTPSServer):
+    """Keep the HTTPS server alive until an exit signal arrives."""
+    await server.start()
+    # Wait on an event rather than sleeping in a loop so we can cancel cleanly
+    stop = asyncio.Event()
 
+    def _graceful_shutdown(*_):
+        stop.set()
+    # Handle Ctrl-C or `kill -TERM`
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, _graceful_shutdown)
 
-async def main():
-    parser = argparse.ArgumentParser(description="Unified SO100 Robot Teleoperation System")
+    await stop.wait() # keeps waiting (running the server) until "stop" value is set to true
+    await server.stop()
 
-    # Control flags
-    parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
-    parser.add_argument("--vis", action="store_true", help="Enable visualization")
+async def main() -> None:
+    """Main function for the web-server."""
+
+    parser = argparse.ArgumentParser(description="telegrip Web-UI static file server")
+    parser.add_argument("--host", default=global_config.host_ip, help="IP/interface to bind (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=global_config.https_port, help="HTTPS port (default: 8443)")
     parser.add_argument(
         "--log-level",
-        default="info",
+        default=global_config.log_level,
         choices=["debug", "info", "warning", "error", "critical"],
-        help="Set logging level",
+        help="Logging verbosity",
     )
-
     args = parser.parse_args()
 
-    # Configure logging
-    log_level = getattr(logging, args.log_level.upper())
-    logging.basicConfig(level=log_level, format="%(asctime)s - %(message)s", datefmt="%H:%M:%S")
+    # Configure root logger *before* any further logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper()),
+        format="%(asctime)s - %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
-    robot_enabled = not args.no_robot
-    visualize = args.vis
-    host_display = get_local_ip() if config.host_ip == "0.0.0.0" else config.host_ip
-    logging.info("🤖 telegrip starting...")
-    logging.info("📱 Open the UI in your browser on:")
-    logging.info(f"   https://{host_display}:{config.https_port}")
-    logging.info("📱 Then go to the same address on your VR headset browser")
-    logging.info("💡 Use --log-level info to see detailed output")
-    logging.info("")
+    # Build a config instance with the overrides supplied on the CLI
+    cfg: TelegripConfig = replace(
+        global_config, host_ip=args.host, https_port=args.port, log_level=args.log_level
+    )
 
-    try:
-        command_queue = asyncio.Queue()
-        https_server = HTTPSServer(config)
-        vr_server = VRWebSocketServer(command_queue, config)
-        control_loop = ControlLoop(config, robot_enabled, visualize)
+    host_display = get_local_ip() if cfg.host_ip == "0.0.0.0" else cfg.host_ip
 
-        await https_server.start()
-        await vr_server.start()
-        control_loop_task = asyncio.create_task(control_loop.run(command_queue))
-        await asyncio.gather(control_loop_task)
+    logger.info("🖥️  telegrip web-server starting on %s:%s", host_display, cfg.https_port)
+    logger.info("📱 Open the UI in your browser on:")
+    logger.info("   https://%s:%s", host_display, cfg.https_port)
+    logger.info("📱 Then go to the same address on your VR headset browser")
+    logger.info("💡 Use --log-level info to see detailed output\n")
 
-    except KeyboardInterrupt:
-        logging.info("\n🛑 Keyboard interrupt. Shutting down...")
-    except asyncio.CancelledError:
-        logging.info("\n🛑 Task cancelled. Shutting down...")
-    except Exception as e:
-        logging.error(f"🚨 Unexpected error: {e}")
-    finally:
-        try:
-            control_loop_task.cancel()
-            try:
-                await asyncio.wait_for(asyncio.gather(control_loop_task, return_exceptions=True), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Some tasks did not complete within timeout")
-            except KeyboardInterrupt:
-                logger.warning("Cleanup interrupted, forcing shutdown")
+    await _serve_forever(HTTPSServer(cfg))
+    logger.info("✅ web-server shutdown complete.")
 
-            await vr_server.stop()
-            await https_server.stop()
-            await control_loop.stop()
-            logging.info("✅ Shutdown complete.")
-
-        except KeyboardInterrupt:
-            logger.warning("Cleanup forcibly interrupted")
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
-
-
-def main_cli():
+def main_cli() -> None:
+    """Sync wrapper so the file is runnable as a script or module."""
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("👋 telegrip stopped")
-
+        logger.info("👋 web-server interrupted")
 
 if __name__ == "__main__":
     main_cli()

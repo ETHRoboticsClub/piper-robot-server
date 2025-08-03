@@ -5,7 +5,6 @@ Contains forward and inverse kinematics solvers using PyBullet.
 
 import logging
 import math
-import time
 
 import casadi
 import meshcat.geometry as mg

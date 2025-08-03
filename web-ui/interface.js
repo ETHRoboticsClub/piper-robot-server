@@ -148,41 +148,6 @@ function saveConfiguration() {
   });
 }
 
-// Update status indicators
-function updateStatus() {
-  fetch('/api/status')
-    .then(response => response.json())
-    .then(data => {
-      // Update arm connection indicators (based on device files)
-      const leftIndicator = document.getElementById('leftArmStatus');
-      const rightIndicator = document.getElementById('rightArmStatus');
-      const vrIndicator = document.getElementById('vrStatus');
-      
-      leftIndicator.className = 'status-indicator' + (data.left_arm_connected ? ' connected' : '');
-      rightIndicator.className = 'status-indicator' + (data.right_arm_connected ? ' connected' : '');
-      vrIndicator.className = 'status-indicator' + (data.vrConnected ? ' connected' : '');
-      
-      // Update keyboard control status
-      isKeyboardEnabled = data.keyboardEnabled;
-      const keyboardHelp = document.querySelector('.keyboard-help');
-      
-      if (isKeyboardEnabled) {
-        if (keyboardHelp) keyboardHelp.classList.add('active');
-      } else {
-        if (keyboardHelp) keyboardHelp.classList.remove('active');
-      }
-      
-      // Update robot engagement status
-      if (data.robotEngaged !== undefined) {
-        isRobotEngaged = data.robotEngaged;
-        updateEngagementUI();
-      }
-    })
-    .catch(error => {
-      console.error('Error fetching status:', error);
-    });
-}
-
 function updateEngagementUI() {
   const engageBtn = document.getElementById('robotEngageBtn');
   const engageBtnText = document.getElementById('engageBtnText');
@@ -386,22 +351,16 @@ function sendKeyCommand(keyCode, action) {
 document.addEventListener('DOMContentLoaded', () => {
   updateUIForDevice();
   
-  // Start status monitoring
-  updateStatus();
-  setInterval(updateStatus, 2000); // Update every 2 seconds
-  
   // Handle VR mode changes
   document.addEventListener('fullscreenchange', updateUIForDevice);
   
   // VR session detection
   if (navigator.xr) {
     navigator.xr.addEventListener('sessionstart', () => {
-      updateStatus();
       updateUIForDevice();
     });
     
     navigator.xr.addEventListener('sessionend', () => {
-      updateStatus();
       updateUIForDevice();
     });
   }
