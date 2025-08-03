@@ -1,8 +1,9 @@
 // Wait for A-Frame scene to load
 
-AFRAME.registerComponent('controlles', {
+AFRAME.registerComponent('controller-updater', {
   init: function () {
-    console.log('Controller updater component initialized.');
+    console.log('🎮 Controller updater component initialized.');
+    console.log('🔍 Checking for controller elements...');
     // Controllers are enabled
 
     this.leftHand = document.querySelector('#leftHand');
@@ -89,7 +90,9 @@ AFRAME.registerComponent('controlles', {
       this.rightHandInfoText.setAttribute('rotation', textRotation);
 
     // --- Create axis indicators ---
+    console.log('🔧 Creating axis indicators...');
     this.createAxisIndicators();
+    console.log('✅ Axis indicators created successfully');
 
     // --- Helper function to send grip release message ---
     this.sendGripRelease = (hand) => {
@@ -310,17 +313,30 @@ AFRAME.registerComponent('controlles', {
   initializeAsyncWithConfig: async function () {
     // defaults, if loading from backend fails
     let roomName = 'robot-vr-teleop-room';
-    let participantIdentity = 'vr-controller-commands';
+    let participantIdentity = 'controllers-publishing';
+    let destinationParticipant = 'controllers-processing';
     let debug = false;
 
     try {
       const config = await window.LiveKitUtils.loadLiveKitConfig();
       roomName = config.livekit_room;
-      participantIdentity = config.controller_participant;
+      participantIdentity = config.controllers_publishing_participant;
+      destinationParticipant = config.controllers_processing_participant;
       debug = config.vr_viewer_debug;
       console.log('Loaded LiveKit config from backend:', config);
+      console.log(
+        '🎯 Participant identities - Publishing:',
+        participantIdentity,
+        'Processing:',
+        destinationParticipant,
+      );
+
+      // Store as component property for use in sendMessageToControlServer
+      this.destinationParticipant = destinationParticipant;
     } catch (error) {
       console.warn('Failed to load LiveKit config, using defaults:', error);
+      // Set fallback value
+      this.destinationParticipant = destinationParticipant;
     }
 
     // connect to livekit room
@@ -350,12 +366,41 @@ AFRAME.registerComponent('controlles', {
   // --- End LiveKit Event Handlers ---
 
   sendMessageToControlServer: function (message) {
+    if (!window.LiveKitUtils || !window.LiveKitUtils.room) {
+      console.error('❌ LiveKit not connected, cannot send message:', message);
+      return;
+    }
+
     const strData = JSON.stringify(message);
     const encodedData = this.encoder.encode(strData);
-    window.LiveKitUtils.room.localParticipant.publishData(encodedData, {
-      reliable: true,
-      destinationIdentities: ['control-server'],
-    });
+
+    try {
+      // Check if target participant is connected before sending targeted message
+      const targetConnected = Array.from(
+        window.LiveKitUtils.room.remoteParticipants.values(),
+      ).some((p) => p.identity === this.destinationParticipant);
+
+      if (targetConnected) {
+        window.LiveKitUtils.room.localParticipant.publishData(encodedData, {
+          reliable: true,
+          destinationIdentities: [this.destinationParticipant],
+          topic: 'vr-controller-data',
+        });
+        console.log('📤 Sent TARGETED message to control server:', message);
+      } else {
+        // Fallback to broadcast if target not connected yet
+        window.LiveKitUtils.room.localParticipant.publishData(encodedData, {
+          reliable: true,
+          topic: 'vr-controller-data',
+        });
+        console.log(
+          '📤 Sent BROADCAST message (target not connected):',
+          message,
+        );
+      }
+    } catch (error) {
+      console.error('❌ Failed to send message:', error, message);
+    }
   },
 
   createAxisIndicators: function () {
@@ -484,12 +529,34 @@ AFRAME.registerComponent('controlles', {
     // Update controller text if controllers are visible
     if (!this.leftHand || !this.rightHand) return; // Added safety check
 
-    // --- BEGIN DETAILED LOGGING ---
-    if (this.leftHand.object3D) {
-      // console.log(`Left Hand Raw - Visible: ${this.leftHand.object3D.visible}, Pos: ${this.leftHand.object3D.position.x.toFixed(2)},${this.leftHand.object3D.position.y.toFixed(2)},${this.leftHand.object3D.position.z.toFixed(2)}`);
-    }
-    if (this.rightHand.object3D) {
-      // console.log(`Right Hand Raw - Visible: ${this.rightHand.object3D.visible}, Pos: ${this.rightHand.object3D.position.x.toFixed(2)},${this.rightHand.object3D.position.y.toFixed(2)},${this.rightHand.object3D.position.z.toFixed(2)}`);
+    // Initialize debug counter if not exists
+    if (!this.debugCounter) this.debugCounter = 0;
+    this.debugCounter++;
+
+    // --- BEGIN DETAILED LOGGING (every 60 frames = ~1 second) ---
+    if (this.debugCounter % 60 === 0) {
+      if (this.leftHand.object3D) {
+        console.log(
+          `👈 Left Hand - Visible: ${
+            this.leftHand.object3D.visible
+          }, Pos: ${this.leftHand.object3D.position.x.toFixed(
+            2,
+          )},${this.leftHand.object3D.position.y.toFixed(
+            2,
+          )},${this.leftHand.object3D.position.z.toFixed(2)}`,
+        );
+      }
+      if (this.rightHand.object3D) {
+        console.log(
+          `👉 Right Hand - Visible: ${
+            this.rightHand.object3D.visible
+          }, Pos: ${this.rightHand.object3D.position.x.toFixed(
+            2,
+          )},${this.rightHand.object3D.position.y.toFixed(
+            2,
+          )},${this.rightHand.object3D.position.z.toFixed(2)}`,
+        );
+      }
     }
     // --- END DETAILED LOGGING ---
 
@@ -656,7 +723,20 @@ AFRAME.registerComponent('controlles', {
         leftController: leftController,
         rightController: rightController,
       };
+
+      // Debug log every 60 frames to avoid spam
+      if (this.debugCounter % 60 === 0) {
+        console.log('📡 Sending controller data:', {
+          hasValidLeft,
+          hasValidRight,
+          leftPos: leftController.position,
+          rightPos: rightController.position,
+        });
+      }
+
       this.sendMessageToControlServer(dualControllerData);
+    } else if (this.debugCounter % 60 === 0) {
+      console.log('⚠️ No valid controller data to send');
     }
   },
 });
@@ -669,27 +749,32 @@ document.addEventListener('DOMContentLoaded', (event) => {
     // Listen for controller connection events
     scene.addEventListener('controllerconnected', (evt) => {
       console.log(
-        'Controller CONNECTED:',
+        '🎮 Controller CONNECTED:',
         evt.detail.name,
         evt.detail.component.data.hand,
       );
+      console.log('📊 Controller details:', evt.detail);
     });
     scene.addEventListener('controllerdisconnected', (evt) => {
       console.log(
-        'Controller DISCONNECTED:',
+        '🎮 Controller DISCONNECTED:',
         evt.detail.name,
         evt.detail.component.data.hand,
       );
     });
 
     // Add controller-updater component when scene is loaded (A-Frame manages session)
+    console.log('🔄 Scene loaded status:', scene.hasLoaded);
     if (scene.hasLoaded) {
       scene.setAttribute('controller-updater', '');
-      console.log('controller-updater component added immediately.');
+      console.log('✅ controller-updater component added immediately.');
     } else {
+      console.log('⏳ Waiting for scene to load...');
       scene.addEventListener('loaded', () => {
         scene.setAttribute('controller-updater', '');
-        console.log('controller-updater component added after scene loaded.');
+        console.log(
+          '✅ controller-updater component added after scene loaded.',
+        );
       });
     }
   } else {

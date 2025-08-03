@@ -25,23 +25,6 @@ logger = logging.getLogger(__name__)
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 
-class TextDecoder():
-    def __init__(self):
-        pass
-    
-    def decode(self, array):
-        """
-        exp:
-            >>> textdecoder = TextDecoder()
-            >>> textdecoder.decode([36])
-            >>> $
-        """
-        if isinstance(array, list):
-            return bytearray(array).decode('utf-8')
-        elif isinstance(array, bytearray):
-            return array.decode('utf-8')
-        else:
-            raise TypeError(f'expecting a list or bytearray got: {type(array)}')
 
 class VRControllerState:
     """State tracking for a VR controller."""
@@ -98,22 +81,47 @@ class VRControllerInputProvider(BaseInputProvider):
         # event handlers
         @self.room.on("participant_connected")
         def on_participant_connected(participant: rtc.RemoteParticipant):
-            self.logger.info(f"Participant connected {participant.sid}, {participant.identity}")
+            self.logger.info(f"👤 Participant connected {participant.sid}, {participant.identity}")
+            if participant.identity == "controllers-publishing":
+                self.logger.info("🎮 VR Controller participant connected - ready to receive data!")
+            
+        @self.room.on("participant_disconnected")
+        def on_participant_disconnected(participant: rtc.RemoteParticipant):
+            self.logger.info(f"👤 Participant disconnected {participant.sid}, {participant.identity}")
 
         @self.room.on("data_received")
         def on_data_received(data: rtc.DataPacket):
+            participant_id = data.participant.identity if data.participant else "unknown"
+            topic = getattr(data, 'topic', 'no-topic') if hasattr(data, 'topic') else 'no-topic'
+            
+            # Log data packet reception occasionally to avoid spam
+            if not hasattr(self, '_packet_log_counter'):
+                self._packet_log_counter = 0
+            self._packet_log_counter += 1
+            
+            if self._packet_log_counter % 500 == 0:  # Log every 500th packet
+                self.logger.info(f"📨 Received data packet #{self._packet_log_counter} from {participant_id}: {len(data.data)} bytes, topic: {topic}")
+            
             task = asyncio.create_task(self._handle_data_packet(data))
             # Keep track of outstanding packet-processing tasks so we can cancel them on shutdown
             self._data_tasks.add(task)
             task.add_done_callback(self._data_tasks.discard)
+            
+        # Add a test to verify data_received handler is registered
+        self.logger.info("🔧 Data packet handler registered")
 
         # connect to livekit room
         try:
             await self.room.connect(LIVEKIT_URL, lk_token)
-            self.logger.info(f"Connected to LiveKit room {room_name} as {participant_name}")
+            self.logger.info(f"✅ Connected to LiveKit room {room_name} as {participant_name}")
+            
+            # Log room state
+            self.logger.info(f"📊 Room participants: {len(self.room.remote_participants)}")
+            for participant in self.room.remote_participants.values():
+                self.logger.info(f"  - {participant.identity} ({participant.sid})")
             while True:
-                await asyncio.sleep(1) # livekit room stay alive signal
-                self.logger.info("Livekit room stay alive signal")
+                await asyncio.sleep(5) # livekit room stay alive signal (less frequent)
+                self.logger.debug(f"💓 VR Controller connection alive - Remote participants: {len(self.room.remote_participants)}")
         except Exception as e:
             self.logger.error(f"Failed to connect to LiveKit: {e}")
             return
@@ -138,7 +146,8 @@ class VRControllerInputProvider(BaseInputProvider):
         """Handle data packet coming from LiveKit."""
         processing_start = time.perf_counter()
         try:
-            payload = json.loads(TextDecoder().decode(packet.data))
+            # LiveKit gives us bytes, so we can decode directly
+            payload = json.loads(packet.data.decode('utf-8'))
             await self._process_controller_data(payload)
         except json.JSONDecodeError:
             self.logger.warning(f"Received non-JSON message: {packet.data}")
@@ -158,13 +167,37 @@ class VRControllerInputProvider(BaseInputProvider):
                     self.logger.debug(f"📊 Message frequency: {freq:.1f} Hz ({self.msg_count} msgs)")
                     self.msg_count = 0
                     self.start_time = time.perf_counter()
-            # log processing latency outside the lock – purely diagnostic
-            self.logger.debug(
-                f"🕒 VR message processing time: {(time.perf_counter() - processing_start)*1000:.1f}ms"
-            )
+            # log processing latency outside the lock – purely diagnostic (less frequently)
+            if hasattr(self, '_timing_log_counter'):
+                self._timing_log_counter += 1
+            else:
+                self._timing_log_counter = 1
+                
+            if self._timing_log_counter % 200 == 0:  # Log timing every 200 messages
+                self.logger.debug(
+                    f"🕒 VR message processing time: {(time.perf_counter() - processing_start)*1000:.1f}ms"
+                )
             
     async def _process_controller_data(self, data: Dict):
         """Process incoming VR controller data."""
+        # Only log detailed data when buttons are active to reduce noise
+        left_data = data.get("leftController", {})
+        right_data = data.get("rightController", {})
+        
+        left_active = left_data.get("gripActive", False) or left_data.get("trigger", 0) > 0.5
+        right_active = right_data.get("gripActive", False) or right_data.get("trigger", 0) > 0.5
+        
+        if left_active or right_active:
+            self.logger.info(f"🎮 Controller ACTIVE - Left: grip={left_data.get('gripActive')}, trigger={left_data.get('trigger'):.1f} | Right: grip={right_data.get('gripActive')}, trigger={right_data.get('trigger'):.1f}")
+        else:
+            # Only log every 100th message when controllers are idle
+            if hasattr(self, '_idle_log_counter'):
+                self._idle_log_counter += 1
+            else:
+                self._idle_log_counter = 1
+                
+            if self._idle_log_counter % 100 == 0:
+                self.logger.debug(f"🎮 Controllers idle (message #{self._idle_log_counter})")
 
         # Handle new dual controller format
         if "leftController" in data and "rightController" in data:
@@ -221,6 +254,7 @@ class VRControllerInputProvider(BaseInputProvider):
         trigger_active = trigger > 0.5
         if trigger_active != controller.trigger_active:
             controller.trigger_active = trigger_active
+            self.logger.info(f"🎯 {hand.upper()} trigger {'PRESSED' if trigger_active else 'RELEASED'} - sending gripper goal")
 
             # Send gripper control goal - do not specify mode to avoid interfering with position control
             # Reverse behavior: gripper open by default, closes when trigger pressed
@@ -230,6 +264,7 @@ class VRControllerInputProvider(BaseInputProvider):
                 gripper_closed=not trigger_active,  # Inverted: closed when trigger NOT active
             )
             await self.send_goal(gripper_goal)
+            self.logger.info(f"✅ Sent gripper goal for {hand} arm")
 
             logger.info(
                 f"🤏 {hand.upper()} trigger {'ACTIVE' if trigger_active else 'RELEASED'} - gripper {'OPENED' if trigger_active else 'CLOSED'}"
@@ -241,6 +276,7 @@ class VRControllerInputProvider(BaseInputProvider):
                 # Grip just activated - set origin and reset target position
                 controller.grip_active = True
                 controller.origin_transform = transform.copy()
+                self.logger.info(f"🔒 {hand.upper()} grip ACTIVATED - sending reset goal")
 
                 # Send reset signal to control loop to reset target position to current robot position
                 reset_goal = ControlGoal(
@@ -248,11 +284,13 @@ class VRControllerInputProvider(BaseInputProvider):
                     arm=hand,
                 )
                 await self.send_goal(reset_goal)
+                self.logger.info(f"✅ Sent grip init goal for {hand} arm")
 
                 logger.info(f"🔒 {hand.upper()} grip activated - arm control enabled")
 
             # Compute target position
             if controller.origin_transform is not None:
+                self.logger.debug(f"🎯 {hand.upper()} grip active - sending movement goal")
 
                 # Create control goal with relative transform
                 goal = ControlGoal(
@@ -262,6 +300,7 @@ class VRControllerInputProvider(BaseInputProvider):
                     vr_target_transform=transform,
                 )
                 await self.send_goal(goal)
+                self.logger.debug(f"✅ Sent movement goal for {hand} arm")
 
     async def _handle_grip_release(self, hand: str):
         """Handle grip release for a controller."""

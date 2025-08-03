@@ -210,7 +210,8 @@ class TelegripConfig:
     # LiveKit Configurations
     livekit_room: str = "robot-vr-teleop-room"
     camera_streamer_participant: str = "camera-streamer"
-    controller_participant: str = "vr-controller-commands"
+    controllers_processing_participant: str = "controllers-processing"
+    controllers_publishing_participant: str = "controllers-publishing"
     vr_viewer_participant: str = "vr-viewer"
     vr_viewer_debug: bool = True
     
