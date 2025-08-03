@@ -90,11 +90,11 @@ class RobotInterface:
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
 
-        left_config = PiperConfig(port="left_piper", cameras={})
+        left_config = PiperConfig(port="left_piper")
         # Set the robot name for calibration file lookup
         left_config.id = "left_follower"
 
-        right_config = PiperConfig(port="right_piper", cameras={})
+        right_config = PiperConfig(port="right_piper")
         # Set the robot name for calibration file lookup
         right_config.id = "right_follower"
 
