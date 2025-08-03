@@ -3,7 +3,6 @@
 
 # Core dependencies
 numpy==1.21.0
-torch==2.0.1
 scipy==1.9.0
 pybullet==3.2.5
 websockets==11.0.3

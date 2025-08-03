@@ -4,13 +4,11 @@ An open source teleoperation control system for the [SO100 robot arm](https://gi
 
 <img src="web-ui/media/telegrip_instructions.jpg" alt="VR Controller Instructions" width="400">
 
-*Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm.*
+_Using a VR headset like the Meta Quest and the built-in WebXR app, controller movements are streamed to the telegrip controller so you can record training data without a dedicated leader arm._
 
 https://github.com/user-attachments/assets/e21168b5-e9b4-4c83-ab4d-a15cb470d11b
 
-
-*telegrip operation of two SO-100 arms using a Quest 3 headset*
-
+_telegrip operation of two SO-100 arms using a Quest 3 headset_
 
 ## Features
 
@@ -29,11 +27,7 @@ https://github.com/user-attachments/assets/e21168b5-e9b4-4c83-ab4d-a15cb470d11b
 2. **Python Environment**: Python 3.8+ with required packages
 3. **VR Setup** (optional): Meta Quest or other headset with WebXR support (no app installation needed!)
 
-
-
-
 ### Package Installation
-
 
 Install telegrip (this package):
 
@@ -67,8 +61,6 @@ Run the web server:
 webserver
 ```
 
-
-
 ### Command Line Options
 
 ```bash
@@ -93,26 +85,31 @@ Options:
 ### Development/Testing Modes
 
 **Visualization Only** (no robot hardware):
+
 ```bash
 robotserver --no-robot
 ```
 
 **Keyboard Only** (no VR):
+
 ```bash
 webserver --no-vr
 ```
 
 **No Simulation** (no PyBullet sim or IK):
+
 ```bash
 robotserver --no-sim
 ```
 
 **Headless** (no PyBullet GUI):
+
 ```bash
 robotserver --no-viz
 ```
 
 **Auto-connect to Robot** (skip manual connection step):
+
 ```bash
 robotserver --autoconnect
 ```
@@ -123,16 +120,19 @@ robotserver --autoconnect
 
 1. **Setup**: Connect Meta Quest to same network, navigate to `https://<your-ip>:8443`
 
-2. **Arm Position Control**: 
+2. **Arm Position Control**:
+
    - **Hold grip button** to activate position control for that arm
    - While holding grip, the robot arm gripper tip will track your controller position in 3D space
    - Release grip button to deactivate position control
 
 3. **Wrist Orientation Control**:
+
    - The **roll and pitch** of your controller will be matched on the wrist joint of the arm
    - This allows precise orientation control of the end effector
 
 4. **Gripper Control**:
+
    - Press and **hold trigger button** to close the gripper
    - The gripper stays closed as long as you hold the trigger
    - Release trigger to open the gripper
@@ -142,18 +142,20 @@ robotserver --autoconnect
 ### Keyboard Control
 
 **Left Arm Control**:
-   - **W/S**: Forward/Backward
-   - **A/D**: Left/Right 
-   - **Q/E**: Down/Up
-   - **Z/X**: Wrist roll
-   - **F**: Toggle gripper open/closed
+
+- **W/S**: Forward/Backward
+- **A/D**: Left/Right
+- **Q/E**: Down/Up
+- **Z/X**: Wrist roll
+- **F**: Toggle gripper open/closed
 
 **Right Arm Control**:
-   - **I/K**: Forward/Backward
-   - **J/L**: Left/Right
-   - **U/O**: Up/Down
-   - **N/M**: Wrist roll
-   - **; (semicolon)**: Toggle gripper open/closed
+
+- **I/K**: Forward/Backward
+- **J/L**: Left/Right
+- **U/O**: Up/Down
+- **N/M**: Wrist roll
+- **; (semicolon)**: Toggle gripper open/closed
 
 ## Architecture
 
@@ -186,6 +188,7 @@ graph TD
 ### Data Structures
 
 **ControlGoal**: High-level control command
+
 ```python
 @dataclass
 class ControlGoal:
@@ -209,7 +212,7 @@ class ControlGoal:
 ### Network Configuration
 
 - **HTTPS Port**: 8443 (web interface)
-- **WebSocket Port**: 8442 (VR controllers)  
+- **WebSocket Port**: 8442 (VR controllers)
 - **Host**: 0.0.0.0 (all interfaces)
 
 ### Coordinate Systems
@@ -218,27 +221,58 @@ class ControlGoal:
 - **Robot**: X=forward, Y=left, Z=up
 - **Transformation**: Handled automatically in kinematics module
 
+## Production Deployment
+
+For deploying telegrip on external Ubuntu servers or VMs, use the automated deployment setup:
+
+```bash
+# Clone repository to your server
+git clone <repository-url> telegrip
+cd telegrip
+
+# Create conda environment (if needed)
+conda env create -f environment.yml
+
+# Generate deployment configuration
+./deploy-setup.sh your-domain.com  # or ./deploy-setup.sh for localhost
+
+# Follow the generated deployment instructions
+```
+
+The deployment script automatically:
+
+- Detects your system configuration (user, paths, conda environment)
+- Generates nginx and systemd configuration files
+- Provides step-by-step installation commands
+- Configures HTTPS with SSL certificates
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment documentation.
+
 ## Troubleshooting
 
 ### Common Issues
 
 **Robot Connection Failed**:
+
 - Check USB-serial device permissions: `sudo chmod 666 /dev/ttySO100*`
 - Verify port names match actual devices
 - Try running with `--no-robot` for testing
 
 **VR Controllers Not Connecting**:
+
 - Ensure Quest and robot are on same network
 - SSL certificates are generated automatically, but check `cert.pem` and `key.pem` exist if issues persist
 - Try accessing web interface directly in browser first
 - If OpenSSL is missing, install it: `sudo apt-get install openssl` (Ubuntu) or `brew install openssl` (macOS)
 
 **PyBullet Visualization Issues**:
+
 - Install PyBullet: `pip install pybullet`
 - Try headless mode: `--no-viz`
 - Check URDF file exists at specified path
 
 **Keyboard Input Not Working**:
+
 - Run with appropriate permissions for input access
 - Check terminal has focus for key events
 - Try `--no-keyboard` to isolate issue
@@ -246,12 +280,14 @@ class ControlGoal:
 ### Debug Modes
 
 **Detailed Logging**:
+
 ```bash
 robotserver --log-level info    # Show detailed startup and operation info
 robotserver --log-level debug   # Show maximum detail for debugging
 ```
 
 **Component Isolation**:
+
 - Test individual components with disable flags
 - Check component status in logs
 - Verify queue communication

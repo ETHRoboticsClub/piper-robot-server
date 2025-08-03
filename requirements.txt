@@ -3,13 +3,12 @@
 # For installation as package, use: pip install -e .
 
 numpy
-torch
 scipy
 pybullet
 websockets
 pynput
-flask
-flask-cors
+fastapi
+uvicorn[standard]
 python-dotenv
 livekit
 # For development

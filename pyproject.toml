@@ -14,7 +14,6 @@ keywords = ["robotics", "teleoperation", "vr", "robot-control"]
 
 dependencies = [
     "numpy",
-    "torch",
     "websockets",
     "pynput",
     "pybullet",
@@ -23,6 +22,8 @@ dependencies = [
     "livekit",
     "opencv-python",
     "python-dotenv",
+    "fastapi",
+    "uvicorn[standard]",
 ]
 
 requires-python = ">=3.8"

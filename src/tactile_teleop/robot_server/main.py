@@ -8,7 +8,6 @@ import logging
 import multiprocessing as mp
 
 from tactile_teleop.config import config
-from tactile_teleop.livekit_auth import LiveKitAuthServer
 
 from tactile_teleop.robot_server.control_loop import ControlLoop
 from tactile_teleop.robot_server.inputs.vr_controllers import VRControllerInputProvider
@@ -78,14 +77,9 @@ async def main():
 
     logger.info("Initializing server components...")
 
-    # authentication ASGI server
-    auth_server = LiveKitAuthServer(port=auth_port)
 
     try:
         # running background (daemon) processes
-        logger.info("Starting auth server...")
-        auth_server.start()
-
         logger.info("Starting camera streamer and control loop in parallel...")
         logger.info(f"Camera participant: {config.camera_streamer_participant}")
         logger.info(f"Controller participant: {config.controllers_processing_participant}")
@@ -118,9 +112,6 @@ async def main():
 
     finally:
         logger.info("Shutting down...")
-
-        # stop external processes
-        auth_server.stop()
 
         # Terminate and wait for processes to finish
         if "camera_process" in locals() and camera_process.is_alive():
