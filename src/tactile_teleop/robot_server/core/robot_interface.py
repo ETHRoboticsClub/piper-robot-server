@@ -13,7 +13,7 @@ from typing import Any, Tuple
 import numpy as np
 import pinocchio as pin
 
-from ..config import NUM_JOINTS, TelegripConfig
+from tactile_teleop.config import NUM_JOINTS, TelegripConfig
 from .geometry import transform2pose, xyzrpy2transform
 from .kinematics import Arm_IK
 from .piper import Piper, PiperConfig

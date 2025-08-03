@@ -6,7 +6,7 @@ from typing import List
 
 import numpy as np
 
-from .config import TelegripConfig
+from tactile_teleop.config import TelegripConfig
 from .core.geometry import convert_to_robot_convention, xyzrpy2transform
 from .core.robot_interface import RobotInterface
 from .inputs.base import ControlGoal, EventType

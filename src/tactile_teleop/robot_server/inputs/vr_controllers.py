@@ -16,9 +16,9 @@ from livekit import rtc
 
 from tactile_teleop.livekit_auth import generate_token
 from tactile_teleop.config import TelegripConfig
-from tactile_teleop.core.geometry import pose2transform
 
-from .base import BaseInputProvider, ControlGoal, EventType
+from tactile_teleop.robot_server.core.geometry import pose2transform
+from tactile_teleop.robot_server.inputs.base import BaseInputProvider, ControlGoal, EventType
 
 
 logger = logging.getLogger(__name__)

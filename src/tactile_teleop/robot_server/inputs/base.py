@@ -3,12 +3,12 @@ Base classes and data structures for input providers.
 """
 
 import asyncio
+import numpy as np
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Literal, Optional
-
-import numpy as np
+from typing import Optional
 
 
 class EventType(Enum):
