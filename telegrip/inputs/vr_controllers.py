@@ -271,7 +271,7 @@ class VRControllerInputProvider(BaseInputProvider):
             await self.send_goal(gripper_goal)
             self.logger.info(f"(VRControllerInputProvider) ✅ Sent gripper goal for {hand} arm")
 
-            logger.info(
+            self.logger.info(
                 f"(VRControllerInputProvider) 🤏 {hand.upper()} trigger {'ACTIVE' if trigger_active else 'RELEASED'} - gripper {'OPENED' if trigger_active else 'CLOSED'}"
             )
 
