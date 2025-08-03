@@ -89,11 +89,12 @@ class CameraStreamer:
         
         while self.is_running:
             try:
-                ret, frame = self.cap.read()  # blocking call (synchronous)
+                loop = asyncio.get_event_loop()
+                ret, frame = await loop.run_in_executor(None, self.cap.read)  # blocking call, running in separate thread
 
                 if not ret:
                     self.logger.warning("Can't receive frame (stream end?). Retrying...")
-                    await asyncio.sleep(0.1)  # Use async sleep instead of blocking sleep
+                    await asyncio.sleep(0.1) 
                     continue
             except Exception as e:
                 self.logger.error(f"Error reading from camera: {e}")
@@ -204,7 +205,7 @@ class CameraStreamer:
             self.logger.info("🔄 Camera streamer running...")
             while True:
                 await asyncio.sleep(5)  # Less frequent logging
-                self.logger.debug(f"💓 Connection alive - Remote participants: {len(self.room.remote_participants)}")
+                self.logger.info(f"💓 Connection alive - Remote participants: {len(self.room.remote_participants)}")
                 
         except KeyboardInterrupt:
             self.logger.info("⌨️  KeyboardInterrupt, shutting down")
