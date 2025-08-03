@@ -14,10 +14,10 @@ import numpy as np
 
 from livekit import rtc
 
-from telegrip.livekit_auth import generate_token
+from tactile_teleop.livekit_auth import generate_token
+from tactile_teleop.config import TelegripConfig
+from tactile_teleop.core.geometry import pose2transform
 
-from telegrip.config import TelegripConfig
-from telegrip.core.geometry import pose2transform
 from .base import BaseInputProvider, ControlGoal, EventType
 
 

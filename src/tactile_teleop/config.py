@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .utils import get_absolute_path
+from tactile_teleop.utils import get_absolute_path, get_robot_server_path
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,6 @@ class TelegripConfig:
 
     # Paths
     urdf_path: str = URDF_PATH
-    webapp_dir: str = "webapp"
 
     # IK settings
     use_reference_poses: bool = USE_REFERENCE_POSES
@@ -221,7 +220,7 @@ class TelegripConfig:
     target_ipd: float = 62.0
     eye_separation: float = 0.62
     focal_length: float = 500
-    calibration_file: str = "camera_streaming/calibration/stereo_calibration_vr_SUCCESS_20250803_043704.pkl"
+    calibration_file: str = str(get_robot_server_path("camera_streaming/calibration/stereo_calibration_vr_SUCCESS_20250803_043704.pkl"))
 
     @property
     def ssl_files_exist(self) -> bool:
@@ -232,7 +231,7 @@ class TelegripConfig:
 
     def ensure_ssl_certificates(self) -> bool:
         """Ensure SSL certificates exist, generating them if necessary."""
-        from .utils import ensure_ssl_certificates
+        from tactile_teleop.utils import ensure_ssl_certificates
 
         return ensure_ssl_certificates(self.certfile, self.keyfile)
 
@@ -241,12 +240,6 @@ class TelegripConfig:
         """Check if URDF file exists."""
         urdf_path = get_absolute_path(self.urdf_path)
         return urdf_path.exists()
-
-    @property
-    def webapp_exists(self) -> bool:
-        """Check if webapp directory exists."""
-        webapp_path = get_absolute_path(self.webapp_dir)
-        return webapp_path.exists()
 
     def get_absolute_urdf_path(self) -> str:
         """Get absolute path to URDF file."""

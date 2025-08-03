@@ -3,8 +3,6 @@
 import time
 from typing import Any, Dict
 
-import numpy as np
-
 try:
     from piper_sdk import C_PiperInterface_V2
 except ImportError:

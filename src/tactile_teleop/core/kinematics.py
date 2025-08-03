@@ -7,7 +7,6 @@ import logging
 import math
 import os
 import tempfile
-from pathlib import Path
 
 import casadi
 import meshcat.geometry as mg

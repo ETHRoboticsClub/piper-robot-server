@@ -30,17 +30,15 @@ def get_local_ip():
 
 def get_package_dir() -> Path:
     """
-    Get the directory where the telegrip package is installed.
+    Get the directory where the tactile_teleop package is installed.
     This allows us to find package files regardless of current working directory.
     """
-    # Get the directory containing this utils.py file
-    # which is the telegrip package directory
-    return Path(__file__).parent
+    return Path(__file__).parent.parent
 
 
 def get_project_root() -> Path:
     """
-    Get the project root directory (parent of the telegrip package).
+    Get the project root directory (parent of the tactile_teleop package).
     This is where config files, SSL certificates, web-ui, URDF, etc. should be located.
     """
     return get_package_dir().parent
@@ -58,6 +56,17 @@ def get_absolute_path(relative_path: str) -> Path:
     """
     return get_project_root() / relative_path
 
+def get_web_server_path(relative_path: str) -> Path:
+    """
+    Get the path to the web-ui directory.
+    """
+    return get_project_root() / "src" / "tactile_teleop" / "web_server" / relative_path
+
+def get_robot_server_path(relative_path: str) -> Path:
+    """
+    Get the path to the robot-server directory.
+    """
+    return get_project_root() / "src" / "tactile_teleop" / "robot_server" / relative_path
 
 def generate_ssl_certificates(cert_path: str = "cert.pem", key_path: str = "key.pem") -> bool:
     """

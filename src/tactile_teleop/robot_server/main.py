@@ -7,11 +7,13 @@ import asyncio
 import logging
 import multiprocessing as mp
 
-from camera_streaming.camera_streamer import CameraStreamer
-from telegrip.config import config
-from telegrip.control_loop import ControlLoop
-from telegrip.inputs.vr_controllers import VRControllerInputProvider
-from telegrip.livekit_auth import LiveKitAuthServer
+from tactile_teleop.config import config
+from tactile_teleop.control_loop import ControlLoop
+from tactile_teleop.inputs.vr_controllers import VRControllerInputProvider
+from tactile_teleop.livekit_auth import LiveKitAuthServer
+
+from .camera_streaming.camera_streamer import CameraStreamer
+
 
 logger = logging.getLogger(__name__)
 

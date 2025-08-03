@@ -7,10 +7,9 @@ import asyncio
 import signal
 from dataclasses import replace
 
-from telegrip.utils import get_local_ip
-from telegrip.config import config as global_config
-
-from telegrip.config import TelegripConfig
+from tactile_teleop.utils import get_local_ip
+from tactile_teleop.config import config as global_config
+from tactile_teleop.config import TelegripConfig
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +72,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
     def serve_file(self, filename, content_type):
         """Serve a static file from the project directory."""
-        from telegrip.utils import get_absolute_path
+        from tactile_teleop.utils import get_web_server_path
 
         try:
             # Convert relative path to absolute path in project directory
-            abs_path = get_absolute_path(filename)
+            web_server_path = get_web_server_path(filename)
 
-            with open(abs_path, "rb") as f:
+            with open(web_server_path, "rb") as f:
                 file_content = f.read()
 
             self.send_response(200)

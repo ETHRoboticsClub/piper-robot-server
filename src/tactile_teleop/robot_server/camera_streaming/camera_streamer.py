@@ -3,8 +3,6 @@ import json
 import logging
 import os
 import pickle
-import time
-from pathlib import Path
 from typing import Optional
 
 import cv2
@@ -12,7 +10,7 @@ import numpy as np
 from dotenv import load_dotenv
 from livekit import rtc
 
-from telegrip.livekit_auth import generate_token
+from tactile_teleop.livekit_auth import generate_token
 
 # Load environment variables from the project root
 load_dotenv()

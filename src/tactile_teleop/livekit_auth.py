@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from telegrip.config import config
+from tactile_teleop.config import config
 
 logger = logging.getLogger(__name__)
 load_dotenv()
