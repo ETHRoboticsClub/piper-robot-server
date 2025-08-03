@@ -102,7 +102,7 @@ class LiveKitAuthServer:
         
         self._register_api_endpoints()
         
-        if not LIVEKIT_API_KEY and LIVEKIT_API_SECRET and LIVEKIT_URL:
+        if not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET or not LIVEKIT_URL:
             raise ValueError("LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and LIVEKIT_URL must be set in the .env file")
         
     def _get_token(self, payload: dict) -> JSONResponse:
