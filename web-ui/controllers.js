@@ -40,7 +40,7 @@ AFRAME.registerComponent('controller-updater', {
     this.decoder = new TextDecoder();
 
     // Load config and initialize asynchronously
-    this.initializeAsyncWithConfig();
+    this.initializeAsyncWithConfig().catch(e => console.error('Error during async initialization:', e));
 
     // --- VR Status Reporting Function ---
     this.reportVRStatus = (connected) => {
