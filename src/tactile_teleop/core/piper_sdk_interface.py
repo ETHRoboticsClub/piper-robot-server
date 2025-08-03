@@ -7,7 +7,7 @@ try:
     from piper_sdk import C_PiperInterface_V2
 except ImportError:
     print("Is the piper_sdk installed: pip install piper_sdk")
-    C_PiperInterface_V2 = None  # For type checking and docs
+    C_PiperInterface_V2: Any = None  # For type checking and docs
 
 JOINT_LIMITS_RAD = {
     "min": [-2.6179, 0.0, -2.967, -1.745, -1.22, -2.09439],

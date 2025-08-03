@@ -176,8 +176,9 @@ class RobotInterface:
         """Solve inverse kinematics for specified arm."""
         position, quaternion = transform2pose(target_pose)
         # TODO: check if it is xyzw or wxyz
+        quat_wxyz = np.array([quaternion[3], quaternion[0], quaternion[1], quaternion[2]])
         target = pin.SE3(
-            pin.Quaternion(quaternion[3], quaternion[0], quaternion[1], quaternion[2]),
+            pin.Quaternion(quat_wxyz),
             position,
         )
         sol_q, tau_ff, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
