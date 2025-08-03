@@ -7,6 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
 import yaml
 
 from .utils import get_absolute_path
@@ -206,7 +207,7 @@ class TelegripConfig:
     pos_step: float = POS_STEP
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
-    
+
     # LiveKit Configurations
     livekit_room: str = "robot-vr-teleop-room"
     camera_streamer_participant: str = "camera-streamer"
@@ -214,7 +215,13 @@ class TelegripConfig:
     controllers_publishing_participant: str = "controllers-publishing"
     vr_viewer_participant: str = "vr-viewer"
     vr_viewer_debug: bool = True
-    
+
+    # Stereo Video Configuration
+    physical_baseline: float = 92.0
+    target_ipd: float = 62.0
+    eye_separation: float = 0.62
+    focal_length: float = 500
+    calibration_file: str = "camera_streaming/calibration/stereo_calibration_vr_SUCCESS_20250803_043704.pkl"
 
     @property
     def ssl_files_exist(self) -> bool:

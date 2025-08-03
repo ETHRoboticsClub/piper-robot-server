@@ -5,6 +5,9 @@ Contains forward and inverse kinematics solvers using PyBullet.
 
 import logging
 import math
+import os
+import tempfile
+from pathlib import Path
 
 import casadi
 import meshcat.geometry as mg
@@ -76,11 +79,63 @@ def quaternion_from_matrix(matrix):
     return np.array([qx, qy, qz, qw])
 
 
+def _make_mesh_paths_absolute(urdf_path: str) -> str:
+    """
+    Convert relative mesh paths in URDF to absolute paths.
+    Returns path to a temporary URDF file with absolute paths.
+    """
+    urdf_abs_path = os.path.abspath(urdf_path)
+    urdf_dir = os.path.dirname(urdf_abs_path)
+
+    # Read the original URDF
+    with open(urdf_abs_path, "r") as f:
+        urdf_content = f.read()
+
+    # Replace relative mesh paths with absolute paths
+    # Look for patterns like: filename="assets/something.STL"
+    import re
+
+    def replace_mesh_path(match):
+        relative_path = match.group(1)
+        if not os.path.isabs(relative_path):
+            # Convert to absolute path
+            absolute_path = os.path.join(urdf_dir, relative_path)
+            return f'filename="{absolute_path}"'
+        return match.group(0)  # Keep absolute paths as-is
+
+    # Replace all mesh filename attributes
+    urdf_content = re.sub(r'filename="([^"]+\.STL)"', replace_mesh_path, urdf_content, flags=re.IGNORECASE)
+
+    # Create temporary file with absolute paths
+    temp_fd, temp_path = tempfile.mkstemp(suffix=".urdf", text=True)
+    try:
+        with os.fdopen(temp_fd, "w") as f:
+            f.write(urdf_content)
+        return temp_path
+    except:
+        os.close(temp_fd)
+        raise
+
+
 class Arm_IK:
     def __init__(self, urdf_path: str):
         np.set_printoptions(precision=5, suppress=True, linewidth=200)
 
-        self.robot = pin.RobotWrapper.BuildFromURDF(urdf_path)
+        # Create temporary URDF with absolute mesh paths
+        temp_urdf_path = _make_mesh_paths_absolute(urdf_path)
+
+        try:
+            # Load URDF with absolute paths
+            self.robot = pin.RobotWrapper.BuildFromURDF(temp_urdf_path)
+
+            # Build geometry model
+            self.geom_model = pin.buildGeomFromUrdf(self.robot.model, temp_urdf_path, pin.GeometryType.COLLISION)
+
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_urdf_path):
+                os.unlink(temp_urdf_path)
+
         self.mixed_jointsToLockIDs = ["joint7", "joint8"]
 
         self.reduced_robot = self.robot.buildReducedRobot(
@@ -105,7 +160,6 @@ class Arm_IK:
             )
         )
 
-        self.geom_model = pin.buildGeomFromUrdf(self.robot.model, urdf_path, pin.GeometryType.COLLISION)
         for i in range(4, 9):
             for j in range(0, 3):
                 self.geom_model.addCollisionPair(pin.CollisionPair(i, j))

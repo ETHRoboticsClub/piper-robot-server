@@ -6,199 +6,422 @@ AFRAME.registerComponent('teleop-video-stream', {
     console.log('Window location:', window.location.href);
 
     this.videoElement = null;
+   
+    // Load config and initialize asynchronously
+    this.initializeAsyncWithConfig();
 
     // Create video element for the stream
     this.createVideoElement();
-
-    // Load config and initialize asynchronously
-    this.initializeAsyncWithConfig();
   },
 
   initializeAsyncWithConfig: async function () {
     // defaults, if loading from backend fails
     let roomName = 'robot-vr-teleop-room';
     let participantIdentity = 'vr-viewer';
-    let debug = false;
 
     try {
       console.log('🔧 Loading LiveKit config from backend...');
       const config = await window.LiveKitUtils.loadLiveKitConfig();
       roomName = config.livekit_room;
       participantIdentity = config.vr_viewer_participant;
-      debug = config.vr_viewer_debug;
       console.log('✅ Loaded LiveKit config from backend:', config);
       console.log('🏠 (for video stream) Using roomName:', roomName);
       console.log(
         '👤 (for video stream) Using participantIdentity:',
         participantIdentity,
       );
-      console.log('🐛 (for video stream) Using debug:', debug);
     } catch (error) {
       console.warn('⚠️ Failed to load LiveKit config, using defaults:', error);
     }
-
-    // Create debug text display for VR
-    if (debug) {
-      window.LiveKitUtils.createVrLogDisplay();
-      window.LiveKitUtils.logToVR('VR log display created');
-    }
-
     // connect to livekit room
     console.log('🔌 Attempting to connect to LiveKit room...');
     window.LiveKitUtils.asyncRoomConnect(this, roomName, participantIdentity);
+
+    // Calibration parameters
+    this.data.physicalBaseline = config.physical_baseline;
+    this.data.targetIPD = config.target_ipd;
+    this.data.eyeSeparation = config.eye_separation;
+    this.data.focalLength = config.focal_length;
+    this.data.baselineScaleFactor = this.data.targetIPD / this.data.physicalBaseline;
   },
 
-  // --- LiveKit Event Handlers ---
-  handleTrackSubscribed: function (track, publication, participant) {
-    window.LiveKitUtils.logToVR(
-      `Track subscribed: ${track.kind} from ${participant.identity}`,
-    );
-
-    if (track.kind === 'video') {
-      track.attach(this.videoElement);
-      window.LiveKitUtils.logToVR('Attached video track to video element');
-
-      // Force video to play and apply texture
-      setTimeout(() => {
-        this.videoElement
-          .play()
-          .then(() => {
-            window.LiveKitUtils.logToVR('Video playback started');
-            this.applyVideoTexture();
-          })
-          .catch((err) => {
-            window.LiveKitUtils.logToVR(
-              'ERROR: Video playback failed - ' + err.message,
-            );
-          });
-      }, 100);
-    }
-  },
-
-  handleTrackUnsubscribed: function (track, publication, participant) {
-    window.LiveKitUtils.logToVR(
-      'Track unsubscribed:',
-      track.kind,
-      'from participant:',
-      participant.identity,
-    );
-
-    if (track.kind === 'video') {
-      track.detach();
-    }
-  },
-
-  handleConnected: function () {
-    window.LiveKitUtils.logToVR('Connected to LiveKit room');
-
-    // Log current room state
-    const room = window.LiveKitUtils.room;
-    if (room) {
-      window.LiveKitUtils.logToVR(
-        `Local participant: ${room.localParticipant.identity}`,
-      );
-      window.LiveKitUtils.logToVR(
-        `Remote participants: ${room.remoteParticipants.size}`,
-      );
-
-      // Check for existing participants and their tracks (like camera-streamer)
-      room.remoteParticipants.forEach((participant) => {
-        window.LiveKitUtils.logToVR(
-          `Found existing participant: ${participant.identity}`,
-        );
-        participant.trackPublications.forEach((publication) => {
-          window.LiveKitUtils.logToVR(
-            `  - Track: ${publication.kind} (${
-              publication.source || 'unknown'
-            })`,
-          );
-          if (publication.isSubscribed && publication.track) {
-            window.LiveKitUtils.logToVR(`    Already subscribed, attaching...`);
-            if (publication.track.kind === 'video') {
-              this.handleTrackSubscribed(
-                publication.track,
-                publication,
-                participant,
-              );
-            }
-          }
-        });
-      });
-    }
-  },
-
-  handleDisconnect: function () {
-    window.LiveKitUtils.logToVR('Disconnected from LiveKit room');
-  },
-  // --- End LiveKit Event Handlers ---
-
-  remove: function () {
-    // Clean up video element
-    if (this.videoElement) {
-      if (this.videoElement.parentNode) {
-        this.videoElement.parentNode.removeChild(this.videoElement);
-      }
-      this.videoElement = null;
-    }
-  },
-
+  
   createVideoElement: function () {
     // Create video element to display the stream
     this.videoElement = document.createElement('video');
     this.videoElement.autoplay = true;
     this.videoElement.playsInline = true;
-    this.videoElement.muted = true; // Required for autoplay in many browsers
-    this.videoElement.style.display = 'none'; // Hide the actual video element
-    this.videoElement.id = 'livekit-video-' + Date.now();
-
-    // Add to document body (not A-Frame entity)
+    this.videoElement.muted = true;
+    this.videoElement.style.display = 'none';
+    this.videoElement.id = 'calibrated-livekit-video-' + Date.now();
+    
+    // Add to document body
     document.body.appendChild(this.videoElement);
-
+    
+    // Create canvas elements for split video
+    this.createSplitCanvases();
+    
     // Set up video texture for A-Frame
     this.setupVideoTexture();
   },
 
-  setupVideoTexture: function () {
-    // Wait for video to be ready then apply as texture
-    this.videoElement.addEventListener('loadeddata', () => {
-      window.LiveKitUtils.logToVR('Video data loaded, applying texture');
-      this.applyVideoTexture();
-    });
-
-    this.videoElement.addEventListener('playing', () => {
-      window.LiveKitUtils.logToVR('Video is playing');
-      this.applyVideoTexture();
-    });
+  createSplitCanvases: function () {
+    // Create canvas elements for left and right video halves
+    this.leftCanvas = document.createElement('canvas');
+    this.rightCanvas = document.createElement('canvas');
+    
+    this.leftCanvas.id = 'calibrated-left-video-canvas-' + Date.now();
+    this.rightCanvas.id = 'calibrated-right-video-canvas-' + Date.now();
+    
+    this.leftCanvas.style.display = 'none';
+    this.rightCanvas.style.display = 'none';
+    
+    // Add to document body
+    document.body.appendChild(this.leftCanvas);
+    document.body.appendChild(this.rightCanvas);
+    
+    // Get canvas contexts
+    this.leftCtx = this.leftCanvas.getContext('2d');
+    this.rightCtx = this.rightCanvas.getContext('2d');
+    
+    this.isRendering = false;
   },
 
-  applyVideoTexture: function () {
-    // Apply video as texture to the A-Frame plane
-    const dimensions = `${this.videoElement.videoWidth}x${this.videoElement.videoHeight}`;
-    window.LiveKitUtils.logToVR(
-      `Applying texture: ${dimensions}, ready: ${this.videoElement.readyState}, paused: ${this.videoElement.paused}`,
-    );
-
-    // Add visual feedback for debugging
-    if (
-      this.videoElement.videoWidth === 0 ||
-      this.videoElement.videoHeight === 0
-    ) {
-      window.LiveKitUtils.logToVR(
-        'WARNING: Video has no dimensions! Setting red placeholder.',
-      );
-      // Set a temporary red color to indicate issues
-      this.el.setAttribute('material', {
-        shader: 'flat',
-        color: 'red',
-        transparent: false,
-      });
-    } else {
-      window.LiveKitUtils.logToVR('Video texture applied successfully');
-      this.el.setAttribute('material', {
-        shader: 'flat',
-        src: `#${this.videoElement.id}`,
-        transparent: false,
-      });
+  setupVideoTexture: function () {
+    this.videoElement.addEventListener('loadeddata', () => {
+      this.setupCanvasDimensions();
+      this.setupStereoPlanes();
+      this.applyVideoTexture();
+    });
+    
+    this.videoElement.addEventListener('playing', () => {
+      this.setupCanvasDimensions();
+      this.setupStereoPlanes();
+      this.applyVideoTexture();
+      this.startSplitRendering();
+    });
+  },
+  
+  setupCanvasDimensions: function () {
+    if (this.videoElement.videoWidth > 0 && this.videoElement.videoHeight > 0) {
+      const halfWidth = this.videoElement.videoWidth / 2;
+      const height = this.videoElement.videoHeight;
+      
+      this.leftCanvas.width = halfWidth;
+      this.leftCanvas.height = height;
+      this.rightCanvas.width = halfWidth;
+      this.rightCanvas.height = height;
+      
+      console.log(`Canvas dimensions: ${halfWidth}x${height} per eye`);
     }
   },
+  
+  setupStereoPlanes: function () {
+    // Get or create stereo plane elements with proper positioning
+    let leftVideoPlane = document.querySelector('#leftVideoPlane');
+    let rightVideoPlane = document.querySelector('#rightVideoPlane');
+    
+    if (!leftVideoPlane) {
+      leftVideoPlane = document.createElement('a-plane');
+      leftVideoPlane.id = 'leftVideoPlane';
+      leftVideoPlane.setAttribute('position', `-${this.data.eyeSeparation/2} 0 -2`);
+      leftVideoPlane.setAttribute('rotation', '0 0 0');
+      leftVideoPlane.setAttribute('width', '3.2');
+      leftVideoPlane.setAttribute('height', '2.4');
+      leftVideoPlane.setAttribute('stereo', 'eye: left');
+      document.querySelector('a-scene').appendChild(leftVideoPlane);
+    }
+    
+    if (!rightVideoPlane) {
+      rightVideoPlane = document.createElement('a-plane');
+      rightVideoPlane.id = 'rightVideoPlane';
+      rightVideoPlane.setAttribute('position', `${this.data.eyeSeparation/2} 0 -2`);
+      rightVideoPlane.setAttribute('rotation', '0 0 0');
+      rightVideoPlane.setAttribute('width', '3.2');
+      rightVideoPlane.setAttribute('height', '2.4');
+      rightVideoPlane.setAttribute('stereo', 'eye: right');
+      document.querySelector('a-scene').appendChild(rightVideoPlane);
+    }
+    
+    console.log(`Stereo planes positioned with ${this.data.eyeSeparation}m separation`);
+  },
+  
+  startSplitRendering: function () {
+    if (this.isRendering) {
+      return;
+    }
+    
+    this.isRendering = true;
+    
+    // Get references to the planes for texture updates
+    const leftVideoPlane = document.querySelector('#leftVideoPlane');
+    const rightVideoPlane = document.querySelector('#rightVideoPlane');
+    
+    const renderFrame = () => {
+      if (!this.isRendering || this.videoElement.paused || this.videoElement.ended) {
+        if (this.vrRenderTimeout) {
+          clearTimeout(this.vrRenderTimeout);
+          this.vrRenderTimeout = null;
+        }
+        return;
+      }
+      
+      if (this.videoElement.videoWidth > 0 && this.videoElement.videoHeight > 0) {
+        const halfWidth = this.videoElement.videoWidth / 2;
+        const height = this.videoElement.videoHeight;
+        
+        try {
+          // Draw left half of video to left canvas (already rectified by Python)
+          this.leftCtx.drawImage(
+            this.videoElement,
+            0, 0, halfWidth, height,
+            0, 0, halfWidth, height
+          );
+          
+          // Draw right half of video to right canvas (already rectified by Python)
+          this.rightCtx.drawImage(
+            this.videoElement,
+            halfWidth, 0, halfWidth, height,
+            0, 0, halfWidth, height
+          );
+          
+          // Force A-Frame to update the textures
+          this.updateAFrameTextures(leftVideoPlane, rightVideoPlane);
+          
+        } catch (error) {
+          console.error('Canvas drawing error:', error);
+        }
+      }
+      
+      // Use setTimeout for consistent rendering in both VR and desktop
+      try {
+        this.vrRenderTimeout = setTimeout(renderFrame, 16); // ~60fps
+      } catch (error) {
+        console.error('setTimeout failed:', error);
+      }
+    };
+    
+    renderFrame();
+  },
+  
+  updateAFrameTextures: function (leftPlane, rightPlane) {
+    try {
+      if (leftPlane && leftPlane.getObject3D('mesh')) {
+        const leftMaterial = leftPlane.getObject3D('mesh').material;
+        if (leftMaterial && leftMaterial.map) {
+          leftMaterial.map.needsUpdate = true;
+        }
+      }
+      
+      if (rightPlane && rightPlane.getObject3D('mesh')) {
+        const rightMaterial = rightPlane.getObject3D('mesh').material;
+        if (rightMaterial && rightMaterial.map) {
+          rightMaterial.map.needsUpdate = true;
+        }
+      }
+    } catch (error) {
+      console.error('Texture update error:', error);
+    }
+  },
+  
+  applyVideoTexture: function () {
+    const leftVideoPlane = document.querySelector('#leftVideoPlane');
+    const rightVideoPlane = document.querySelector('#rightVideoPlane');
+    
+    if (!leftVideoPlane || !rightVideoPlane) {
+      console.error('Could not find video planes');
+      return;
+    }
+    
+    if (this.videoElement.videoWidth === 0 || this.videoElement.videoHeight === 0) {
+      // Set fallback colors to indicate issues
+      leftVideoPlane.setAttribute('material', { color: 'red' });
+      rightVideoPlane.setAttribute('material', { color: 'blue' });
+      console.warn('Video dimensions are zero, showing fallback colors');
+    } else {
+      // Apply left canvas to left plane
+      leftVideoPlane.setAttribute('material', {
+        shader: 'flat',
+        src: `#${this.leftCanvas.id}`,
+        transparent: false,
+      });
+      
+      // Apply right canvas to right plane  
+      rightVideoPlane.setAttribute('material', {
+        shader: 'flat',
+        src: `#${this.rightCanvas.id}`,
+        transparent: false,
+      });
+      
+      console.log('Applied calibrated stereo textures to VR planes');
+    }
+  },
+  
+  connectToRoom: async function () {
+    try {
+      const response = await this.getToken();
+      const { token, livekit_url } = response;
+      
+      this.room = new window.LiveKitClient.Room();
+      
+      // Set up event listeners
+      this.room
+      .on(window.LiveKitClient.RoomEvent.TrackSubscribed, this.handleTrackSubscribed.bind(this))
+      .on(window.LiveKitClient.RoomEvent.TrackUnsubscribed, this.handleTrackUnsubscribed.bind(this))
+      .on(window.LiveKitClient.RoomEvent.Disconnected, this.handleDisconnect.bind(this))
+      .on(window.LiveKitClient.RoomEvent.Connected, this.handleConnected.bind(this));
+      
+      await this.room.connect(livekit_url, token);
+      console.log('Connected to LiveKit room for calibrated stereo streaming');
+    } catch (error) {
+      console.error('Failed to connect to room:', error);
+    }
+  },
+  
+  getToken: async function () {
+    try {
+      const isVR = navigator.xr && (await navigator.xr.isSessionSupported('immersive-vr').catch(() => false));
+      if (!isVR) {
+        throw new Error('VR session not detected. Calibrated camera streaming is only supported in VR.');
+      }
+      
+      const authUrl = `https://${window.location.hostname}:${this.data.authServerPort}/api/subscriber-token`;
+      
+      const response = await fetch(authUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          room_name: this.roomName,
+          participant_identity: this.participantIdentity,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Token request failed:', error);
+      throw error;
+    }
+  },
+  
+  handleTrackSubscribed: function (track, publication, participant) {
+    if (track.kind === 'video') {
+      track.attach(this.videoElement);
+      console.log('Subscribed to calibrated stereo video track');
+      
+      // Add track-level event listeners
+      track.on('muted', () => {
+        console.warn('Calibrated video track muted');
+      });
+      
+      track.on('unmuted', () => {
+        console.log('Calibrated video track unmuted');
+      });
+      
+      track.on('ended', () => {
+        console.log('Calibrated video track ended');
+      });
+      
+      // Force video to play and apply texture
+      setTimeout(() => {
+        this.videoElement
+        .play()
+        .then(() => {
+          this.setupCanvasDimensions();
+          this.setupStereoPlanes();
+          this.applyVideoTexture();
+          this.startSplitRendering();
+          console.log('Started calibrated stereo video playback');
+        })
+        .catch((err) => {
+          console.error('Calibrated video playback failed:', err);
+        });
+      }, 100);
+    }
+  },
+  
+  handleTrackUnsubscribed: function (track, publication, participant) {
+    if (track.kind === 'video') {
+      track.detach();
+      console.log('Unsubscribed from calibrated video track');
+    }
+  },
+  
+  handleConnected: function () {
+    console.log('Connected to LiveKit room for calibrated stereo viewing');
+  },
+
+  handleDisconnect: function () {
+    console.log('Disconnected from LiveKit room');
+  },
+
+  remove: function () {
+    // Stop rendering loop
+    this.isRendering = false;
+
+    // Clean up VR render timeouts
+    if (this.vrRenderTimeout) {
+      clearTimeout(this.vrRenderTimeout);
+      this.vrRenderTimeout = null;
+    }
+
+    // Clean up LiveKit room connection
+    if (this.room) {
+      this.room.disconnect();
+      this.room = null;
+    }
+
+    // Clean up video element
+    if (this.videoElement && this.videoElement.parentNode) {
+      this.videoElement.parentNode.removeChild(this.videoElement);
+      this.videoElement = null;
+    }
+
+    // Clean up canvas elements
+    if (this.leftCanvas && this.leftCanvas.parentNode) {
+      this.leftCanvas.parentNode.removeChild(this.leftCanvas);
+      this.leftCanvas = null;
+      this.leftCtx = null;
+    }
+
+    if (this.rightCanvas && this.rightCanvas.parentNode) {
+      this.rightCanvas.parentNode.removeChild(this.rightCanvas);
+      this.rightCanvas = null;
+      this.rightCtx = null;
+    }
+
+    console.log('Cleaned up calibrated stereo video streamer');
+  },
 });
+
+// Enhanced stereo component that understands eye layers
+AFRAME.registerComponent('stereo', {
+  schema: {
+    eye: { type: 'string', default: "left"},
+    // Add calibration awareness
+    baselineScale: { type: 'number', default: 0.674 }, // 62/92
+  },
+
+  update: function(oldData){
+    var object3D = this.el.object3D.children[0];
+    var data = this.data;
+
+    if(data.eye === "both"){
+      object3D.layers.set(0);
+    }
+    else{
+      object3D.layers.set(data.eye === 'left' ? 1:2);
+    }
+    
+    // Log calibration info
+    if (data.eye !== oldData.eye) {
+      console.log(`Set stereo layer for ${data.eye} eye (baseline scale: ${data.baselineScale.toFixed(3)})`);
+    }
+  },
+}); 

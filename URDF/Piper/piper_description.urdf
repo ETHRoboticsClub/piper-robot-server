@@ -26,7 +26,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/base_link.STL" />
+          filename="assets/base_link.STL" />
       </geometry>
       <material
         name="">
@@ -40,7 +40,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/base_link.STL" />
+          filename="assets/base_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -66,7 +66,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link1.STL" />
+          filename="assets/link1.STL" />
       </geometry>
       <material
         name="">
@@ -80,7 +80,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link1.STL" />
+          filename="assets/link1.STL" />
       </geometry>
     </collision>
   </link>
@@ -124,7 +124,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link2.STL" />
+          filename="assets/link2.STL" />
       </geometry>
       <material
         name="">
@@ -138,7 +138,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link2.STL" />
+          filename="assets/link2.STL" />
       </geometry>
     </collision>
   </link>
@@ -182,7 +182,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link3.STL" />
+          filename="assets/link3.STL" />
       </geometry>
       <material
         name="">
@@ -196,7 +196,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link3.STL" />
+          filename="assets/link3.STL" />
       </geometry>
     </collision>
   </link>
@@ -240,7 +240,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link4.STL" />
+          filename="assets/link4.STL" />
       </geometry>
       <material
         name="">
@@ -254,7 +254,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link4.STL" />
+          filename="assets/link4.STL" />
       </geometry>
     </collision>
   </link>
@@ -298,7 +298,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link5.STL" />
+          filename="assets/link5.STL" />
       </geometry>
       <material
         name="">
@@ -312,7 +312,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link5.STL" />
+          filename="assets/link5.STL" />
       </geometry>
     </collision>
   </link>
@@ -356,7 +356,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link6.STL" />
+          filename="assets/link6.STL" />
       </geometry>
       <material
         name="">
@@ -370,7 +370,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link6.STL" />
+          filename="assets/link6.STL" />
       </geometry>
     </collision>
   </link>
@@ -414,7 +414,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/gripper_base.STL" />
+          filename="assets/gripper_base.STL" />
       </geometry>
       <material
         name="">
@@ -428,7 +428,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/gripper_base.STL" />
+          filename="assets/gripper_base.STL" />
       </geometry>
     </collision>
   </link> 
@@ -465,7 +465,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link7.STL" />
+          filename="assets/link7.STL" />
       </geometry>
       <material
         name="">
@@ -479,7 +479,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link7.STL" />
+          filename="assets/link7.STL" />
       </geometry>
     </collision>
   </link>
@@ -523,7 +523,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link8.STL" />
+          filename="assets/link8.STL" />
       </geometry>
       <material
         name="">
@@ -537,7 +537,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/home/zhamers/telegrip/URDF/Piper/assets/link8.STL" />
+          filename="assets/link8.STL" />
       </geometry>
     </collision>
   </link>

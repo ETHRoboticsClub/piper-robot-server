@@ -422,9 +422,26 @@
       </a-entity>
 
       <!-- Video stream display -->
-      <a-plane position="0 1.6 -2" width="2" height="1.5" teleop-video-stream>
-      </a-plane>
-    </a-scene>
+      <a-entity
+      teleop-video-streamer="roomName: robot-vr-room; participantIdentity: vr-viewer; authServerPort: 5050"
+      >
+        <a-plane
+          id="rightVideoPlane"
+          position="0 1.6 -2"
+          width="2"
+          height="1.5"
+          stereo="eye: right"
+        ></a-plane>
+        <a-plane
+          id="leftVideoPlane"
+          position="0 1.6 -2"
+          width="2"
+          height="1.5"
+          stereo="eye: left"
+        ></a-plane>
+    </a-entity>
+
+  </a-scene>
 
     <script>
       // Update VR server URL dynamically
