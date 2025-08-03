@@ -3,6 +3,6 @@ description:
 globs: 
 alwaysApply: true
 ---
-This project use the micromamba environment "lerobot"
-telegrip can run by just
-micromamba activate lerobot && telegrip
+This project use the conda environment "tactile-teleop"
+To activate the environment, run:
+cd /home/zhamers/tactile-teleop && source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop 

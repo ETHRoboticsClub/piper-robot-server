@@ -8,7 +8,6 @@ scipy
 pybullet
 websockets
 pynput
-lerobot[feetech]
 flask
 flask-cors
 python-dotenv

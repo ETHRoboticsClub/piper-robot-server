@@ -1,4 +1,4 @@
-# Piper SDK interface for LeRobot integration
+# Piper SDK interface
 
 import time
 from typing import Any, Dict

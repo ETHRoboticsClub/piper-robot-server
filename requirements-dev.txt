@@ -8,7 +8,6 @@ scipy==1.9.0
 pybullet==3.2.5
 websockets==11.0.3
 pynput==1.7.6
-lerobot[feetech]==0.1.0
 
 # Development tools
 pytest==7.4.0

@@ -34,23 +34,12 @@ https://github.com/user-attachments/assets/e21168b5-e9b4-4c83-ab4d-a15cb470d11b
 
 ### Package Installation
 
-You must first manually install LeRobot according to the official instructions at [https://github.com/huggingface/lerobot](https://github.com/huggingface/lerobot).
 
-Follow the official LeRobot installation guide:
-
-```bash
-# Clone the official LeRobot repository
-git clone https://github.com/huggingface/lerobot.git
-cd lerobot
-# Install according to their instructions (typically):
-pip install -e .
-```
-
-After installing LeRobot, install telegrip (this package):
+Install telegrip (this package):
 
 ```bash
 # Install in editable mode (recommended for development)
-git clone https://github.com/DipFlip/telegrip.git
+git clone https://github.com/tactileroboticsai/tactile-teleop.git
 pip install -e .
 ```
 
@@ -66,25 +55,24 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 3
 
 ### Basic Usage
 
-Run the complete teleoperation system:
+Run the robot server:
 
 ```bash
-telegrip
+robotserver
 ```
-The first time you might be asked to complete pose calibrations as shown in [this guide](https://github.com/huggingface/lerobot/blob/8cfab3882480bdde38e42d93a9752de5ed42cae2/examples/10_use_so100.md#e-calibrate). Calibration files are stored in `.cache/calibration/so100/arm_name.json`. When calibration files are found, you will be greeted with a message like 
+
+Run the web server:
+
 ```bash
-🤖 telegrip starting...
-Open the UI in your browser on:
-https://192.168.7.233:8443
-Then go to the same address on your VR headset browser
+webserver
 ```
-Click on or enter your address in a browser to show the UI. Visit the same address from your VR headset to enter the VR web-app. The first time you should enter robot arm port information under the settings menu (top right). Alternatively you can manually enter the details in the `config.yaml` file in the root of this repo.
-Once you see that the robot arms are found (green indicators) you can click "Connect Robot" and start controlling it by keyboard or with the VR headset.
+
+
 
 ### Command Line Options
 
 ```bash
-telegrip [OPTIONS]
+robotserver [OPTIONS]
 
 Options:
   --no-robot        Disable robot connection (visualization only)
@@ -106,27 +94,27 @@ Options:
 
 **Visualization Only** (no robot hardware):
 ```bash
-telegrip --no-robot
+robotserver --no-robot
 ```
 
 **Keyboard Only** (no VR):
 ```bash
-telegrip --no-vr
+webserver --no-vr
 ```
 
 **No Simulation** (no PyBullet sim or IK):
 ```bash
-telegrip --no-sim
+robotserver --no-sim
 ```
 
 **Headless** (no PyBullet GUI):
 ```bash
-telegrip --no-viz
+robotserver --no-viz
 ```
 
 **Auto-connect to Robot** (skip manual connection step):
 ```bash
-telegrip --autoconnect
+robotserver --autoconnect
 ```
 
 ## Control Methods
@@ -259,8 +247,8 @@ class ControlGoal:
 
 **Detailed Logging**:
 ```bash
-telegrip --log-level info    # Show detailed startup and operation info
-telegrip --log-level debug   # Show maximum detail for debugging
+robotserver --log-level info    # Show detailed startup and operation info
+robotserver --log-level debug   # Show maximum detail for debugging
 ```
 
 **Component Isolation**:

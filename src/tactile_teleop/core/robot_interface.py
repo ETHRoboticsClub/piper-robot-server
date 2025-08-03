@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, Tuple
+from typing import Any, Tuple
 
 import numpy as np
 import pinocchio as pin
@@ -90,13 +90,8 @@ class RobotInterface:
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
 
-        left_config = PiperConfig(port="left_piper", cameras={})
-        # Set the robot name for calibration file lookup
-        left_config.id = "left_follower"
-
-        right_config = PiperConfig(port="right_piper", cameras={})
-        # Set the robot name for calibration file lookup
-        right_config.id = "right_follower"
+        left_config = PiperConfig(port="left_piper", id="left_follower")
+        right_config = PiperConfig(port="right_piper", id="right_follower")
 
         return left_config, right_config
 
