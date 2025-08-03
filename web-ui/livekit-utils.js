@@ -21,7 +21,11 @@ window.LiveKitUtils = {
   },
 
   loadLiveKitConfig: async function () {
-    const response = await fetch('https://localhost:5050/api/livekit-config');
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const port = this.AUTH_SERVER_PORT;
+    const url = `${protocol}//${hostname}:${port}/api/livekit-config`;
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error('Failed to load LiveKit config');
     }
