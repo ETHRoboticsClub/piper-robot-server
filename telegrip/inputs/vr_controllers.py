@@ -305,7 +305,7 @@ class VRControllerInputProvider(BaseInputProvider):
                     vr_target_transform=transform,
                 )
                 await self.send_goal(goal)
-                self.logger.debug(f"✅ Sent movement goal for {hand} arm")
+                self.logger.debug(f"(VRControllerInputProvider) ✅ Sent movement goal for {hand} arm")
 
     async def _handle_grip_release(self, hand: str):
         """Handle grip release for a controller."""
@@ -326,7 +326,7 @@ class VRControllerInputProvider(BaseInputProvider):
             )
             await self.send_goal(goal)
 
-            logger.info(f"🔓 {hand.upper()} grip released - arm control stopped")
+            self.logger.info(f"(VRControllerInputProvider) 🔓 {hand.upper()} grip released - arm control stopped")
 
     async def _handle_trigger_release(self, hand: str):
         """Handle trigger release for a controller."""
@@ -343,7 +343,7 @@ class VRControllerInputProvider(BaseInputProvider):
             )
             await self.send_goal(goal)
 
-            logger.info(f"🤏 {hand.upper()} trigger released - gripper CLOSED")
+            self.logger.info(f"(VRControllerInputProvider) 🤏 {hand.upper()} trigger released - gripper CLOSED")
 
     async def _handle_reset_button_release(self, hand: str):
         """Handle X button release for a controller."""
@@ -353,6 +353,6 @@ class VRControllerInputProvider(BaseInputProvider):
         )
         await self.send_goal(goal)
 
-        logger.info(f"🔓 {hand.upper()} reset button released - going to initial position")
+        self.logger.info(f"(VRControllerInputProvider) 🔓 {hand.upper()} reset button released - going to initial position")
         
     
