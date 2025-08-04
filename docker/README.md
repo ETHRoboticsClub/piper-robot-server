@@ -121,6 +121,7 @@ The system uses **two types** of environment files for security:
 **Setup Steps:**
 
 **Step 1: Create secrets file** (required):
+
 ```bash
 # Create .env file with your API keys and secrets
 cat > .env << 'EOF'
@@ -132,6 +133,7 @@ EOF
 ```
 
 **Step 2: Choose deployment environment:**
+
 ```bash
 # For development (localhost)
 ./docker/scripts/docker-build.sh dev
@@ -143,6 +145,7 @@ EOF
 **Configuration Files:**
 
 **In `development.env` / `production.env`** (domain/deployment settings):
+
 ```bash
 # Domain Configuration
 DOMAIN_NAME=localhost                # development.env uses localhost
@@ -162,6 +165,7 @@ FASTAPI_LOG_LEVEL=info
 ```
 
 **In `.env`** (API keys and secrets - not committed):
+
 ```bash
 # LiveKit Configuration
 LIVEKIT_API_KEY="your-api-key"

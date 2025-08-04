@@ -44,9 +44,9 @@ services:
     volumes:
       - ssl_certs:/etc/ssl/certs:ro
       - ssl_keys:/etc/ssl/private:ro
-      # Mount custom SSL certificates (optional)
-      - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
-      - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
+      # Mount custom SSL certificates (default: off)
+      # - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
+      # - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
     depends_on:
       fastapi:
         condition: service_healthy
