@@ -1,20 +1,26 @@
 import argparse
 import asyncio
 import logging
+import os
 import signal
 from contextlib import asynccontextmanager
 from dataclasses import replace
 
+from dotenv import load_dotenv
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from tactile_teleop.config import TelegripConfig, config as global_config
 from tactile_teleop.utils import get_local_ip, get_web_server_path
+from tactile_teleop.livekit_auth import generate_token
 
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +28,42 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 FastAPI web server starting up")
     yield
     logger.info("🛑 FastAPI web server shutting down")
+
+
+def _add_auth_endpoints(app: FastAPI) -> None:
+    """Add LiveKit auth endpoints to the FastAPI app."""
+    @app.post("/api/auth/get-token")
+    async def get_token(payload: dict):
+        try:
+            room_name = payload.get('room_name')
+            participant_identity = payload.get('participant_identity')
+            canPublish = payload.get('canPublish', False)
+            ttl_minutes = payload.get('ttl', 60)
+            
+            if not room_name:
+                raise HTTPException(status_code=400, detail='room_name is required')
+            
+            if not participant_identity:
+                raise HTTPException(status_code=400, detail='participant_identity is required')
+            
+            token = generate_token(room_name, participant_identity, canPublish, ttl_minutes)
+            
+            return JSONResponse({
+                'token': token,
+                'livekit_url': LIVEKIT_URL
+            }, status_code=200)
+            
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/api/auth/livekit-config")
+    async def livekit_config() -> JSONResponse:
+        try:
+            return JSONResponse(global_config.__dict__, status_code=200)
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 def create_app(config: TelegripConfig, behind_proxy: bool = False) -> FastAPI:
@@ -43,6 +85,9 @@ def create_app(config: TelegripConfig, behind_proxy: bool = False) -> FastAPI:
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
+    
+    # Add LiveKit auth endpoints (available in both modes)
+    _add_auth_endpoints(app)
     
     if behind_proxy:
         # Add health check endpoint for nginx

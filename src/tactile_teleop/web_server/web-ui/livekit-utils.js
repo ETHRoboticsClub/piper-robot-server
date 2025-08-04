@@ -1,6 +1,4 @@
 window.LiveKitUtils = {
-  AUTH_SERVER_PORT: 5050,
-
   asyncRoomConnect: async function (component, roomName, participantIdentity) {
     try {
       this.logToVR('Starting initialization...');
@@ -21,10 +19,7 @@ window.LiveKitUtils = {
   },
 
   loadLiveKitConfig: async function () {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
-    const port = this.AUTH_SERVER_PORT;
-    const url = `${protocol}//${hostname}:${port}/api/livekit-config`;
+    const url = '/api/auth/livekit-config';
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error('Failed to load LiveKit config');
@@ -108,7 +103,7 @@ window.LiveKitUtils = {
         );
       }
 
-      const authUrl = `https://${window.location.hostname}:${this.AUTH_SERVER_PORT}/api/get-token`;
+      const authUrl = '/api/auth/get-token';
       this.logToVR(`Getting token from: ${authUrl} (VR: ${isVR})`);
 
       const response = await fetch(authUrl, {
