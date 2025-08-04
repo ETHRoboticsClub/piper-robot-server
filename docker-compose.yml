@@ -33,6 +33,8 @@ services:
     build:
       context: .
       dockerfile: docker/nginx.dockerfile
+      args:
+        DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
     container_name: tactile-teleop-nginx
     restart: unless-stopped
     env_file:
