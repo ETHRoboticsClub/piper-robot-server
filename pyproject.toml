@@ -47,7 +47,11 @@ Homepage = "https://github.com/your-username/vr_so100_teleoperation"
 Repository = "https://github.com/your-username/vr_so100_teleoperation"
 
 [tool.setuptools.packages.find]
-where = ["src"] 
+where = ["src"]
+
+[tool.setuptools.package-data]
+"tactile_teleop.web_server" = ["web-ui/**/*"]
+"tactile_teleop.robot_server" = ["camera_streaming/calibration/*"] 
 
 [tool.black]
 line-length = 120

@@ -89,12 +89,12 @@ def create_app(config: TelegripConfig, behind_proxy: bool = False) -> FastAPI:
     # Add LiveKit auth endpoints (available in both modes)
     _add_auth_endpoints(app)
     
+    # Add health check endpoint (always available for deployment platforms)
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy", "timestamp": asyncio.get_event_loop().time()}
+    
     if behind_proxy:
-        # Add health check endpoint for nginx
-        @app.get("/health")
-        async def health_check():
-            return {"status": "healthy", "timestamp": asyncio.get_event_loop().time()}
-        
         # Add API routes under /api prefix when behind proxy
         @app.get("/api/info")
         async def api_info():
