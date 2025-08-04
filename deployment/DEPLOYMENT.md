@@ -17,8 +17,8 @@ Internet → Nginx (Port 443/80) → Unix Socket → FastAPI Server
 ## Prerequisites
 
 - Ubuntu/Debian Linux system (tested on Ubuntu 20.04+)
-- Python 3.10+ installed
-- Project dependencies installed (`pip install -r requirements.txt && pip install -e .`)
+- Conda/Miniconda installed
+- Conda environment `tactile-teleop` configured with all dependencies
 - Project cloned to desired location (e.g., `/home/username/telegrip`)
 - Sudo privileges for installing nginx and systemd services
 
@@ -30,20 +30,24 @@ For a fresh Ubuntu VM deployment:
 
 ```bash
 # 1. Install system dependencies
-sudo apt update && sudo apt install -y nginx git curl python3 python3-pip python3-venv
+sudo apt update && sudo apt install -y nginx git curl
 
-# 2. Clone and setup the project
+# 2. Install Miniconda (if not already installed)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh -b
+source ~/miniconda3/etc/profile.d/conda.sh
+
+# 3. Clone and setup the project
 git clone <repository-url> telegrip
 cd telegrip
 
-# 3. Install Python dependencies
-pip3 install -r requirements.txt
-pip3 install -e .
+# 4. Create conda environment (ensure it's named 'tactile-teleop')
+# Set up your tactile-teleop environment with all required dependencies
 
-# 4. Run automated deployment
+# 5. Run automated deployment
 ./deploy-setup.sh your-server-ip-or-domain
 
-# 5. Follow the printed instructions to complete deployment
+# 6. Follow the printed instructions to complete deployment
 ```
 
 ### Automated Setup
@@ -55,9 +59,8 @@ Use the provided deployment script to automatically configure files for your sys
 git clone <repository-url> telegrip
 cd telegrip
 
-# Install Python dependencies
-pip3 install -r requirements.txt
-pip3 install -e .
+# Create conda environment (if not already done)
+# Ensure you have the 'tactile-teleop' conda environment setup
 
 # Run automated deployment setup
 ./deploy-setup.sh
@@ -68,7 +71,7 @@ pip3 install -e .
 
 The script will:
 
-- Auto-detect your user, paths, and Python installation
+- Auto-detect your user, paths, and conda environment (must be named `tactile-teleop`)
 - Generate properly configured nginx and systemd files in `deployment/` from templates
 - Replace all placeholders with your system-specific values
 - Provide step-by-step deployment instructions
@@ -81,7 +84,7 @@ If you prefer manual configuration:
 
 ```bash
 # Generate configuration from template
-./deploy-setup.sh your-server-name
+./deploy-nginx-setup-no-doc.sh your-server-name
 
 # Install nginx config
 sudo cp deployment/nginx-tactile-teleop.conf /etc/nginx/sites-available/tactile-teleop
@@ -109,7 +112,8 @@ sudo mkdir -p /etc/ssl/certs /etc/ssl/private
 
 # Generate certificates (replace with your project path)
 cd /path/to/your/telegrip
-python3 -c "from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()"
+source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop
+python -c "from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()"
 
 # Deploy certificates
 sudo cp ~/.tactile_teleop/ssl/cert.pem /etc/ssl/certs/tactile-teleop.crt
@@ -179,7 +183,7 @@ sudo tail -f /var/log/nginx/tactile-teleop.error.log
 
 ### Systemd Service (`/etc/systemd/system/tactile-teleop.service`)
 
-- Python environment setup with PYTHONPATH
+- Conda environment activation
 - Unix socket mode (`--behind-proxy`)
 - Auto-restart on failure
 - Process isolation and security hardening
@@ -217,11 +221,11 @@ sudo tail -f /var/log/nginx/tactile-teleop.access.log
 - Always edit the `.template` files and re-run `./deploy-setup.sh`
 - Generated files are overwritten each time you run the script
 
-**Python Dependencies:**
+**Conda Environment:**
 
-- Python 3.10+ must be available as `python3`
-- Install dependencies with: `pip3 install -r requirements.txt && pip3 install -e .`
-- Verify installation with: `python3 -c "import tactile_teleop"`
+- Environment MUST be named exactly `tactile-teleop`
+- Verify with: `conda env list | grep tactile-teleop`
+- Ensure all project dependencies are installed in this environment
 
 **File Permissions:**
 
@@ -239,8 +243,8 @@ sudo tail -f /var/log/nginx/tactile-teleop.access.log
 # Check logs
 sudo journalctl -u tactile-teleop --no-pager
 
-# Verify Python installation and module (replace with actual username and path)
-sudo -u $USER bash -c "cd /path/to/your/telegrip && PYTHONPATH=/path/to/your/telegrip/src python3 -m tactile_teleop.web_server --help"
+# Verify conda environment and module (replace with actual username and path)
+sudo -u $USER bash -c "cd /path/to/your/telegrip && source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop && python -m tactile_teleop.web_server --help"
 ```
 
 **Nginx 502 Bad Gateway:**
@@ -257,7 +261,7 @@ sudo systemctl restart tactile-teleop
 
 ```bash
 # Regenerate certificates (replace with actual username and path)
-sudo -u $USER bash -c "cd /path/to/your/telegrip && PYTHONPATH=/path/to/your/telegrip/src python3 -c 'from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()'"
+sudo -u $USER bash -c "cd /path/to/your/telegrip && source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop && python -c 'from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()'"
 
 # Redeploy to nginx locations
 sudo cp ~/.tactile_teleop/ssl/cert.pem /etc/ssl/certs/tactile-teleop.crt
@@ -287,7 +291,7 @@ Certificates are self-signed and valid for 365 days. To renew:
 
 ```bash
 # Regenerate certificates (replace with actual username and path)
-sudo -u $USER bash -c "cd /path/to/your/telegrip && PYTHONPATH=/path/to/your/telegrip/src python3 -c 'from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()'"
+sudo -u $USER bash -c "cd /path/to/your/telegrip && source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop && python -c 'from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()'"
 
 # Redeploy certificates
 sudo cp ~/.tactile_teleop/ssl/cert.pem /etc/ssl/certs/tactile-teleop.crt
@@ -326,7 +330,7 @@ This deployment system uses **template files** with placeholders that are automa
 ### Template Files:
 
 - `deployment/nginx-tactile-teleop.conf.template` - Template with `{{PROJECT_ROOT}}` and `{{SERVER_NAME}}` placeholders
-- `deployment/tactile-teleop.service.template` - Template with `{{USER}}`, `{{PROJECT_ROOT}}`, and `{{PYTHON_PATH}}` placeholders
+- `deployment/tactile-teleop.service.template` - Template with `{{USER}}`, `{{PROJECT_ROOT}}`, and `{{CONDA_ENV_PATH}}` placeholders
 
 ### Generated Files:
 
@@ -340,12 +344,12 @@ When you run `./deploy-setup.sh`, it creates:
 - **Always use the `deploy-setup.sh` script** to generate properly configured files
 - **Never edit the generated files directly** - they will be overwritten when you re-run the script
 - **Template files are preserved** - you can run the script multiple times safely
-- **Python 3 must be available and dependencies installed**
+- **The conda environment must be named `tactile-teleop`**
 
 The script automatically:
 
-1. Auto-detects your environment (user, paths, Python installation)
-2. Validates that the `tactile_teleop` module is available
+1. Auto-detects your environment (user, paths, conda installation)
+2. Validates that the `tactile-teleop` conda environment exists
 3. Replaces all placeholders with detected values
 4. Creates deployment-ready configuration files
 5. Provides complete deployment instructions

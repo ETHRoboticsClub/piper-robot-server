@@ -113,14 +113,60 @@ docker-compose ps
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+The system uses **two types** of environment files for security:
 
+1. **Domain/Deployment Config**: `development.env` or `production.env` (committed to git)
+2. **API Keys/Secrets**: `.env` (not committed to git - you create this)
+
+**Setup Steps:**
+
+**Step 1: Create secrets file** (required):
 ```bash
-# .env
+# Create .env file with your API keys and secrets
+cat > .env << 'EOF'
+# LiveKit Configuration
+LIVEKIT_API_KEY="devkey"
+LIVEKIT_API_SECRET="secret"
+LIVEKIT_URL="ws://localhost:7880"
+EOF
+```
+
+**Step 2: Choose deployment environment:**
+```bash
+# For development (localhost)
+./docker/scripts/docker-build.sh dev
+
+# For production (teleop.tactilerobotics.ai)
+./docker/scripts/docker-build.sh prod false production.env
+```
+
+**Configuration Files:**
+
+**In `development.env` / `production.env`** (domain/deployment settings):
+```bash
+# Domain Configuration
+DOMAIN_NAME=localhost                # development.env uses localhost
+DOMAIN_NAME=teleop.tactilerobotics.ai # production.env uses your domain
+
+# Network Ports
+NGINX_HTTP_PORT=8080   # HTTP port (dev: 8080, prod: 80)
+NGINX_HTTPS_PORT=8443  # HTTPS port (dev: 8443, prod: 443)
+
+# SSL Configuration
+USE_CUSTOM_SSL=false   # development.env uses self-signed
+USE_CUSTOM_SSL=true    # production.env uses custom certificates
+
+# Other settings
 COMPOSE_PROJECT_NAME=tactile-teleop
-NGINX_HTTP_PORT=8080
-NGINX_HTTPS_PORT=8443
 FASTAPI_LOG_LEVEL=info
+```
+
+**In `.env`** (API keys and secrets - not committed):
+```bash
+# LiveKit Configuration
+LIVEKIT_API_KEY="your-api-key"
+LIVEKIT_API_SECRET="your-secret"
+LIVEKIT_URL="ws://your-livekit-server:7880"
 ```
 
 ### Custom Ports
@@ -313,21 +359,31 @@ sudo ufw reload
 - **Web Interface**: `https://your-vm-ip:8443/`
 - **Health Check**: `https://your-vm-ip:8443/health`
 
-### Custom Domain Setup (Optional)
+### Custom Domain Setup
 
-If you have a domain name pointing to your VM:
+To configure your domain (e.g., `teleop.tactilerobotics.ai`):
+
+**Method 1: Edit Environment File (Recommended)**
 
 ```bash
-# Stop current services
-docker-compose down
+# Edit your environment file
+nano development.env  # or production.env
 
-# Edit nginx configuration for your domain
-nano docker/config/nginx.conf
-# Change: server_name _;
-# To:     server_name your-domain.com;
+# Update the domain name
+DOMAIN_NAME=teleop.tactilerobotics.ai
+
+# Rebuild with new configuration
+./docker/scripts/docker-build.sh prod
+```
+
+**Method 2: Manual Configuration**
+
+```bash
+# Configure nginx manually
+./docker/scripts/configure-nginx.sh
 
 # Restart services
-docker-compose up -d
+docker-compose down && docker-compose up -d
 ```
 
 ### Production SSL with Let's Encrypt
@@ -336,23 +392,24 @@ docker-compose up -d
 # Install certbot for Let's Encrypt
 sudo apt install certbot
 
-# Get certificate (replace your-domain.com)
-sudo certbot certonly --standalone -d your-domain.com
+# Get certificate for your configured domain
+DOMAIN_NAME=teleop.tactilerobotics.ai  # Use your actual domain
+sudo certbot certonly --standalone \
+    -d $DOMAIN_NAME \
+    -d www.$DOMAIN_NAME \
+    --email admin@$DOMAIN_NAME \
+    --agree-tos \
+    --non-interactive
 
 # Copy certificates to project
 mkdir -p ssl/
-sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem ssl/cert.pem
-sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem ssl/key.pem
+sudo cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem ssl/cert.pem
+sudo cp /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem ssl/key.pem
 sudo chown $USER:$USER ssl/*
 
-# Update nginx config for your domain
-nano docker/config/nginx.conf
-# Change: server_name _;
-# To:     server_name your-domain.com;
-
-# Uncomment SSL volume mounts in docker-compose.yml
-# Restart services
-docker-compose down && docker-compose up -d
+# Your domain is already configured via environment variables!
+# Just rebuild and restart services
+./docker/scripts/docker-build.sh prod
 ```
 
 ### Remote Management Commands

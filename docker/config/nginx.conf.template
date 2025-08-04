@@ -6,14 +6,14 @@ upstream fastapi_backend {
 # HTTP to HTTPS redirect
 server {
     listen 80;
-    server_name localhost www.localhost;
-    return 301 https://localhost$request_uri;
+    server_name ${DOMAIN_NAME} www.${DOMAIN_NAME};
+    return 301 https://${DOMAIN_NAME}$request_uri;
 }
 
 # HTTPS server
 server {
     listen 443 ssl http2;
-    server_name localhost www.localhost;
+    server_name ${DOMAIN_NAME} www.${DOMAIN_NAME};
     
     # SSL Configuration
     ssl_certificate /etc/ssl/certs/tactile-teleop.crt;

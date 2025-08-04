@@ -19,7 +19,7 @@ dependencies = [
     "pybullet",
     "scipy",
     "pyyaml",
-    "livekit",
+    "livekit-api",
     "opencv-python",
     "python-dotenv",
     "fastapi",

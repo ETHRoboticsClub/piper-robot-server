@@ -1,5 +1,5 @@
 # Tactile Teleop FastAPI Application
-FROM python:3.10-slim
+FROM continuumio/miniconda3:latest
 
 LABEL maintainer="Tactile Robotics <info@tactilerobotics.ai>"
 LABEL description="Tactile Teleop FastAPI Web Server"
@@ -7,6 +7,7 @@ LABEL description="Tactile Teleop FastAPI Web Server"
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV CONDA_ENV_NAME=tactile-teleop
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -24,10 +25,11 @@ COPY requirements.txt pyproject.toml ./
 COPY src/ ./src/
 COPY docker/docker-entrypoint.py ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install -e .
+# Create conda environment and install dependencies
+RUN conda create -n ${CONDA_ENV_NAME} python=3.10 -y && \
+    conda run -n ${CONDA_ENV_NAME} pip install --no-cache-dir -r requirements.txt && \
+    conda run -n ${CONDA_ENV_NAME} pip install -e . && \
+    conda clean -afy
 
 # Create app user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -40,4 +42,4 @@ RUN mkdir -p /home/appuser/.tactile_teleop/ssl
 EXPOSE 8000
 
 # Default command runs the custom Docker entrypoint
-CMD ["python", "docker-entrypoint.py"]
+CMD ["conda", "run", "-n", "tactile-teleop", "python", "docker-entrypoint.py"]

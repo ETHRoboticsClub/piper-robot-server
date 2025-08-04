@@ -1,8 +1,9 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: true
 ---
-This project use the conda environment "tactile-teleop"
+
+This project uses the conda environment "tactile-teleop"
 To activate the environment, run:
-cd /home/zhamers/tactile-teleop && source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop 
+cd /home/zhamers/telegrip && source ~/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop

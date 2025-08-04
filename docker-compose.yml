@@ -7,6 +7,9 @@ services:
       dockerfile: docker/Dockerfile
     container_name: tactile-teleop-api
     restart: unless-stopped
+    env_file:
+      - development.env # Domain and deployment configuration
+      - .env # API keys and secrets (create from .env.example)
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
@@ -32,15 +35,18 @@ services:
       dockerfile: docker/nginx.dockerfile
     container_name: tactile-teleop-nginx
     restart: unless-stopped
+    env_file:
+      - development.env # Domain and deployment configuration
+      - .env # API keys and secrets (create from .env.example)
     ports:
-      - '8080:80' # HTTP
-      - '8443:443' # HTTPS
+      - '${NGINX_HTTP_PORT:-8080}:80' # HTTP
+      - '${NGINX_HTTPS_PORT:-8443}:443' # HTTPS
     volumes:
       - ssl_certs:/etc/ssl/certs:ro
       - ssl_keys:/etc/ssl/private:ro
       # Mount custom SSL certificates (optional)
-      # - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
-      # - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
+      - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
+      - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
     depends_on:
       fastapi:
         condition: service_healthy
