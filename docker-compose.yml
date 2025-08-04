@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: tactile-teleop-api
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount SSL certificates if you want to use custom ones
+      - ssl_certs:/home/appuser/.tactile_teleop/ssl
+      # Mount for development (optional - uncomment for live code updates)
+      # - ./src:/app/src
+    networks:
+      - tactile-network
+    # For development/debugging - expose FastAPI directly
+    # ports:
+    #   - "8000:8000"
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx.dockerfile
+    container_name: tactile-teleop-nginx
+    restart: unless-stopped
+    ports:
+      - '8080:80' # HTTP
+      - '8443:443' # HTTPS
+    volumes:
+      - ssl_certs:/etc/ssl/certs:ro
+      - ssl_keys:/etc/ssl/private:ro
+      # Mount custom SSL certificates (optional)
+      # - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
+      # - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    networks:
+      - tactile-network
+    healthcheck:
+      test: ['CMD', 'curl', '-k', '-f', 'https://localhost/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ssl_certs:
+    driver: local
+  ssl_keys:
+    driver: local
+
+networks:
+  tactile-network:
+    driver: bridge
