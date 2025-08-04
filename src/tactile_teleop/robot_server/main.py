@@ -56,7 +56,6 @@ async def main():
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
     parser.add_argument("--camera-index-left", type=int, default=0, help="Camera index to use")
     parser.add_argument("--camera-index-right", type=int, default=0, help="Camera index to use")
-    parser.add_argument("--auth-port", type=int, default=5050, help="Auth server port")
     parser.add_argument(
         "--log-level",
         default="info",
@@ -73,7 +72,6 @@ async def main():
     visualize = args.vis
     camera_index_left = args.camera_index_left if args.camera_index_left is not None else 0
     camera_index_right = args.camera_index_right if args.camera_index_right is not None else 0
-    auth_port = args.auth_port
 
     logger.info("Initializing server components...")
 

@@ -185,6 +185,11 @@ class LiveKitAuthServer:
                 
         self._proc = None
         return JSONResponse({'message': 'Shutting down...'}, status_code=200)
-            
+         
+         
+if __name__ == "__main__":
+    server = LiveKitAuthServer(port=5050, host='0.0.0.0', cert='cert.pem', key='key.pem')
+    server.start()
+    
 __all__ = ["generate_token", "LiveKitAuthServer"]
         
