@@ -42,6 +42,22 @@ open https://localhost:8443/
 open https://localhost:8443/
 ```
 
+### SSL Certificate Setup
+
+⚠️ **Important**: The default setup uses self-signed SSL certificates which will show browser security warnings.
+
+For production deployments with trusted SSL certificates, see: **[SSL-SETUP.md](../SSL-SETUP.md)**
+
+Quick setup with Let's Encrypt:
+
+```bash
+# Setup trusted SSL certificate
+./docker/scripts/setup-letsencrypt.sh teleop.tactilerobotics.ai zeno@tactilerobotics.ai
+
+# Start with trusted certificates
+docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
+```
+
 ## 🏗️ Architecture Overview
 
 ```
