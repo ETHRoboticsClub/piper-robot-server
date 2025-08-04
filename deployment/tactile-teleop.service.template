@@ -9,13 +9,12 @@ User={{USER}}
 Group={{USER}}
 WorkingDirectory={{PROJECT_ROOT}}
 
-# Environment setup - activate conda environment
-Environment=PATH={{CONDA_ENV_PATH}}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=CONDA_DEFAULT_ENV=tactile-teleop
-Environment=CONDA_PREFIX={{CONDA_ENV_PATH}}
+# Environment setup - use system Python
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONPATH={{PROJECT_ROOT}}/src
 
 # Start the FastAPI server in proxy mode with Unix socket
-ExecStart={{CONDA_ENV_PATH}}/bin/python -m tactile_teleop.web_server --behind-proxy --log-level info
+ExecStart={{PYTHON_PATH}} -m tactile_teleop.web_server --behind-proxy --log-level info
 
 # Restart policy
 Restart=always

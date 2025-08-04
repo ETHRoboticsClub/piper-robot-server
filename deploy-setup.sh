@@ -13,43 +13,26 @@ CURRENT_USER=${USER:-$(whoami)}
 PROJECT_ROOT=$(pwd)
 SERVER_NAME=${1:-localhost}
 
-# Find conda environment path
-if [ -z "$CONDA_PREFIX" ]; then
-    # Try to find conda installation
-    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-        source "$HOME/miniconda3/etc/profile.d/conda.sh"
-        if conda activate tactile-teleop 2>/dev/null; then
-            CONDA_ENV_PATH="$CONDA_PREFIX"
-            conda deactivate
-        else
-            echo "Error: tactile-teleop conda environment not found"
-            echo "Please create the environment first with: conda env create -f environment.yml"
-            exit 1
-        fi
-    elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-        source "$HOME/anaconda3/etc/profile.d/conda.sh"
-        if conda activate tactile-teleop 2>/dev/null; then
-            CONDA_ENV_PATH="$CONDA_PREFIX"
-            conda deactivate
-        else
-            echo "Error: tactile-teleop conda environment not found"
-            echo "Please create the environment first with: conda env create -f environment.yml"
-            exit 1
-        fi
-    else
-        echo "Error: Conda installation not found"
-        echo "Please install conda and create the tactile-teleop environment"
-        exit 1
-    fi
-else
-    CONDA_ENV_PATH="$CONDA_PREFIX"
+# Find Python installation
+PYTHON_PATH=$(which python3)
+if [ -z "$PYTHON_PATH" ]; then
+    echo "Error: python3 not found in PATH"
+    echo "Please install Python 3 and ensure it's in your PATH"
+    exit 1
+fi
+
+# Verify tactile_teleop module is available
+if ! PYTHONPATH="$PROJECT_ROOT/src" $PYTHON_PATH -c "import tactile_teleop" 2>/dev/null; then
+    echo "Error: tactile_teleop module not found"
+    echo "Please install the project dependencies with: pip install -r requirements.txt && pip install -e ."
+    exit 1
 fi
 
 echo "Detected configuration:"
 echo "  User: $CURRENT_USER"
 echo "  Project root: $PROJECT_ROOT"
 echo "  Server name: $SERVER_NAME"
-echo "  Conda environment: $CONDA_ENV_PATH"
+echo "  Python path: $PYTHON_PATH"
 echo
 
 # Create deployment directory
@@ -66,7 +49,7 @@ sed -e "s|{{PROJECT_ROOT}}|$PROJECT_ROOT|g" \
 echo "Generating systemd service..."
 sed -e "s|{{USER}}|$CURRENT_USER|g" \
     -e "s|{{PROJECT_ROOT}}|$PROJECT_ROOT|g" \
-    -e "s|{{CONDA_ENV_PATH}}|$CONDA_ENV_PATH|g" \
+    -e "s|{{PYTHON_PATH}}|$PYTHON_PATH|g" \
     "$DEPLOY_DIR/tactile-teleop.service.template" > "$DEPLOY_DIR/tactile-teleop.service"
 
 echo "Configuration files generated in: $DEPLOY_DIR/"
@@ -88,8 +71,7 @@ echo "   sudo systemctl enable tactile-teleop"
 echo
 echo "4. Generate and install SSL certificates:"
 echo "   cd $PROJECT_ROOT"
-echo "   source $HOME/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop"
-echo "   python -c \"from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()\""
+echo "   $PYTHON_PATH -c \"from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()\""
 echo "   sudo mkdir -p /etc/ssl/certs /etc/ssl/private"
 echo "   sudo cp ~/.tactile_teleop/ssl/cert.pem /etc/ssl/certs/tactile-teleop.crt"
 echo "   sudo cp ~/.tactile_teleop/ssl/key.pem /etc/ssl/private/tactile-teleop.key"
