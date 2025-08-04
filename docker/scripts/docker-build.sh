@@ -83,6 +83,7 @@ echo "⚙️  Configuring nginx with $ENV_FILE..."
 echo
 # Build and start services
 echo "🏗️  Building and starting services..."
+export ENV_FILE
 COMPOSE_FILE=$COMPOSE_FILE docker-compose up -d $BUILD_FLAGS
 
 echo
