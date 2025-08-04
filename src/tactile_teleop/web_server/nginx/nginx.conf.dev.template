@@ -1,36 +1,22 @@
-# Nginx configuration template for Docker containerized Tactile Teleop
+# Nginx configuration for initial certificate acquisition
 upstream fastapi_backend {
-    server fastapi:8000;  # Docker service name and internal port
+    server ${FASTAPI_BACKEND};
 }
 
-# HTTP to HTTPS redirect
+# HTTP server for ACME challenges and initial setup
 server {
     listen 80;
     server_name ${DOMAIN_NAME} www.${DOMAIN_NAME};
-    return 301 https://${DOMAIN_NAME}$request_uri;
-}
-
-# HTTPS server
-server {
-    listen 443 ssl http2;
-    server_name ${DOMAIN_NAME} www.${DOMAIN_NAME};
     
-    # SSL Configuration
-    ssl_certificate /etc/ssl/certs/tactile-teleop.crt;
-    ssl_certificate_key /etc/ssl/private/tactile-teleop.key;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    
-    # Security headers
-    add_header X-Frame-Options DENY;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # ACME challenge location for Let's Encrypt
+    location ^~ /.well-known/acme-challenge/ {
+        root ${CERTBOT_ROOT};
+        try_files $uri =404;
+    }
     
     # Serve static files directly
     location / {
-        root /usr/share/nginx/html;
+        root ${WEB_ROOT};
         try_files $uri $uri/ /index.html;
         
         # Cache static assets
@@ -40,7 +26,7 @@ server {
         }
     }
     
-    # Proxy API requests to FastAPI container
+    # Proxy API requests to FastAPI backend
     location /api/ {
         proxy_pass http://fastapi_backend;
         proxy_set_header Host $host;

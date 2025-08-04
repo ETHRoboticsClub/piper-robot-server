@@ -9,14 +9,9 @@ services:
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-development.env} # Domain and deployment configuration
-      - .env # API keys and secrets (create from .env.example)
+      - .env # API keys and secrets
     environment:
       - PYTHONUNBUFFERED=1
-    volumes:
-      # Mount SSL certificates if you want to use custom ones
-      - ssl_certs:/home/appuser/.tactile_teleop/ssl
-      # Mount for development (optional - uncomment for live code updates)
-      # - ./src:/app/src
     networks:
       - tactile-network
     # For development/debugging - expose FastAPI directly
@@ -30,41 +25,47 @@ services:
       start_period: 40s
 
   nginx:
+    container_name: tactile-teleop-nginx
     build:
       context: .
       dockerfile: docker/nginx.dockerfile
       args:
         DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
-    container_name: tactile-teleop-nginx
-    restart: unless-stopped
+    networks:
+      - tactile-network
     env_file:
       - ${ENV_FILE:-development.env} # Domain and deployment configuration
-      - .env # API keys and secrets (create from .env.example)
+      - .env # API keys and secrets
     ports:
       - '${NGINX_HTTP_PORT:-8080}:80' # HTTP
       - '${NGINX_HTTPS_PORT:-8443}:443' # HTTPS
     volumes:
-      - ssl_certs:/etc/ssl/certs:ro
-      - ssl_keys:/etc/ssl/private:ro
-      # Mount custom SSL certificates (default: off)
-      # - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
-      # - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
+      # Certbot certificates and challenges
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       fastapi:
         condition: service_healthy
-    networks:
-      - tactile-network
     healthcheck:
       test: ['CMD', 'curl', '-k', '-f', 'https://localhost/health']
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
 
-volumes:
-  ssl_certs:
-    driver: local
-  ssl_keys:
-    driver: local
+  certbot:
+    container_name: certbot
+    image: certbot/certbot
+    networks:
+      - tactile-network
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    restart: unless-stopped
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;" # 💡
+    depends_on:
+      - nginx
 
 networks:
   tactile-network:

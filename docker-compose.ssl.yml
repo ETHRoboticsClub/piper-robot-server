@@ -1,5 +1,5 @@
-# Docker Compose override for SSL certificates
-# Use this file to enable trusted SSL certificates from Let's Encrypt or custom CA
+# Docker Compose override for SSL production deployment
+# Use this file to enable Let's Encrypt SSL certificates
 #
 # Usage:
 #   docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
@@ -9,11 +9,12 @@ version: '3.8'
 services:
   nginx:
     volumes:
-      # Mount trusted SSL certificates (uncomment after obtaining certificates)
-      # For Let's Encrypt certificates:
-      - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
-      - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
-
-      # For custom CA certificates (alternative):
-      # - ./ssl/custom-cert.crt:/etc/ssl/certs/tactile-teleop.crt:ro
-      # - ./ssl/custom-key.key:/etc/ssl/private/tactile-teleop.key:ro
+      # Override nginx config to use production SSL configuration
+      - ./src/tactile_teleop/web_server/nginx/nginx-tactile-teleop.conf:/etc/nginx/conf.d/tactile-teleop.conf
+      # Certbot volumes (already included in base compose file)
+      # - ./certbot/conf:/etc/letsencrypt:ro
+      # - ./certbot/www:/var/www/certbot:ro
+    ports:
+      # Use standard ports for production
+      - '80:80' # HTTP
+      - '443:443' # HTTPS

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configure nginx.conf from template based on environment variables
-# This script generates nginx.conf from nginx.conf.template using environment variables
+# This script generates nginx-tactile-teleop.conf from nginx.conf.dev.template or nginx.conf.prod.template using environment variables
 # 
 # Usage: ./configure-nginx.sh [environment_file]
 # Example: ./configure-nginx.sh production.env
@@ -10,9 +10,8 @@ set -e
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DOCKER_DIR="$PROJECT_ROOT/docker"
-CONFIG_DIR="$DOCKER_DIR/config"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+NGINX_DIR="$SCRIPT_DIR/nginx"
 
 # Default values
 DEFAULT_DOMAIN="localhost"
@@ -42,14 +41,28 @@ fi
 
 # Set defaults if not provided
 DOMAIN_NAME="${DOMAIN_NAME:-$DEFAULT_DOMAIN}"
-USE_CUSTOM_SSL="${USE_CUSTOM_SSL:-$DEFAULT_USE_CUSTOM_SSL}"
+USE_SSL="${USE_SSL:-true}"
+
+# Configure backend and paths for direct deployment
+FASTAPI_BACKEND="unix:/tmp/tactile-teleop.sock"
+WEB_ROOT="$PROJECT_ROOT/src/tactile_teleop/web_server/web-ui"
+CERTBOT_ROOT="/var/www/certbot"
 
 echo "Configuring nginx for domain: $DOMAIN_NAME"
-echo "Using custom SSL: $USE_CUSTOM_SSL"
+echo "Using SSL: $USE_SSL"
+echo "FastAPI backend: $FASTAPI_BACKEND"
+echo "Web root: $WEB_ROOT"
 
-# Check if template exists
-TEMPLATE_FILE="$CONFIG_DIR/nginx.conf.template"
-OUTPUT_FILE="$CONFIG_DIR/nginx.conf"
+# Determine which config to generate based on SSL mode
+if [ "$USE_SSL" = "true" ]; then
+    TEMPLATE_FILE="$NGINX_DIR/nginx.conf.prod.template"
+    OUTPUT_FILE="$NGINX_DIR/nginx-tactile-teleop.conf"
+    echo "Generating production HTTPS configuration..."
+else
+    TEMPLATE_FILE="$NGINX_DIR/nginx.conf.dev.template"
+    OUTPUT_FILE="$NGINX_DIR/nginx-tactile-teleop.conf"
+    echo "Generating development HTTP configuration..."
+fi
 
 if [ ! -f "$TEMPLATE_FILE" ]; then
     echo "ERROR: Template file not found: $TEMPLATE_FILE"
@@ -60,7 +73,8 @@ fi
 echo "Generating $OUTPUT_FILE from template..."
 
 # Use envsubst to replace environment variables in template
-envsubst '$DOMAIN_NAME' < "$TEMPLATE_FILE" > "$OUTPUT_FILE"
+export DOMAIN_NAME FASTAPI_BACKEND WEB_ROOT CERTBOT_ROOT
+envsubst '$DOMAIN_NAME $FASTAPI_BACKEND $WEB_ROOT $CERTBOT_ROOT' < "$TEMPLATE_FILE" > "$OUTPUT_FILE"
 
 echo "Successfully configured nginx.conf for domain: $DOMAIN_NAME"
 

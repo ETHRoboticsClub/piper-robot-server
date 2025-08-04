@@ -30,18 +30,77 @@ case $ENVIRONMENT in
     "prod"|"production")
         echo "🚀 Building for production environment"
         COMPOSE_FILE="docker-compose.yml"
+        
+        # SSL Certificate Setup for Production
+        echo
+        echo "🔒 Checking SSL certificate configuration..."
+        
+        SSL_ENABLED=false
+        if [ -f "ssl/cert.pem" ] && [ -f "ssl/key.pem" ]; then
+            echo "✅ Trusted SSL certificates found in ssl/ directory"
+            SSL_ENABLED=true
+        else
+            echo "⚠️  No trusted SSL certificates found - using self-signed certificates"
+            echo "   This will cause browser security warnings"
+            echo
+            
+            # Check if domain is configured for Let's Encrypt
+            DOMAIN_NAME=${DOMAIN_NAME:-teleop.tactilerobotics.ai}
+            EMAIL=${LETSENCRYPT_EMAIL:-zeno@tactilerobotics.ai}
+            AUTO_SSL=${AUTO_SSL:-false}
+            
+            # Auto setup for CI/CD or if explicitly requested
+            if [[ "$AUTO_SSL" == "true" ]]; then
+                echo "🤖 Auto-setting up Let's Encrypt SSL certificates for $DOMAIN_NAME (AUTO_SSL=true)"
+                REPLY="y"
+            else
+                read -p "🤖 Would you like to automatically set up Let's Encrypt SSL certificates for $DOMAIN_NAME? (y/N): " -r
+            fi
+            
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                echo "🔐 Setting up Let's Encrypt SSL certificates..."
+                
+                # Stop any running containers first
+                echo "🛑 Stopping existing containers..."
+                docker-compose down 2>/dev/null || true
+                
+                # Run Let's Encrypt setup
+                if ./docker/scripts/setup-letsencrypt.sh "$DOMAIN_NAME" "$EMAIL"; then
+                    echo "✅ SSL certificates obtained successfully!"
+                    SSL_ENABLED=true
+                else
+                    echo "❌ SSL certificate setup failed. Continuing with self-signed certificates."
+                    echo "   You can manually run: ./docker/scripts/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
+                fi
+            else
+                echo "ℹ️  Continuing with self-signed certificates"
+                echo "   To set up SSL later, run: ./docker/scripts/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
+            fi
+        fi
+        
+        # Add SSL compose file if certificates are available
+        if [ "$SSL_ENABLED" = true ]; then
+            echo "🔒 Enabling trusted SSL certificates in Docker Compose"
+            COMPOSE_FILE="docker-compose.yml:docker-compose.ssl.yml"
+        fi
         ;;
     *)
         echo "Usage: $0 [dev|prod] [rebuild] [env_file]"
         echo "  dev/development: Include development overrides"
-        echo "  prod/production: Production configuration only"
+        echo "  prod/production: Production configuration only (includes SSL setup)"
         echo "  rebuild: Force rebuild of all images"
         echo "  env_file: Environment file to use (default: development.env)"
         echo ""
+        echo "Environment Variables for SSL (Production):"
+        echo "  DOMAIN_NAME: Domain for SSL certificate (default: teleop.tactilerobotics.ai)"
+        echo "  LETSENCRYPT_EMAIL: Email for Let's Encrypt (default: zeno@tactilerobotics.ai)"
+        echo "  AUTO_SSL: Auto-setup SSL without prompt (default: false)"
+        echo ""
         echo "Examples:"
         echo "  $0 dev                    # Development with development.env"
-        echo "  $0 prod rebuild           # Production rebuild with development.env"
+        echo "  $0 prod rebuild           # Production rebuild with SSL setup"
         echo "  $0 prod false production.env  # Production with production.env"
+        echo "  AUTO_SSL=true $0 prod     # Production with automatic SSL setup"
         exit 1
         ;;
 esac
@@ -78,7 +137,7 @@ fi
 
 # Configure nginx based on environment variables
 echo "⚙️  Configuring nginx with $ENV_FILE..."
-./docker/scripts/configure-nginx.sh "$ENV_FILE"
+./docker/scripts/configure-nginx-docker.sh "$ENV_FILE"
 
 echo
 # Build and start services

@@ -1,0 +1,121 @@
+# Nginx configuration for production with Let's Encrypt SSL
+upstream fastapi_backend {
+    server ${FASTAPI_BACKEND};
+}
+
+# HTTP server - ACME challenges and redirect to HTTPS
+server {
+    listen 80;
+    server_name ${DOMAIN_NAME} www.${DOMAIN_NAME};
+    
+    # ACME challenge location for Let's Encrypt renewals
+    location ^~ /.well-known/acme-challenge/ {
+        root ${CERTBOT_ROOT};
+        try_files $uri =404;
+    }
+    
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://${DOMAIN_NAME}$request_uri;
+    }
+}
+
+# HTTPS server for www subdomain - redirect to non-www
+server {
+    listen 443 ssl http2;
+    server_name www.${DOMAIN_NAME};
+    
+    # SSL Configuration - Let's Encrypt certificates
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    
+    # Include additional Let's Encrypt options
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    
+    # Redirect to non-www
+    return 301 https://${DOMAIN_NAME}$request_uri;
+}
+
+# HTTPS server - main production server
+server {
+    listen 443 ssl http2;
+    server_name ${DOMAIN_NAME};
+    
+    # SSL Configuration - Let's Encrypt certificates
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    
+    # Include additional Let's Encrypt options
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    
+    # Security headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    
+    # Serve static files directly
+    location / {
+        root ${WEB_ROOT};
+        try_files $uri $uri/ /index.html;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|mp4)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+    
+    # Proxy API requests to FastAPI backend
+    location /api/ {
+        proxy_pass http://fastapi_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # Health check endpoint
+    location /health {
+        proxy_pass http://fastapi_backend;
+        access_log off;
+    }
+    
+    # SEO files
+    location = /robots.txt { log_not_found off; }
+    location = /sitemap.xml { log_not_found off; }
+    location = /favicon.ico { log_not_found off; }
+    
+    # Deny access to dot files
+    location ~ /\.(?!well-known) { 
+        deny all; 
+    }
+    
+    # Logging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+}
