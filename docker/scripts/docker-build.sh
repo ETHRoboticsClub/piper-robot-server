@@ -84,6 +84,7 @@ echo
 # Build and start services
 echo "🏗️  Building and starting services..."
 export ENV_FILE
+export DOMAIN_NAME
 COMPOSE_FILE=$COMPOSE_FILE docker-compose up -d $BUILD_FLAGS
 
 echo
