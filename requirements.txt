@@ -10,7 +10,7 @@ pynput
 fastapi
 uvicorn[standard]
 python-dotenv
-livekit
+livekit-api
 # For development
 pytest
 black
