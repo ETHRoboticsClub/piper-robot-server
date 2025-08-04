@@ -11,7 +11,16 @@ echo
 # Parse command line arguments
 ENVIRONMENT=${1:-production}
 REBUILD=${2:-false}
-ENV_FILE=${3:-development.env}
+ENV_FILE=${3:-}
+
+# Set default environment file based on environment if not specified
+if [ -z "$ENV_FILE" ]; then
+    if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "production" ]; then
+        ENV_FILE="production.env"
+    else
+        ENV_FILE="development.env"
+    fi
+fi
 
 case $ENVIRONMENT in
     "dev"|"development")
