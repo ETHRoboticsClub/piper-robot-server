@@ -35,3 +35,8 @@ robot:
 ssl:
   certfile: cert.pem
   keyfile: key.pem
+stereo_video:
+  # Number of pixels to crop from outer edges of stereo frames
+  # Removes left edge of left camera and right edge of right camera
+  # to eliminate monocular zones that can be jarring in VR
+  edge_crop_pixels: 60

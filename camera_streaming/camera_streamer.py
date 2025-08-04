@@ -3,8 +3,6 @@ import json
 import logging
 import os
 import pickle
-import time
-from pathlib import Path
 from typing import Optional
 
 import cv2
@@ -31,6 +29,7 @@ class CameraStreamer:
         calibration_file: str,
         cap_backend: int = cv2.CAP_V4L2,
         cam_name="robot0-birds-eye",
+        edge_crop_pixels: int = 50,  # New parameter for edge cropping
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -46,11 +45,17 @@ class CameraStreamer:
         self.cap_left = None
         self.cap_right = None
 
+        # Edge cropping configuration
+        self.edge_crop_pixels = edge_crop_pixels
+
         # Load calibration data
         self.load_calibration_data()
 
-        # Video source - use calibrated frame dimensions (side-by-side)
-        self.source = rtc.VideoSource(self.frame_width * 2, self.frame_height)
+        # Calculate cropped dimensions
+        self.cropped_width = self.frame_width - self.edge_crop_pixels
+
+        # Video source - use cropped frame dimensions (side-by-side)
+        self.source = rtc.VideoSource(self.cropped_width * 2, self.frame_height)
         self.track = rtc.LocalVideoTrack.create_video_track(cam_name, self.source)
         self.room: Optional[rtc.Room] = None
 
@@ -146,6 +151,7 @@ class CameraStreamer:
             raise RuntimeError(f"Failed to open right camera at index {self.cam_index_right}")
 
         self.logger.info(f"Cameras initialized at {self.frame_width}x{self.frame_height}")
+        self.logger.info(f"Edge cropping enabled: {self.edge_crop_pixels} pixels from " f"outer edges")
 
     def rectify_frames(self, frame_left, frame_right):
         """Apply calibration rectification to stereo frames."""
@@ -153,6 +159,19 @@ class CameraStreamer:
         rect_left = cv2.remap(frame_left, self.map_left[0], self.map_left[1], cv2.INTER_LINEAR)
         rect_right = cv2.remap(frame_right, self.map_right[0], self.map_right[1], cv2.INTER_LINEAR)
         return rect_left, rect_right
+
+    def crop_stereo_edges(self, frame_left, frame_right):
+        """
+        Crop the outer edges of stereo frames to remove monocular zones.
+        Removes left edge of left frame and right edge of right frame.
+        """
+        # Crop left edge from left frame (remove leftmost pixels)
+        cropped_left = frame_left[:, self.edge_crop_pixels :]
+
+        # Crop right edge from right frame (remove rightmost pixels)
+        cropped_right = frame_right[:, : -self.edge_crop_pixels]
+
+        return cropped_left, cropped_right
 
     def _start_camera_loop(self):
         self.is_running = True
@@ -210,18 +229,27 @@ class CameraStreamer:
                 frame_rgb_right = cv2.cvtColor(rect_right, cv2.COLOR_BGR2RGB)
 
                 # Ensure frames are correct size
-                if frame_rgb_left.shape[:2] != (self.frame_height, self.frame_width):
+                if frame_rgb_left.shape[:2] != (
+                    self.frame_height,
+                    self.frame_width,
+                ):
                     frame_rgb_left = cv2.resize(frame_rgb_left, (self.frame_width, self.frame_height))
-                if frame_rgb_right.shape[:2] != (self.frame_height, self.frame_width):
+                if frame_rgb_right.shape[:2] != (
+                    self.frame_height,
+                    self.frame_width,
+                ):
                     frame_rgb_right = cv2.resize(frame_rgb_right, (self.frame_width, self.frame_height))
 
-                # Concatenate rectified left and right frames width-wise
-                concat_frame = cv2.hconcat([frame_rgb_left, frame_rgb_right])
+                # Crop outer edges to remove monocular zones
+                cropped_left, cropped_right = self.crop_stereo_edges(frame_rgb_left, frame_rgb_right)
+
+                # Concatenate cropped left and right frames width-wise
+                concat_frame = cv2.hconcat([cropped_left, cropped_right])
 
                 # Push concatenated frame to livekit track
                 frame_bytes = concat_frame.tobytes()
                 video_frame = rtc.VideoFrame(
-                    self.frame_width * 2,
+                    self.cropped_width * 2,
                     self.frame_height,
                     rtc.VideoBufferType.RGB24,
                     frame_bytes,

@@ -21,7 +21,10 @@ def _camera_process_wrapper(cam_infices: dict[str, int], calibration_file: str, 
 
     async def run_camera():
         camera_streamer = CameraStreamer(
-            cam_indices=cam_infices, calibration_file=calibration_file, cam_name="robot0-birds-eye"
+            cam_indices=cam_infices,
+            calibration_file=calibration_file,
+            cam_name="robot0-birds-eye",
+            edge_crop_pixels=config.edge_crop_pixels,
         )
         await camera_streamer.start(room_name, participant_name)
 

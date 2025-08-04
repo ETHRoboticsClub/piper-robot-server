@@ -38,6 +38,9 @@ DEFAULT_CONFIG = {
         "hysteresis_threshold": 0.01,
         "movement_penalty_weight": 0.01,
     },
+    "stereo_video": {
+        "edge_crop_pixels": 60,
+    },
 }
 
 
@@ -217,11 +220,10 @@ class TelegripConfig:
     vr_viewer_debug: bool = True
 
     # Stereo Video Configuration
-    physical_baseline: float = 92.0
-    target_ipd: float = 62.0
+
     eye_separation: float = 0.62
-    focal_length: float = 500
-    calibration_file: str = "camera_streaming/calibration/stereo_calibration_vr_SUCCESS_20250803_043704.pkl"
+    calibration_file: str = "camera_streaming/calibration/stereo_calibration_vr_20250804_052134.pkl"
+    edge_crop_pixels: int = _config_data["stereo_video"]["edge_crop_pixels"]
 
     @property
     def ssl_files_exist(self) -> bool:

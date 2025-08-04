@@ -36,13 +36,6 @@ AFRAME.registerComponent('teleop-video-stream', {
     // connect to livekit room
     console.log('🔌 Attempting to connect to LiveKit room...');
     window.LiveKitUtils.asyncRoomConnect(this, roomName, participantIdentity);
-
-    // Calibration parameters
-    this.data.physicalBaseline = config.physical_baseline;
-    this.data.targetIPD = config.target_ipd;
-    this.data.eyeSeparation = config.eye_separation;
-    this.data.focalLength = config.focal_length;
-    this.data.baselineScaleFactor = this.data.targetIPD / this.data.physicalBaseline;
   },
 
   
@@ -121,29 +114,54 @@ AFRAME.registerComponent('teleop-video-stream', {
     let leftVideoPlane = document.querySelector('#leftVideoPlane');
     let rightVideoPlane = document.querySelector('#rightVideoPlane');
     
+    // Calculate dimensions based on actual video aspect ratio
+    let planeWidth = 3.2;  // Default width in VR units
+    let planeHeight = 2.4; // Default height in VR units
+    
+    if (this.videoElement.videoWidth > 0 && this.videoElement.videoHeight > 0) {
+      const halfWidth = this.videoElement.videoWidth / 2;
+      const height = this.videoElement.videoHeight;
+      const aspectRatio = halfWidth / height;
+      
+      // Maintain consistent height, adjust width based on aspect ratio
+      planeHeight = 1.5;
+      planeWidth = planeHeight * aspectRatio;
+      
+      console.log(`Video aspect ratio: ${aspectRatio.toFixed(3)}:1 (${halfWidth}x${height} per eye)`);
+      console.log(`VR plane dimensions: ${planeWidth.toFixed(2)}x${planeHeight.toFixed(2)}`);
+    }
+    
     if (!leftVideoPlane) {
       leftVideoPlane = document.createElement('a-plane');
       leftVideoPlane.id = 'leftVideoPlane';
-      leftVideoPlane.setAttribute('position', `-${this.data.eyeSeparation/2} 0 -2`);
+      leftVideoPlane.setAttribute('position', `0 0 -2`);
       leftVideoPlane.setAttribute('rotation', '0 0 0');
-      leftVideoPlane.setAttribute('width', '3.2');
-      leftVideoPlane.setAttribute('height', '2.4');
+      leftVideoPlane.setAttribute('width', planeWidth.toString());
+      leftVideoPlane.setAttribute('height', planeHeight.toString());
       leftVideoPlane.setAttribute('stereo', 'eye: left');
       document.querySelector('a-scene').appendChild(leftVideoPlane);
+    } else {
+      // Update existing plane dimensions
+      leftVideoPlane.setAttribute('width', planeWidth.toString());
+      leftVideoPlane.setAttribute('height', planeHeight.toString());
     }
     
     if (!rightVideoPlane) {
       rightVideoPlane = document.createElement('a-plane');
       rightVideoPlane.id = 'rightVideoPlane';
-      rightVideoPlane.setAttribute('position', `${this.data.eyeSeparation/2} 0 -2`);
+      rightVideoPlane.setAttribute('position', `0 0 -2`);
       rightVideoPlane.setAttribute('rotation', '0 0 0');
-      rightVideoPlane.setAttribute('width', '3.2');
-      rightVideoPlane.setAttribute('height', '2.4');
+      rightVideoPlane.setAttribute('width', planeWidth.toString());
+      rightVideoPlane.setAttribute('height', planeHeight.toString());
       rightVideoPlane.setAttribute('stereo', 'eye: right');
       document.querySelector('a-scene').appendChild(rightVideoPlane);
+    } else {
+      // Update existing plane dimensions
+      rightVideoPlane.setAttribute('width', planeWidth.toString());
+      rightVideoPlane.setAttribute('height', planeHeight.toString());
     }
     
-    console.log(`Stereo planes positioned with ${this.data.eyeSeparation}m separation`);
+    console.log(`Stereo planes positioned with correct aspect ratio for cropped video`);
   },
   
   startSplitRendering: function () {
@@ -404,8 +422,6 @@ AFRAME.registerComponent('teleop-video-stream', {
 AFRAME.registerComponent('stereo', {
   schema: {
     eye: { type: 'string', default: "left"},
-    // Add calibration awareness
-    baselineScale: { type: 'number', default: 0.674 }, // 62/92
   },
 
   update: function(oldData){
@@ -419,9 +435,9 @@ AFRAME.registerComponent('stereo', {
       object3D.layers.set(data.eye === 'left' ? 1:2);
     }
     
-    // Log calibration info
+    // Log stereo layer info
     if (data.eye !== oldData.eye) {
-      console.log(`Set stereo layer for ${data.eye} eye (baseline scale: ${data.baselineScale.toFixed(3)})`);
+      console.log(`Set stereo layer for ${data.eye} eye`);
     }
   },
 }); 
