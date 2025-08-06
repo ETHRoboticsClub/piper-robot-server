@@ -3,16 +3,14 @@
 # For installation as package, use: pip install -e .
 
 numpy
-torch
 scipy
 pybullet
 websockets
 pynput
-lerobot[feetech]
-flask
-flask-cors
+fastapi
+uvicorn[standard]
 python-dotenv
-livekit
+livekit-api
 # For development
 pytest
 black

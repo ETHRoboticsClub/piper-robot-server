@@ -3,25 +3,27 @@ requires = ["setuptools >= 61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "telegrip"
+name = "tactile_teleop"
 version = "1.0.0"
-description = "Teleoperation Control System for the SO100 Robot Arm(s)"
+description = "Accurate and High Throughput Remote Teleoperation Control System"
 authors = [
-    {name = "Emil Rofors", email = "emirof@gmail.com"},
+    {name = "Zeno Hamers", email = "zeno@tactilerobotics.ai"},
+    {name = "Alex Spiridonov", email = "alex@tactilerobotics.ai"},
 ]
 keywords = ["robotics", "teleoperation", "vr", "robot-control"]
 
 dependencies = [
     "numpy",
-    "torch",
     "websockets",
     "pynput",
     "pybullet",
     "scipy",
     "pyyaml",
-    "livekit",
+    "livekit-api",
     "opencv-python",
     "python-dotenv",
+    "fastapi",
+    "uvicorn[standard]",
 ]
 
 requires-python = ">=3.8"
@@ -36,14 +38,20 @@ dev = [
 ]
 
 [project.scripts]
-telegrip = "telegrip.main:main_cli"
+robotserver = "tactile_teleop.robot_server.main:main_cli"
+webserver = "tactile_teleop.web_server.main:main_cli"
+
 
 [project.urls]
 Homepage = "https://github.com/your-username/vr_so100_teleoperation"
 Repository = "https://github.com/your-username/vr_so100_teleoperation"
 
-[tool.setuptools]
-packages = ["telegrip", "camera_streaming"] 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"tactile_teleop.web_server" = ["web-ui/**/*"]
+"tactile_teleop.robot_server" = ["camera_streaming/calibration/*"] 
 
 [tool.black]
 line-length = 120
