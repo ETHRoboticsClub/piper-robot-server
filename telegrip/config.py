@@ -222,7 +222,7 @@ class TelegripConfig:
     # Stereo Video Configuration
 
     eye_separation: float = 0.62
-    calibration_file: str = "camera_streaming/calibration/stereo_calibration_vr_20250804_052134.pkl"
+    calibration_file: str = "camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl"
     edge_crop_pixels: int = _config_data["stereo_video"]["edge_crop_pixels"]
 
     @property
