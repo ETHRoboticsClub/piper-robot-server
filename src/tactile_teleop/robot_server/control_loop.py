@@ -7,6 +7,7 @@ from typing import List
 import numpy as np
 
 from tactile_teleop.config import TelegripConfig
+
 from .core.geometry import convert_to_robot_convention, xyzrpy2transform
 from .core.robot_interface import RobotInterface
 from .inputs.base import ControlGoal, EventType
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ArmState:
     arm_name: str
-    initial_transform: np.ndarray = xyzrpy2transform(0.19, 0.0, 0.2, 0, 0, 0)
+    initial_transform: np.ndarray = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
     origin_transform: np.ndarray | None = None
     target_transform: np.ndarray | None = None
     gripper_closed: bool = True

@@ -1,5 +1,5 @@
 """
-Robot interface module for the SO100 teleoperation system.
+Robot interface module.
 Provides a clean wrapper around robot devices with safety checks and convenience methods.
 """
 
@@ -85,8 +85,8 @@ class RobotInterface:
         self.max_general_errors = 8  # Allow more general errors before full disconnection
 
         # Initial positions for safe shutdown - restored original values
-        self.initial_left_arm = np.array([0, 0, 0, 0, 0, 0, 0])
-        self.initial_right_arm = np.array([0, 0, 0, 0, 0, 0, 0])
+        self.initial_left_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
+        self.initial_right_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
 
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
@@ -162,13 +162,13 @@ class RobotInterface:
             return (
                 self.left_robot.get_end_effector_transform()
                 if self.left_robot
-                else xyzrpy2transform(0.19, 0.0, 0.2, 0.0, 0.0, 0.0)
+                else xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
             )
         elif arm == "right":
             return (
                 self.right_robot.get_end_effector_transform()
                 if self.right_robot
-                else xyzrpy2transform(0.19, 0.0, 0.2, 0.0, 0.0, 0.0)
+                else xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
             )
         else:
             raise ValueError(f"Invalid arm: {arm}")
@@ -274,11 +274,10 @@ class RobotInterface:
         """Return both arms to initial position."""
         logger.info("⏪ Returning robot to initial position...")
 
-        try:
-            # Set initial positions - no direction mapping
-            self.left_arm_angles = self.initial_left_arm.copy()
-            self.right_arm_angles = self.initial_right_arm.copy()
+        self.left_arm_angles = np.concatenate((self.solve_ik("left", self.initial_left_arm, visualize=True), [0.0]))
+        self.right_arm_angles = np.concatenate((self.solve_ik("right", self.initial_right_arm, visualize=True), [0.0]))
 
+        try:
             # Send commands for a few iterations to ensure movement
             for i in range(10):
                 self.send_command()

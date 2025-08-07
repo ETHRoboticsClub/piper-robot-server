@@ -219,7 +219,6 @@ class TelegripConfig:
     vr_viewer_debug: bool = True
 
     # Stereo Video Configuration
-
     eye_separation: float = 0.62
     calibration_file: str = (
         "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl"
