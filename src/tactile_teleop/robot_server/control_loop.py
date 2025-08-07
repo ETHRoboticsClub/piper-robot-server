@@ -79,15 +79,21 @@ class ControlLoop:
 
         # Left arm IK
         if left_arm.target_transform is not None:
-            ik_solution = self.robot_interface.solve_ik("left", left_arm.target_transform, visualize=self.visualize)
+            ik_solution, is_collision = self.robot_interface.solve_ik(
+                "left", left_arm.target_transform, visualize=self.visualize
+            )
             current_gripper = 0.0 if left_arm.gripper_closed else 0.07
-            self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
+            if not is_collision:
+                self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
 
         # Right arm IK
         if right_arm.target_transform is not None:
-            ik_solution = self.robot_interface.solve_ik("right", right_arm.target_transform, visualize=self.visualize)
+            ik_solution, is_collision = self.robot_interface.solve_ik(
+                "right", right_arm.target_transform, visualize=self.visualize
+            )
             current_gripper = 0.0 if right_arm.gripper_closed else 0.07
-            self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
+            if not is_collision:
+                self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
 
         ik_time = time.perf_counter() - start_time_ik
 

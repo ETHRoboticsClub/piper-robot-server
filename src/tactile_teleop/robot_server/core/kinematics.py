@@ -111,13 +111,13 @@ def _make_mesh_paths_absolute(urdf_path: str) -> str:
         with os.fdopen(temp_fd, "w") as f:
             f.write(urdf_content)
         return temp_path
-    except:
+    except Exception:
         os.close(temp_fd)
         raise
 
 
 class Arm_IK:
-    def __init__(self, urdf_path: str):
+    def __init__(self, urdf_path: str, ground_height: float = 0.0):
         np.set_printoptions(precision=5, suppress=True, linewidth=200)
 
         # Create temporary URDF with absolute mesh paths
@@ -142,8 +142,15 @@ class Arm_IK:
             reference_configuration=np.array([0] * self.robot.model.nq),
         )
 
+        # Add ground plane geometry to collision model
+        self.ground_height = ground_height
+        self.exclude_from_ground_collision = ["base_link_0"]
+        self._add_ground_plane()
+        self._init_collision_pairs()
+
         self.first_matrix = create_transformation_matrix(0, 0, 0, 0, -1.57, 0)
-        self.second_matrix = create_transformation_matrix(0.13, 0.0, 0.0, 0, 0, 0)  # 第六轴到末端夹爪坐标的变换矩阵
+        # Transform from joint6 to end-effector gripper coordinates
+        self.second_matrix = create_transformation_matrix(0.13, 0.0, 0.0, 0, 0, 0)
         self.last_matrix = np.dot(self.first_matrix, self.second_matrix)
         q = quaternion_from_matrix(self.last_matrix)
         self.reduced_robot.model.addFrame(
@@ -159,15 +166,12 @@ class Arm_IK:
             )
         )
 
-        for i in range(4, 9):
-            for j in range(0, 3):
-                self.geom_model.addCollisionPair(pin.CollisionPair(i, j))
         self.geometry_data = pin.GeometryData(self.geom_model)
 
         self.init_data = np.zeros(self.reduced_robot.model.nq)
         self.history_data = np.zeros(self.reduced_robot.model.nq)
 
-        # # Initialize the Meshcat visualizer  for visualization
+        # Initialize the Meshcat visualizer for visualization
         self.vis = MeshcatVisualizer(
             self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model
         )
@@ -176,7 +180,7 @@ class Arm_IK:
         self.vis.displayFrames(True, frame_ids=[113, 114], axis_length=0.15, axis_width=5)
         self.vis.display(pin.neutral(self.reduced_robot.model))
 
-        # Enable the display of end effector target frames with short axis lengths and greater width.
+        # Enable display of end effector target frames with short axis lengths
         frame_viz_names = ["ee_target"]
         FRAME_AXIS_POSITIONS = (
             np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]]).astype(np.float32).T
@@ -209,7 +213,7 @@ class Arm_IK:
         self.cTf = casadi.SX.sym("tf", 4, 4)
         cpin.framesForwardKinematics(self.cmodel, self.cdata, self.cq)
 
-        # # Get the hand joint ID and define the error function
+        # Get the hand joint ID and define the error function
         self.gripper_id = self.reduced_robot.model.getFrameId("ee")
         self.error = casadi.Function(
             "error",
@@ -224,7 +228,8 @@ class Arm_IK:
         # Defining the optimization problem
         self.opti = casadi.Opti()
         self.var_q = self.opti.variable(self.reduced_robot.model.nq)
-        # self.var_q_last = self.opti.parameter(self.reduced_robot.model.nq)   # for smooth
+        # For smooth motion (commented out)
+        # self.var_q_last = self.opti.parameter(self.reduced_robot.model.nq)
         self.param_tf = self.opti.parameter(4, 4)
 
         # self.totalcost = casadi.sumsqr(self.error(self.var_q, self.param_tf))
@@ -242,13 +247,50 @@ class Arm_IK:
                 self.reduced_robot.model.lowerPositionLimit, self.var_q, self.reduced_robot.model.upperPositionLimit
             )
         )
-        # print("self.reduced_robot.model.lowerPositionLimit:", self.reduced_robot.model.lowerPositionLimit)
-        # print("self.reduced_robot.model.upperPositionLimit:", self.reduced_robot.model.upperPositionLimit)
+        # Debug prints (commented out)
+        # print("lowerPositionLimit:", self.reduced_robot.model.lowerPositionLimit)
+        # print("upperPositionLimit:", self.reduced_robot.model.upperPositionLimit)
         self.opti.minimize(20 * self.totalcost + 0.01 * self.regularization)
-        # self.opti.minimize(20 * self.totalcost + 0.01 * self.regularization + 0.1 * self.smooth_cost) # for smooth
+        # For smooth motion (commented out)
+        # self.opti.minimize(20 * self.totalcost + 0.01 * self.regularization + 0.1 * self.smooth_cost)
 
         opts = {"ipopt": {"print_level": 0, "max_iter": 50, "tol": 1e-4}, "print_time": False}
         self.opti.solver("ipopt", opts)
+
+    def _init_collision_pairs(self):
+        # Add collision pairs for self-collision detection
+        for i in range(4, 9):
+            for j in range(0, 3):
+                self.geom_model.addCollisionPair(pin.CollisionPair(i, j))
+
+        # Add collision pairs between robot links and ground plane
+        # Ground plane is the last geometry object added
+        ground_plane_idx = self.geom_model.ngeoms - 1
+        for i in range(self.geom_model.ngeoms - 1):  # All robot links
+            # Check if this geometry should be excluded from ground collision
+            geom_name = self.geom_model.geometryObjects[i].name
+
+            if geom_name not in self.exclude_from_ground_collision:
+                self.geom_model.addCollisionPair(pin.CollisionPair(i, ground_plane_idx))
+            else:
+                logger.debug(f"Excluding {geom_name} from ground collision detection")
+
+    def _add_ground_plane(self):
+        """Add a ground plane geometry to the collision model for ground collision detection."""
+        # Create a large box representing the ground plane at the specified height
+        # The box extends from ground_height-0.05 to ground_height+0.05 to create a thin ground plane
+        ground_size = [10.0, 10.0, 0.1]  # Large XY plane, thin in Z
+        ground_pose = pin.SE3.Identity()
+        ground_pose.translation = np.array([0.0, 0.0, self.ground_height - 0.05])
+
+        # Create ground plane geometry
+        ground_geometry = pin.GeometryObject(
+            "ground_plane", 0, pin.hppfcl.Box(*ground_size), ground_pose  # Attach to world frame (frame 0)
+        )
+
+        # Add to geometry model
+        self.geom_model.addGeometryObject(ground_geometry)
+        logger.info(f"Added ground plane at height {self.ground_height}")
 
     def ik_fun(self, target_pose, gripper=0, motorstate=None, motorV=None, visualize=True):
         gripper = np.array([gripper / 2.0, -gripper / 2.0])
@@ -257,14 +299,16 @@ class Arm_IK:
         self.opti.set_initial(self.var_q, self.init_data)
 
         if visualize:
-            self.vis.viewer["ee_target"].set_transform(target_pose)  # for visualization
+            # For visualization
+            self.vis.viewer["ee_target"].set_transform(target_pose)
 
         self.opti.set_value(self.param_tf, target_pose)
-        # self.opti.set_value(self.var_q_last, self.init_data) # for smooth
+        # For smooth motion (commented out)
+        # self.opti.set_value(self.var_q_last, self.init_data)
 
         try:
             # sol = self.opti.solve()
-            sol = self.opti.solve_limited()
+            self.opti.solve_limited()
             sol_q = self.opti.value(self.var_q)
 
             if self.init_data is not None:
@@ -281,30 +325,22 @@ class Arm_IK:
             if visualize:
                 self.vis.display(sol_q)  # for visualization
 
-            if motorV is not None:
-                v = motorV * 0.0
-            else:
-                v = (sol_q - self.init_data) * 0.0
-
-            tau_ff = pin.rnea(
-                self.reduced_robot.model, self.reduced_robot.data, sol_q, v, np.zeros(self.reduced_robot.model.nv)
-            )
-
-            is_collision = self.check_self_collision(sol_q, gripper)
-            dist = self.get_dist(sol_q, target_pose[:3, 3])
-            # print("dist:", dist)
-            return sol_q, tau_ff, not is_collision
+            is_collision = self.check_collision(sol_q, gripper)
+            return sol_q, is_collision
 
         except Exception as e:
             print(f"ERROR in convergence, plotting debug info.{e}")
-            # sol_q = self.opti.debug.value(self.var_q)   # return original value
-            return None, "", False
+            # return original value (commented out)
+            # sol_q = self.opti.debug.value(self.var_q)
+            return None, False
 
-    def check_self_collision(self, q, gripper=np.array([0, 0])):
+    def check_collision(self, q, gripper=np.array([0, 0])):
+        """Check for collisions including self-collision and ground plane collision."""
         pin.forwardKinematics(self.robot.model, self.robot.data, np.concatenate([q, gripper], axis=0))
         pin.updateGeometryPlacements(self.robot.model, self.robot.data, self.geom_model, self.geometry_data)
         collision = pin.computeCollisions(self.geom_model, self.geometry_data, False)
-        # print("collision:", collision)
+        if collision:
+            logger.error("❌ Collision detected")
         return collision
 
     def get_dist(self, q, xyz):

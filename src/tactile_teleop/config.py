@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
         "right_arm": {"name": "Right Arm", "enabled": True},
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
+        "ground_height": 0.0,
     },
     "control": {
         "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -40,6 +41,7 @@ DEFAULT_CONFIG = {
     },
     "stereo_video": {
         "edge_crop_pixels": 60,
+        "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
     },
 }
 
@@ -113,6 +115,7 @@ KEYFILE = _config_data["ssl"]["keyfile"]
 
 VR_TO_ROBOT_SCALE = _config_data["robot"]["vr_to_robot_scale"]
 SEND_INTERVAL = _config_data["robot"]["send_interval"]
+GROUND_HEIGHT = _config_data["robot"]["ground_height"]
 
 POS_STEP = _config_data["control"]["keyboard"]["pos_step"]
 ANGLE_STEP = _config_data["control"]["keyboard"]["angle_step"]
@@ -181,6 +184,7 @@ class TelegripConfig:
     # Robot settings
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
+    ground_height: float = GROUND_HEIGHT
 
     # Control flags
     enable_pybullet: bool = True
@@ -219,10 +223,7 @@ class TelegripConfig:
     vr_viewer_debug: bool = True
 
     # Stereo Video Configuration
-    eye_separation: float = 0.62
-    calibration_file: str = (
-        "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl"
-    )
+    calibration_file: str = _config_data["stereo_video"]["calibration_file"]
     edge_crop_pixels: int = _config_data["stereo_video"]["edge_crop_pixels"]
 
     @property

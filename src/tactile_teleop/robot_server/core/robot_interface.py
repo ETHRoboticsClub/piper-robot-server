@@ -148,9 +148,10 @@ class RobotInterface:
     def setup_kinematics(self):
         """Setup kinematics solvers using PyBullet components for both arms."""
         # Setup solvers for both arms
+        ground_height = self.config.ground_height
         for arm in ["left", "right"]:
-            self.ik_solvers[arm] = Arm_IK(self.config.urdf_path)
-        logger.info("Kinematics solvers initialized for both arms")
+            self.ik_solvers[arm] = Arm_IK(self.config.urdf_path, ground_height)
+        logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 
     def get_end_effector_transform(self, arm: str) -> np.ndarray:
         """Get end effector pose for specified arm.
@@ -181,8 +182,8 @@ class RobotInterface:
             pin.Quaternion(quaternion[3], quaternion[0], quaternion[1], quaternion[2]),
             position,
         )
-        sol_q, tau_ff, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
-        return sol_q
+        sol_q, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
+        return sol_q, is_collision
 
     def update_arm_angles(self, arm: str, joint_angles: np.ndarray):
         """Update joint angles for specified arm."""
@@ -274,8 +275,19 @@ class RobotInterface:
         """Return both arms to initial position."""
         logger.info("⏪ Returning robot to initial position...")
 
-        self.left_arm_angles = np.concatenate((self.solve_ik("left", self.initial_left_arm, visualize=True), [0.0]))
-        self.right_arm_angles = np.concatenate((self.solve_ik("right", self.initial_right_arm, visualize=True), [0.0]))
+        left_arm_angles, left_collision = self.solve_ik("left", self.initial_left_arm, visualize=True)
+        right_arm_angles, right_collision = self.solve_ik("right", self.initial_right_arm, visualize=True)
+
+        if left_collision:
+            logger.error("❌ Left arm collision detected during return to initial position, setting angles to zero")
+            self.left_arm_angles = np.zeros(NUM_JOINTS)
+
+        if right_collision:
+            logger.error("❌ Right arm collision detected during return to initial position, setting angles to zero")
+            self.right_arm_angles = np.zeros(NUM_JOINTS)
+
+        self.left_arm_angles = np.concatenate((left_arm_angles, [0.0]))
+        self.right_arm_angles = np.concatenate((right_arm_angles, [0.0]))
 
         try:
             # Send commands for a few iterations to ensure movement

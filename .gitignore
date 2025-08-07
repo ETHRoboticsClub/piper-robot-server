@@ -84,3 +84,5 @@ key.pem
 cert.pem
 
 camera_streaming/calibration
+tests/
+.cursor/
