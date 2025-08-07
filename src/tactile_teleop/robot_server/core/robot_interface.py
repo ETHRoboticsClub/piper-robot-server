@@ -14,6 +14,7 @@ import numpy as np
 import pinocchio as pin
 
 from tactile_teleop.config import NUM_JOINTS, TelegripConfig
+
 from .geometry import transform2pose, xyzrpy2transform
 from .kinematics import Arm_IK
 from .piper import Piper, PiperConfig
@@ -175,10 +176,9 @@ class RobotInterface:
     def solve_ik(self, arm: str, target_pose: np.ndarray, visualize: bool) -> np.ndarray:
         """Solve inverse kinematics for specified arm."""
         position, quaternion = transform2pose(target_pose)
-        # TODO: check if it is xyzw or wxyz
-        quat_wxyz = np.array([quaternion[3], quaternion[0], quaternion[1], quaternion[2]])
+        # transform2pose returns XYZW, but pin.Quaternion expects WXYZ
         target = pin.SE3(
-            pin.Quaternion(quat_wxyz),
+            pin.Quaternion(quaternion[3], quaternion[0], quaternion[1], quaternion[2]),
             position,
         )
         sol_q, tau_ff, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
