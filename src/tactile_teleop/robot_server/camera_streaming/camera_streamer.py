@@ -17,10 +17,6 @@ load_dotenv()
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 
-WIDTH = 640
-HEIGHT = 480
-DEFAULT_CAM_INDEX = int(os.getenv("CAMERA_INDEX", 6))
-
 
 class CameraStreamer:
     def __init__(
@@ -91,35 +87,14 @@ class CameraStreamer:
             else:
                 raise ValueError("Calibration file must be .pkl or .json")
 
-            # Extract calibration parameters
-            self.camera_matrix_left = calib_data["camera_matrix_left"]
-            self.dist_coeffs_left = calib_data["dist_coeffs_left"]
-            self.camera_matrix_right = calib_data["camera_matrix_right"]
-            self.dist_coeffs_right = calib_data["dist_coeffs_right"]
-
-            self.rotation_matrix = calib_data["rotation_matrix"]
-            self.translation_vector = calib_data["translation_vector"]
-
-            self.rect_left = calib_data["rect_left"]
-            self.rect_right = calib_data["rect_right"]
-            self.proj_left_scaled = calib_data["proj_left_scaled"]
-            self.proj_right_scaled = calib_data["proj_right_scaled"]
-            self.Q = calib_data["Q"]
-
             # These are the key rectification maps for fast processing
             self.map_left = calib_data["map_left"]
             self.map_right = calib_data["map_right"]
-
             self.frame_width = calib_data["frame_width"]
             self.frame_height = calib_data["frame_height"]
-            self.physical_baseline_mm = calib_data["physical_baseline_mm"]
-            self.target_ipd_mm = calib_data["target_ipd_mm"]
-            self.baseline_scale_factor = calib_data["baseline_scale_factor"]
 
             self.logger.info("✓ Calibration data loaded successfully")
             self.logger.info(f"  Frame size: {self.frame_width}x{self.frame_height}")
-            baseline_info = f"  Baseline scaling: {self.physical_baseline_mm}mm → " f"{self.target_ipd_mm}mm"
-            self.logger.info(baseline_info)
 
         except Exception as e:
             self.logger.error(f"Error loading calibration data: {e}")
