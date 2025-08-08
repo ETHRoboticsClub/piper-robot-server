@@ -347,7 +347,6 @@ make deploy-prod
 - `DOMAIN_NAME`: Domain name for certificates (default: teleop.tactilerobotics.ai)
 - `LETSENCRYPT_EMAIL`: Email for Let's Encrypt notifications
 - `AUTO_SSL`: Automatically set up SSL without prompts (default: false)
-- `SSL_ENABLED`: Enable SSL in nginx container (auto-detected)
 
 ### Nginx Configuration
 

@@ -12,7 +12,6 @@ echo
 CURRENT_USER=${USER:-$(whoami)}
 PROJECT_ROOT=$(pwd)
 SERVER_NAME=${1:-localhost}
-SSL_ENABLED=${2:-true}  # Second parameter to enable SSL
 
 # Find conda environment path
 if [ -z "$CONDA_PREFIX" ]; then
@@ -50,7 +49,6 @@ echo "Detected configuration:"
 echo "  User: $CURRENT_USER"
 echo "  Project root: $PROJECT_ROOT"
 echo "  Server name: $SERVER_NAME"
-echo "  SSL Enabled: $SSL_ENABLED"
 echo "  Conda environment: $CONDA_ENV_PATH"
 echo
 
@@ -61,7 +59,7 @@ mkdir -p "$DEPLOY_DIR"
 # Generate nginx configuration files and systemd service
 echo "Generating nginx configuration..."
 cd "$PROJECT_ROOT/src/tactile_teleop/web_server"
-DOMAIN_NAME="$SERVER_NAME" SSL_ENABLED="$SSL_ENABLED" ./nginx/configure-nginx.sh "$PROJECT_ROOT/development.env" direct
+DOMAIN_NAME="$SERVER_NAME" ./nginx/configure-nginx.sh "$PROJECT_ROOT/development.env" direct
 
 echo "Generating systemd service..."
 sed -e "s|{{USER}}|$CURRENT_USER|g" \

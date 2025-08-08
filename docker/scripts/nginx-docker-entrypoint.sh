@@ -8,22 +8,21 @@ set -e
 echo "🔒 Configuring nginx based on runtime SSL certificate availability..."
 
 # Environment variables
-SSL_ENABLED=${SSL_ENABLED:-false}
 DOMAIN_NAME=${DOMAIN_NAME:-teleop.tactilerobotics.ai}
 FASTAPI_BACKEND="fastapi:8000"
 WEB_ROOT="/usr/share/nginx/html"
 CERTBOT_ROOT="/var/www/certbot"
 
-# Runtime SSL detection - override SSL_ENABLED if certificates are not available
+# Runtime SSL detection based purely on certificate availability
 CERTS_AVAILABLE=false
 if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
     CERTS_AVAILABLE=true
 fi
 
-# Determine final SSL configuration
-if [ "$SSL_ENABLED" = "true" ] && [ "$CERTS_AVAILABLE" = "true" ]; then
+# Determine final SSL configuration automatically
+if [ "$CERTS_AVAILABLE" = "true" ]; then
     USE_SSL=true
-    echo "✅ SSL enabled and certificates available - using HTTPS configuration"
+    echo "✅ Certificates available - using HTTPS configuration"
     
     # Verify certificate is not expired
     if openssl x509 -in "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" -noout -checkend 0 2>/dev/null; then
@@ -31,12 +30,9 @@ if [ "$SSL_ENABLED" = "true" ] && [ "$CERTS_AVAILABLE" = "true" ]; then
     else
         echo "⚠️  Certificate may be expired - please renew"
     fi
-elif [ "$SSL_ENABLED" = "true" ] && [ "$CERTS_AVAILABLE" = "false" ]; then
-    USE_SSL=false
-    echo "⚠️  SSL enabled but certificates not available - falling back to HTTP"
 else
     USE_SSL=false
-    echo "ℹ️  Using HTTP configuration"
+    echo "ℹ️  No certificates found - using HTTP configuration"
 fi
 
 # Generate nginx configuration at runtime

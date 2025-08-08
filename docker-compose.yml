@@ -37,7 +37,6 @@ services:
       - ${ENV_FILE:-development.env} # Domain and deployment configuration
       - .env # API keys and secrets
     environment:
-      - SSL_ENABLED=${SSL_ENABLED:-false}
       - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
     ports:
       - '${NGINX_HTTP_PORT:-8080}:80' # HTTP

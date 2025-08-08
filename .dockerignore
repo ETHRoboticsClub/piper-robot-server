@@ -72,10 +72,7 @@ requirements-dev.txt
 
 # Deployment files (will be handled separately)
 deploy-setup.sh
-src/tactile_teleop/web_server/nginx/*.template
 src/tactile_teleop/web_server/nginx/tactile-teleop.service
-src/tactile_teleop/web_server/nginx/DEPLOYMENT.md
-src/tactile_teleop/web_server/register_ssl.sh
 
 # SSL certificates (managed by certbot)
 certbot/

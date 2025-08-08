@@ -5,13 +5,12 @@
 # 
 # Usage: ./configure-nginx.sh [environment_file] [deployment_mode] [--validate]
 # 
-# SSL Configuration:
-#   Set SSL_ENABLED=true/false to explicitly enable/disable SSL for both Docker and direct deployments
-#   If SSL_ENABLED is not set, the script will auto-detect based on Let's Encrypt certificates
+# SSL Configuration: automatic only
+#   SSL is enabled when valid Let's Encrypt certificates are present for DOMAIN_NAME
+#   Otherwise HTTP is used. No manual override is supported.
 #
-# Examples: 
-#   SSL_ENABLED=false ./configure-nginx.sh development.env docker    # HTTP only
-#   SSL_ENABLED=true ./configure-nginx.sh production.env docker     # Force HTTPS
+# Examples:
+#   ./configure-nginx.sh production.env docker                      # Auto-detect SSL
 #   ./configure-nginx.sh production.env direct                      # Auto-detect SSL
 #   ./configure-nginx.sh production.env docker --validate           # Generate config and validate
 
@@ -85,8 +84,7 @@ else
     CERTBOT_ROOT="/var/www/certbot"
 fi
 
-# Determine SSL configuration using SSL_ENABLED environment variable
-# Priority: SSL_ENABLED env var > auto-detection
+# Determine SSL configuration automatically based on certificates
 # Check if certificates are present (avoid redundant file system calls)
 if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
     CERTS_PRESENT="true"
@@ -94,21 +92,12 @@ else
     CERTS_PRESENT="false"
 fi
 
-if [ "${SSL_ENABLED:-}" = "true" ]; then
+if [ "$CERTS_PRESENT" = "true" ]; then
+    echo "🔍 Let's Encrypt certificates found, enabling SSL"
     USE_SSL="true"
-    echo "🔒 SSL explicitly enabled via SSL_ENABLED environment variable"
-elif [ "${SSL_ENABLED:-}" = "false" ]; then
-    USE_SSL="false"
-    echo "🔓 SSL explicitly disabled via SSL_ENABLED environment variable"
 else
-    # Auto-detect SSL if certificates are available (when SSL_ENABLED not explicitly set)
-    if [ "$CERTS_PRESENT" = "true" ]; then
-        echo "🔍 Auto-detected Let's Encrypt certificates, enabling SSL"
-        USE_SSL="true"
-    else
-        USE_SSL="false"
-        echo "🔍 No SSL certificates found, using HTTP mode"
-    fi
+    USE_SSL="false"
+    echo "🔍 No SSL certificates found, using HTTP mode"
 fi
 
 echo "Environment variables:"

@@ -26,7 +26,6 @@ case $ENVIRONMENT in
     "dev"|"development")
         echo "🔧 Building for development environment"
         COMPOSE_FILE="docker-compose.yml:docker-compose.override.yml"
-        SSL_ENABLED=false
         ;;
     "prod"|"production")
         echo "🚀 Building for production environment"
@@ -41,24 +40,23 @@ case $ENVIRONMENT in
         EMAIL=${LETSENCRYPT_EMAIL:-zeno@tactilerobotics.ai}
         AUTO_SSL=${AUTO_SSL:-false}
         
-        SSL_ENABLED=false
-        
         # Check for Let's Encrypt certificates
+        CERTS_PRESENT=false
         if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
             echo "✅ Let's Encrypt certificates found for $DOMAIN_NAME"
+            CERTS_PRESENT=true
             
             # Check certificate validity (not expiring in next 30 days)
             if openssl x509 -in "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" -noout -checkend 2592000 2>/dev/null; then
                 echo "✅ Certificate is valid and not expiring soon"
-                SSL_ENABLED=true
             else
                 echo "⚠️  Let's Encrypt certificate is expired or expiring soon"
-                SSL_ENABLED=true  # Still enable SSL, nginx will show the expired cert warning
+                # nginx will serve the existing certificate; consider renewal
             fi
         fi
         
         # If no valid certificates found, offer to set up Let's Encrypt
-        if [ "$SSL_ENABLED" = false ]; then
+        if [ "$CERTS_PRESENT" = false ]; then
             echo "⚠️  No valid SSL certificates found - will use self-signed certificates"
             echo "   This will cause browser security warnings"
             echo
@@ -81,7 +79,7 @@ case $ENVIRONMENT in
                 # Run Let's Encrypt setup
                 if ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh "$DOMAIN_NAME" "$EMAIL"; then
                     echo "✅ SSL certificates obtained successfully!"
-                    SSL_ENABLED=true
+                    CERTS_PRESENT=true
                 else
                     echo "❌ SSL certificate setup failed. Continuing with self-signed certificates."
                     echo "   You can manually run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
@@ -90,14 +88,6 @@ case $ENVIRONMENT in
                 echo "ℹ️  Continuing with self-signed certificates"
                 echo "   To set up SSL later, run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
             fi
-        fi
-        
-        # Export SSL_ENABLED for docker-compose
-        if [ "$SSL_ENABLED" = true ]; then
-            echo "🔒 Enabling SSL in Docker containers"
-            export SSL_ENABLED=true
-        else
-            export SSL_ENABLED=false
         fi
         ;;
     *)
@@ -122,26 +112,30 @@ case $ENVIRONMENT in
 esac
 
 # Handle rebuild flag
+BUILD_IMAGES=false
 BUILD_FLAGS=""
-COMPOSE_FLAGS=""
+UP_FLAGS=""
 
 if [ "$REBUILD" = "rebuild" ] || [ "$REBUILD" = "true" ]; then
     echo "🔄 Forcing rebuild of all images (explicit rebuild flag)"
-    BUILD_FLAGS="--build --no-cache"
-    COMPOSE_FLAGS="--force-recreate"
+    BUILD_IMAGES=true
+    BUILD_FLAGS="--no-cache"
+    UP_FLAGS="--force-recreate"
 elif [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "production" ]; then
     echo "🔄 Production deployment - always rebuilding without cache to ensure latest changes"
-    BUILD_FLAGS="--build --no-cache"
+    BUILD_IMAGES=true
+    BUILD_FLAGS="--no-cache"
     if [ "$FORCE_RECREATE" = "true" ]; then
         echo "🔄 Forcing container recreation (FORCE_RECREATE=true)"
-        COMPOSE_FLAGS="--force-recreate"
+        UP_FLAGS="--force-recreate"
     fi
 else
-    BUILD_FLAGS="--build"
+    BUILD_IMAGES=true
+    BUILD_FLAGS=""
 fi
 
 echo "📦 Docker Compose files: $COMPOSE_FILE"
-echo "🔒 SSL Enabled: $SSL_ENABLED"
+echo "🔒 SSL: auto-detected at runtime by nginx"
 echo "🔧 Environment file: $ENV_FILE"
 
 # Load environment variables for this script
@@ -169,9 +163,25 @@ echo
 echo "🏗️  Building and starting services..."
 export ENV_FILE
 export DOMAIN_NAME
-export SSL_ENABLED
 export COMPOSE_FILE
-docker-compose up -d $BUILD_FLAGS $COMPOSE_FLAGS
+
+# Build images if needed
+if [ "$BUILD_IMAGES" = "true" ]; then
+    echo "🔧 Building images with: docker-compose build $BUILD_FLAGS"
+    if [ -n "$BUILD_FLAGS" ]; then
+        docker-compose build $BUILD_FLAGS
+    else
+        docker-compose build
+    fi
+fi
+
+# Start services
+echo "🔧 Starting services with: docker-compose up -d $UP_FLAGS"
+if [ -n "$UP_FLAGS" ]; then
+    docker-compose up -d $UP_FLAGS
+else
+    docker-compose up -d
+fi
 
 echo
 echo "⏳ Waiting for services to be healthy..."
@@ -191,26 +201,21 @@ fi
 echo
 echo "🔍 Health Checks:"
 
-# Test nginx (using configured HTTPS port)
+# Test nginx (HTTPS first, then HTTP fallback)
 HTTPS_PORT=${NGINX_HTTPS_PORT:-8443}
+HTTP_PORT=${NGINX_HTTP_PORT:-8080}
 if curl -k -f -s https://localhost:$HTTPS_PORT/health > /dev/null; then
-    echo "✅ Nginx proxy: Healthy"
-    
-    # SSL Certificate validation if SSL is enabled
-    if [ "$SSL_ENABLED" = true ]; then
-        echo "🔍 Validating SSL certificate..."
-        
-        # Check certificate expiration
-        if echo | openssl s_client -servername "$DOMAIN_NAME" -connect localhost:$HTTPS_PORT 2>/dev/null | openssl x509 -noout -checkend 2592000 2>/dev/null; then
-            echo "✅ SSL certificate: Valid and not expiring soon"
-        else
-            echo "⚠️  SSL certificate: May be expired or expiring soon"
-        fi
-        
-        # Check certificate details
-        echo "📋 SSL certificate details:"
-        echo | openssl s_client -servername "$DOMAIN_NAME" -connect localhost:$HTTPS_PORT 2>/dev/null | openssl x509 -noout -subject -dates 2>/dev/null | head -2
+    echo "✅ Nginx proxy (HTTPS): Healthy"
+    echo "🔍 Validating SSL certificate..."
+    if echo | openssl s_client -servername "$DOMAIN_NAME" -connect localhost:$HTTPS_PORT 2>/dev/null | openssl x509 -noout -checkend 2592000 2>/dev/null; then
+        echo "✅ SSL certificate: Valid and not expiring soon"
+    else
+        echo "⚠️  SSL certificate: May be expired or expiring soon"
     fi
+    echo "📋 SSL certificate details:"
+    echo | openssl s_client -servername "$DOMAIN_NAME" -connect localhost:$HTTPS_PORT 2>/dev/null | openssl x509 -noout -subject -dates 2>/dev/null | head -2
+elif curl -f -s http://localhost:$HTTP_PORT/health > /dev/null; then
+    echo "✅ Nginx proxy (HTTP): Healthy"
 else
     echo "❌ Nginx proxy: Unhealthy"
 fi
