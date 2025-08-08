@@ -86,3 +86,4 @@ cert.pem
 camera_streaming/calibration
 tests/
 .cursor/
+.flake8
