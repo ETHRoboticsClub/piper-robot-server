@@ -111,8 +111,10 @@ ssl-renew: ## Renew SSL certificates
 clean: ## Clean up containers and certificates
 	@echo "🧹 Cleaning up containers..."
 	docker-compose down --volumes --remove-orphans
-	@echo "🗑️  Removing unused Docker resources..."
-	docker system prune -f
+	@echo "🗑️  Removing tactile-teleop images..."
+	@docker images | grep tactile-teleop | awk '{print $$3}' | xargs -r docker rmi -f 2>/dev/null || true
+	@echo "🧽 Cleaning up unused Docker resources..."
+	docker system prune -f --volumes
 
 status: ## Show deployment status
 	@echo "📊 Deployment Status:"

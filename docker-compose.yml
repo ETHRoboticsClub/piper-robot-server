@@ -14,9 +14,6 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - tactile-network
-    # For development/debugging - expose FastAPI directly
-    # ports:
-    #   - "8000:8000"
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
       interval: 30s
