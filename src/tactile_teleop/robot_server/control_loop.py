@@ -7,6 +7,7 @@ from typing import List
 import numpy as np
 
 from tactile_teleop.config import TelegripConfig
+
 from .core.geometry import convert_to_robot_convention, xyzrpy2transform
 from .core.robot_interface import RobotInterface
 from .inputs.base import ControlGoal, EventType
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ArmState:
     arm_name: str
-    initial_transform: np.ndarray = xyzrpy2transform(0.19, 0.0, 0.2, 0, 0, 0)
+    initial_transform: np.ndarray = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
     origin_transform: np.ndarray | None = None
     target_transform: np.ndarray | None = None
     gripper_closed: bool = True
@@ -78,15 +79,21 @@ class ControlLoop:
 
         # Left arm IK
         if left_arm.target_transform is not None:
-            ik_solution = self.robot_interface.solve_ik("left", left_arm.target_transform, visualize=self.visualize)
+            ik_solution, is_collision = self.robot_interface.solve_ik(
+                "left", left_arm.target_transform, visualize=self.visualize
+            )
             current_gripper = 0.0 if left_arm.gripper_closed else 0.07
-            self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
+            if not is_collision:
+                self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
 
         # Right arm IK
         if right_arm.target_transform is not None:
-            ik_solution = self.robot_interface.solve_ik("right", right_arm.target_transform, visualize=self.visualize)
+            ik_solution, is_collision = self.robot_interface.solve_ik(
+                "right", right_arm.target_transform, visualize=self.visualize
+            )
             current_gripper = 0.0 if right_arm.gripper_closed else 0.07
-            self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
+            if not is_collision:
+                self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
 
         ik_time = time.perf_counter() - start_time_ik
 

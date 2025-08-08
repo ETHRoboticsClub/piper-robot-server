@@ -1,34 +1,25 @@
 import asyncio
-import json
 import logging
 import os
-import pickle
 from typing import Optional
 
 import cv2
-import numpy as np
 from dotenv import load_dotenv
 from livekit import rtc
 
 from tactile_teleop.livekit_auth import generate_token
+from tactile_teleop.robot_server.camera_streaming import DualCameraOpenCV
 
 # Load environment variables from the project root
 load_dotenv()
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 
-WIDTH = 640
-HEIGHT = 480
-DEFAULT_CAM_INDEX = int(os.getenv("CAMERA_INDEX", 6))
-
 
 class CameraStreamer:
     def __init__(
         self,
-        cam_indices: dict[str, int],
-        calibration_file: str,
-        cap_backend: int = cv2.CAP_V4L2,
-        cam_name="robot0-birds-eye",
+        camera_config: dict,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -36,20 +27,14 @@ class CameraStreamer:
         self._publisher_task: Optional[asyncio.Task] = None
         self.cam_loop_task: Optional[asyncio.Task] = None
 
-        # Camera indices and backend
-        self.cam_index_left = cam_indices["left"]
-        self.cam_index_right = cam_indices["right"]
-        self.cap_backend = cap_backend
-        self.calibration_file = calibration_file
-        self.cap_left = None
-        self.cap_right = None
+        if camera_config["type"] == "dual_camera_opencv":
+            self.camera = DualCameraOpenCV(camera_config)
+        else:
+            raise ValueError(f"Unsupported camera type: {camera_config['type']}")
 
-        # Load calibration data
-        self.load_calibration_data()
-
-        # Video source - use calibrated frame dimensions (side-by-side)
-        self.source = rtc.VideoSource(self.frame_width * 2, self.frame_height)
-        self.track = rtc.LocalVideoTrack.create_video_track(cam_name, self.source)
+        # Video source - use cropped frame dimensions (side-by-side)
+        self.source = rtc.VideoSource(self.camera.cropped_width * 2, self.camera.frame_height)
+        self.track = rtc.LocalVideoTrack.create_video_track("robot0-birds-eye", self.source)
         self.room: Optional[rtc.Room] = None
 
         # Track publish options
@@ -62,100 +47,26 @@ class CameraStreamer:
             ),
             video_codec=rtc.VideoCodec.H264,
         )
+        # Necessary for cropping out monocular zones
+        self.edge_crop_pixels = self.camera.edge_crop_pixels
 
-    def load_calibration_data(self):
-        """Load calibration data from file."""
-        self.logger.info(f"Loading calibration data from {self.calibration_file}...")
+    def crop_stereo_edges(self, frame_left, frame_right):
+        """
+        Crop the outer edges of stereo frames to remove monocular zones.
+        Removes left edge of left frame and right edge of right frame.
+        """
+        # Crop left edge from left frame (remove leftmost pixels)
+        cropped_left = frame_left[:, self.edge_crop_pixels :]
 
-        try:
-            if self.calibration_file.endswith(".pkl"):
-                with open(self.calibration_file, "rb") as f:
-                    calib_data = pickle.load(f)
-            elif self.calibration_file.endswith(".json"):
-                with open(self.calibration_file, "r") as f:
-                    json_data = json.load(f)
-                # Convert lists back to numpy arrays
-                calib_data = {}
-                for key, value in json_data.items():
-                    if isinstance(value, list) and key not in ["checkerboard_size"]:
-                        calib_data[key] = np.array(value)
-                    else:
-                        calib_data[key] = value
-            else:
-                raise ValueError("Calibration file must be .pkl or .json")
+        # Crop right edge from right frame (remove rightmost pixels)
+        cropped_right = frame_right[:, : -self.edge_crop_pixels]
 
-            # Extract calibration parameters
-            self.camera_matrix_left = calib_data["camera_matrix_left"]
-            self.dist_coeffs_left = calib_data["dist_coeffs_left"]
-            self.camera_matrix_right = calib_data["camera_matrix_right"]
-            self.dist_coeffs_right = calib_data["dist_coeffs_right"]
-
-            self.rotation_matrix = calib_data["rotation_matrix"]
-            self.translation_vector = calib_data["translation_vector"]
-
-            self.rect_left = calib_data["rect_left"]
-            self.rect_right = calib_data["rect_right"]
-            self.proj_left_scaled = calib_data["proj_left_scaled"]
-            self.proj_right_scaled = calib_data["proj_right_scaled"]
-            self.Q = calib_data["Q"]
-
-            # These are the key rectification maps for fast processing
-            self.map_left = calib_data["map_left"]
-            self.map_right = calib_data["map_right"]
-
-            self.frame_width = calib_data["frame_width"]
-            self.frame_height = calib_data["frame_height"]
-            self.physical_baseline_mm = calib_data["physical_baseline_mm"]
-            self.target_ipd_mm = calib_data["target_ipd_mm"]
-            self.baseline_scale_factor = calib_data["baseline_scale_factor"]
-
-            self.logger.info("✓ Calibration data loaded successfully")
-            self.logger.info(f"  Frame size: {self.frame_width}x{self.frame_height}")
-            baseline_info = f"  Baseline scaling: {self.physical_baseline_mm}mm → " f"{self.target_ipd_mm}mm"
-            self.logger.info(baseline_info)
-
-        except Exception as e:
-            self.logger.error(f"Error loading calibration data: {e}")
-            raise RuntimeError(f"Failed to load calibration data: {e}")
-
-    def _init_camera(self):
-        """Initialize camera capture - called in the correct async context."""
-        if self.cap_left is not None and self.cap_right is not None:
-            return  # Already initialized
-
-        # Left camera capture
-        self.cap_left = cv2.VideoCapture(index=self.cam_index_left, apiPreference=self.cap_backend)
-        self.cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-        self.cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-        self.cap_left.set(cv2.CAP_PROP_FPS, 30)
-        self.cap_left.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-        if not self.cap_left.isOpened():
-            raise RuntimeError(f"Failed to open left camera at index {self.cam_index_left}")
-
-        # Right camera capture
-        self.cap_right = cv2.VideoCapture(index=self.cam_index_right, apiPreference=self.cap_backend)
-        self.cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-        self.cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-        self.cap_right.set(cv2.CAP_PROP_FPS, 30)
-        self.cap_right.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-        if not self.cap_right.isOpened():
-            raise RuntimeError(f"Failed to open right camera at index {self.cam_index_right}")
-
-        self.logger.info(f"Cameras initialized at {self.frame_width}x{self.frame_height}")
-
-    def rectify_frames(self, frame_left, frame_right):
-        """Apply calibration rectification to stereo frames."""
-        # Apply rectification mapping using precomputed maps
-        rect_left = cv2.remap(frame_left, self.map_left[0], self.map_left[1], cv2.INTER_LINEAR)
-        rect_right = cv2.remap(frame_right, self.map_right[0], self.map_right[1], cv2.INTER_LINEAR)
-        return rect_left, rect_right
+        return cropped_left, cropped_right
 
     def _start_camera_loop(self):
         self.is_running = True
         self.cam_loop_task = asyncio.create_task(self._camera_loop())
-        camera_info = f"Started camera capture loop for cameras " f"{self.cam_index_left} and {self.cam_index_right}"
+        camera_info = f"Started camera capture loop for camera {type(self.camera)}"
         self.logger.info(camera_info)
 
     async def _stop_camera_loop(self):
@@ -166,61 +77,32 @@ class CameraStreamer:
                 await self.cam_loop_task  # wait for the loop to finish
             except asyncio.CancelledError:
                 pass
-        if self.cap_left:
-            self.cap_left.release()
-        if self.cap_right:
-            self.cap_right.release()
-        self.logger.info("Stopped Camera Stream")
+        self.camera.stop_camera()
 
     async def _camera_loop(self):
         """Continuous loop to capture, rectify, and stream camera frames."""
         # Initialize cameras in the correct async context
-        self._init_camera()
-        debug_info = (
-            f"Camera loop starting, is_running={self.is_running}, "
-            f"cap_left.isOpened()={self.cap_left.isOpened()}, "
-            f"cap_right.isOpened()={self.cap_right.isOpened()}"
-        )
-        self.logger.debug(debug_info)
+        self.camera.init_camera()
 
         while self.is_running:
             try:
-                loop = asyncio.get_event_loop()
-                # Read from both cameras
-                ret_left, frame_left = await loop.run_in_executor(None, self.cap_left.read)
-                ret_right, frame_right = await loop.run_in_executor(None, self.cap_right.read)
-
-                if not ret_left or not ret_right:
-                    self.logger.warning("Can't receive frame (stream end?). Retrying...")
-                    await asyncio.sleep(0.1)
-                    continue
+                frame_left, frame_right = await self.camera.capture_frame()
             except Exception as e:
                 self.logger.error(f"Error reading from cameras: {e}")
                 await asyncio.sleep(0.1)
                 continue
-
             try:
-                # Apply calibration rectification
-                rect_left, rect_right = self.rectify_frames(frame_left, frame_right)
+                # Crop outer edges to remove monocular zones
+                cropped_left, cropped_right = self.crop_stereo_edges(frame_left, frame_right)
 
-                # Convert BGR to RGB
-                frame_rgb_left = cv2.cvtColor(rect_left, cv2.COLOR_BGR2RGB)
-                frame_rgb_right = cv2.cvtColor(rect_right, cv2.COLOR_BGR2RGB)
-
-                # Ensure frames are correct size
-                if frame_rgb_left.shape[:2] != (self.frame_height, self.frame_width):
-                    frame_rgb_left = cv2.resize(frame_rgb_left, (self.frame_width, self.frame_height))
-                if frame_rgb_right.shape[:2] != (self.frame_height, self.frame_width):
-                    frame_rgb_right = cv2.resize(frame_rgb_right, (self.frame_width, self.frame_height))
-
-                # Concatenate rectified left and right frames width-wise
-                concat_frame = cv2.hconcat([frame_rgb_left, frame_rgb_right])
+                # Concatenate cropped left and right frames width-wise
+                concat_frame = cv2.hconcat([cropped_left, cropped_right])
 
                 # Push concatenated frame to livekit track
                 frame_bytes = concat_frame.tobytes()
                 video_frame = rtc.VideoFrame(
-                    self.frame_width * 2,
-                    self.frame_height,
+                    self.camera.cropped_width * 2,
+                    self.camera.frame_height,
                     rtc.VideoBufferType.RGB24,
                     frame_bytes,
                 )

@@ -5,9 +5,10 @@ Loads configuration from config.yaml file with fallback to default values.
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import cv2
 import yaml
 
 from tactile_teleop.utils import get_absolute_path, get_robot_server_path
@@ -23,6 +24,7 @@ DEFAULT_CONFIG = {
         "right_arm": {"name": "Right Arm", "enabled": True},
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
+        "ground_height": 0.0,
     },
     "control": {
         "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -37,6 +39,16 @@ DEFAULT_CONFIG = {
         "position_error_threshold": 0.001,
         "hysteresis_threshold": 0.01,
         "movement_penalty_weight": 0.01,
+    },
+    "stereo_video": {
+        "dual_camera_opencv": {
+            "type": "dual_camera_opencv",
+            "edge_crop_pixels": 60,
+            "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
+            "cam_index_left": 4,
+            "cam_index_right": 6,
+            "cap_backend": cv2.CAP_V4L2,
+        }
     },
 }
 
@@ -110,6 +122,7 @@ KEYFILE = _config_data["ssl"]["keyfile"]
 
 VR_TO_ROBOT_SCALE = _config_data["robot"]["vr_to_robot_scale"]
 SEND_INTERVAL = _config_data["robot"]["send_interval"]
+GROUND_HEIGHT = _config_data["robot"]["ground_height"]
 
 POS_STEP = _config_data["control"]["keyboard"]["pos_step"]
 ANGLE_STEP = _config_data["control"]["keyboard"]["angle_step"]
@@ -178,6 +191,7 @@ class TelegripConfig:
     # Robot settings
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
+    ground_height: float = GROUND_HEIGHT
 
     # Control flags
     enable_pybullet: bool = True
@@ -216,11 +230,7 @@ class TelegripConfig:
     vr_viewer_debug: bool = True
 
     # Stereo Video Configuration
-    physical_baseline: float = 92.0
-    target_ipd: float = 62.0
-    eye_separation: float = 0.62
-    focal_length: float = 500
-    calibration_file: str = str(get_robot_server_path("camera_streaming/calibration/stereo_calibration_vr_SUCCESS_20250803_043704.pkl"))
+    camera_config: dict = field(default_factory=lambda: _config_data["stereo_video"])
 
     @property
     def ssl_files_exist(self) -> bool:

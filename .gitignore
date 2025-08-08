@@ -82,3 +82,8 @@ cython_debug/
 # SSL Certificates
 key.pem
 cert.pem
+
+camera_streaming/calibration
+tests/
+.cursor/
+.flake8

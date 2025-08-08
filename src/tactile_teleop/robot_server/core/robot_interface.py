@@ -1,5 +1,5 @@
 """
-Robot interface module for the SO100 teleoperation system.
+Robot interface module.
 Provides a clean wrapper around robot devices with safety checks and convenience methods.
 """
 
@@ -14,6 +14,7 @@ import numpy as np
 import pinocchio as pin
 
 from tactile_teleop.config import NUM_JOINTS, TelegripConfig
+
 from .geometry import transform2pose, xyzrpy2transform
 from .kinematics import Arm_IK
 from .piper import Piper, PiperConfig
@@ -84,8 +85,8 @@ class RobotInterface:
         self.max_general_errors = 8  # Allow more general errors before full disconnection
 
         # Initial positions for safe shutdown - restored original values
-        self.initial_left_arm = np.array([0, 0, 0, 0, 0, 0, 0])
-        self.initial_right_arm = np.array([0, 0, 0, 0, 0, 0, 0])
+        self.initial_left_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
+        self.initial_right_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
 
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
@@ -147,9 +148,10 @@ class RobotInterface:
     def setup_kinematics(self):
         """Setup kinematics solvers using PyBullet components for both arms."""
         # Setup solvers for both arms
+        ground_height = self.config.ground_height
         for arm in ["left", "right"]:
-            self.ik_solvers[arm] = Arm_IK(self.config.urdf_path)
-        logger.info("Kinematics solvers initialized for both arms")
+            self.ik_solvers[arm] = Arm_IK(self.config.urdf_path, ground_height)
+        logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 
     def get_end_effector_transform(self, arm: str) -> np.ndarray:
         """Get end effector pose for specified arm.
@@ -161,13 +163,13 @@ class RobotInterface:
             return (
                 self.left_robot.get_end_effector_transform()
                 if self.left_robot
-                else xyzrpy2transform(0.19, 0.0, 0.2, 0.0, 0.0, 0.0)
+                else xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
             )
         elif arm == "right":
             return (
                 self.right_robot.get_end_effector_transform()
                 if self.right_robot
-                else xyzrpy2transform(0.19, 0.0, 0.2, 0.0, 0.0, 0.0)
+                else xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
             )
         else:
             raise ValueError(f"Invalid arm: {arm}")
@@ -175,14 +177,13 @@ class RobotInterface:
     def solve_ik(self, arm: str, target_pose: np.ndarray, visualize: bool) -> np.ndarray:
         """Solve inverse kinematics for specified arm."""
         position, quaternion = transform2pose(target_pose)
-        # TODO: check if it is xyzw or wxyz
-        quat_wxyz = np.array([quaternion[3], quaternion[0], quaternion[1], quaternion[2]])
+        # transform2pose returns XYZW, but pin.Quaternion expects WXYZ
         target = pin.SE3(
-            pin.Quaternion(quat_wxyz),
+            pin.Quaternion(quaternion[3], quaternion[0], quaternion[1], quaternion[2]),
             position,
         )
-        sol_q, tau_ff, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
-        return sol_q
+        sol_q, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
+        return sol_q, is_collision
 
     def update_arm_angles(self, arm: str, joint_angles: np.ndarray):
         """Update joint angles for specified arm."""
@@ -274,11 +275,21 @@ class RobotInterface:
         """Return both arms to initial position."""
         logger.info("⏪ Returning robot to initial position...")
 
-        try:
-            # Set initial positions - no direction mapping
-            self.left_arm_angles = self.initial_left_arm.copy()
-            self.right_arm_angles = self.initial_right_arm.copy()
+        left_arm_angles, left_collision = self.solve_ik("left", self.initial_left_arm, visualize=True)
+        right_arm_angles, right_collision = self.solve_ik("right", self.initial_right_arm, visualize=True)
 
+        if left_collision:
+            logger.error("❌ Left arm collision detected during return to initial position, setting angles to zero")
+            self.left_arm_angles = np.zeros(NUM_JOINTS)
+
+        if right_collision:
+            logger.error("❌ Right arm collision detected during return to initial position, setting angles to zero")
+            self.right_arm_angles = np.zeros(NUM_JOINTS)
+
+        self.left_arm_angles = np.concatenate((left_arm_angles, [0.0]))
+        self.right_arm_angles = np.concatenate((right_arm_angles, [0.0]))
+
+        try:
             # Send commands for a few iterations to ensure movement
             for i in range(10):
                 self.send_command()
