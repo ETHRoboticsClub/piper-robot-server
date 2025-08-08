@@ -5,6 +5,10 @@
 
 set -e
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
 DOMAIN_NAME=${1:-teleop.tactilerobotics.ai}
 EMAIL=${2:-zeno@tactilerobotics.ai}
 STAGING=${3:-false}
@@ -111,12 +115,12 @@ setup_renewal() {
     echo "🔄 Setting up automatic certificate renewal..."
     
     # Create renewal hook script
-    sudo tee /etc/letsencrypt/renewal-hooks/deploy/docker-restart.sh > /dev/null << 'EOF'
+    sudo tee /etc/letsencrypt/renewal-hooks/deploy/docker-restart.sh > /dev/null << EOF
 #!/bin/bash
 # Restart Docker containers after certificate renewal
 
 # Restart nginx container to reload certificates
-cd /home/zhamers/tactile-teleop
+cd "$PROJECT_ROOT"
 if docker-compose ps nginx | grep -q "Up"; then
     echo "Restarting nginx container after certificate renewal..."
     docker-compose restart nginx
