@@ -7,8 +7,10 @@ LABEL description="Nginx reverse proxy for Tactile Teleop"
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy generated nginx configuration
-COPY src/tactile_teleop/web_server/nginx/nginx-tactile-teleop.conf /etc/nginx/conf.d/tactile-teleop.conf
+# Copy nginx configuration templates for runtime generation
+RUN mkdir -p /etc/nginx/templates
+COPY src/tactile_teleop/web_server/nginx/nginx.conf.dev.template /etc/nginx/templates/
+COPY src/tactile_teleop/web_server/nginx/nginx.conf.prod.template /etc/nginx/templates/
 
 # Create nginx user directories and SSL directories
 RUN mkdir -p /var/cache/nginx /var/log/nginx /etc/ssl/certs /etc/ssl/private && \
