@@ -51,7 +51,13 @@ services:
       fastapi:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'curl', '-k', '-f', 'https://localhost/health']
+      test:
+        [
+          'CMD',
+          'sh',
+          '-c',
+          'curl -k -f https://localhost/health || curl -f http://localhost/health',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
