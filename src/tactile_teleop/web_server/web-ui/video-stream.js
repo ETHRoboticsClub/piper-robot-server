@@ -401,9 +401,6 @@ AFRAME.registerComponent('stereo', {
     } else {
       object3D.layers.set(data.eye === 'left' ? 1 : 2);
     }
-    else{
-      object3D.layers.set(data.eye === 'left' ? 1:2);
-    }
     
     // Log stereo layer info
     if (data.eye !== oldData.eye) {
