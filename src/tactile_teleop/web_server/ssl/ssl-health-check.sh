@@ -70,30 +70,8 @@ echo "🔗 Validating certificate chain..."
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 ROOT_CERT_PATH="$SCRIPT_DIR/isrgrootx1.pem"
 
-# Check if local root certificate exists
-if [ ! -f "$ROOT_CERT_PATH" ]; then
-    echo "⚠️  Local root certificate not found at $ROOT_CERT_PATH"
-    echo "    Downloading Let's Encrypt root certificate with verification..."
-    
-    # Download with proper CA verification
-    if curl -s --cacert /etc/ssl/certs/ca-certificates.crt \
-            https://letsencrypt.org/certs/isrgrootx1.pem \
-            -o "$ROOT_CERT_PATH.tmp"; then
-        
-        # Verify the downloaded certificate is valid
-        if openssl x509 -in "$ROOT_CERT_PATH.tmp" -noout -subject | grep -q "ISRG Root X1"; then
-            mv "$ROOT_CERT_PATH.tmp" "$ROOT_CERT_PATH"
-            echo "✅ Root certificate downloaded and verified"
-        else
-            rm -f "$ROOT_CERT_PATH.tmp"
-            echo "❌ Downloaded certificate validation failed"
-            echo "⚠️  Skipping certificate chain validation"
-        fi
-    else
-        echo "❌ Failed to download root certificate"
-        echo "⚠️  Skipping certificate chain validation"
-    fi
-fi
+# Note: Local root certificate provides additional validation but is optional
+# The system CA bundle (/etc/ssl/certs) is the primary trust anchor
 
 # Perform certificate chain validation if root certificate is available
 if [ -f "$ROOT_CERT_PATH" ]; then
