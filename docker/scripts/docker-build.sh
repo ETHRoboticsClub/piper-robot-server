@@ -124,8 +124,13 @@ esac
 # Handle rebuild flag
 BUILD_FLAGS=""
 if [ "$REBUILD" = "rebuild" ] || [ "$REBUILD" = "true" ]; then
-    echo "🔄 Forcing rebuild of all images"
+    echo "🔄 Forcing rebuild of all images (explicit rebuild flag)"
     BUILD_FLAGS="--build --no-cache"
+elif [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "production" ]; then
+    echo "🔄 Production deployment - always rebuilding without cache to ensure latest changes"
+    BUILD_FLAGS="--build --no-cache"
+else
+    BUILD_FLAGS="--build"
 fi
 
 echo "📦 Docker Compose files: $COMPOSE_FILE"
