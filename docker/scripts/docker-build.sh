@@ -122,22 +122,19 @@ if [ "$REBUILD" = "rebuild" ] || [ "$REBUILD" = "true" ]; then
     BUILD_FLAGS="--no-cache"
     UP_FLAGS="--force-recreate"
 elif [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "production" ]; then
-    echo "🔄 Production deployment - always rebuilding without cache to ensure latest changes"
+    echo "🔄 Production deployment"
     
     # Complete Docker cleanup for production to ensure fresh build
     echo "🧹 Cleaning up existing containers and images..."
-    docker-compose down --volumes --remove-orphans 2>/dev/null || true
-    
-    # Remove project-specific images
-    echo "🗑️  Removing tactile-teleop images..."
-    docker images | grep tactile-teleop | awk '{print $3}' | xargs -r docker rmi -f 2>/dev/null || true
+    docker-compose down --remove-orphans 2>/dev/null || true
     
     # Clean up unused Docker resources
     echo "🧽 Cleaning up unused Docker resources..."
-    docker system prune -f --volumes 2>/dev/null || true
+    docker system prune -f 2>/dev/null || true
     
     BUILD_IMAGES=true
-    BUILD_FLAGS="--no-cache"
+    # BUILD_FLAGS="--no-cache" #uncomment if production always has to rebuild without cache
+    BUILD_FLAGS=""
     if [ "$FORCE_RECREATE" = "true" ]; then
         echo "🔄 Forcing container recreation (FORCE_RECREATE=true)"
         UP_FLAGS="--force-recreate"
