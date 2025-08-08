@@ -123,12 +123,19 @@ esac
 
 # Handle rebuild flag
 BUILD_FLAGS=""
+COMPOSE_FLAGS=""
+
 if [ "$REBUILD" = "rebuild" ] || [ "$REBUILD" = "true" ]; then
     echo "🔄 Forcing rebuild of all images (explicit rebuild flag)"
     BUILD_FLAGS="--build --no-cache"
+    COMPOSE_FLAGS="--force-recreate"
 elif [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "production" ]; then
     echo "🔄 Production deployment - always rebuilding without cache to ensure latest changes"
     BUILD_FLAGS="--build --no-cache"
+    if [ "$FORCE_RECREATE" = "true" ]; then
+        echo "🔄 Forcing container recreation (FORCE_RECREATE=true)"
+        COMPOSE_FLAGS="--force-recreate"
+    fi
 else
     BUILD_FLAGS="--build"
 fi
@@ -157,17 +164,14 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
-# Configure nginx based on environment variables
-echo "⚙️  Configuring nginx with $ENV_FILE..."
-IN_DOCKER=true SSL_ENABLED=$SSL_ENABLED ./src/tactile_teleop/web_server/nginx/configure-nginx.sh "$ENV_FILE" docker
-
 echo
 # Build and start services
 echo "🏗️  Building and starting services..."
 export ENV_FILE
 export DOMAIN_NAME
 export SSL_ENABLED
-COMPOSE_FILE=$COMPOSE_FILE docker-compose up -d $BUILD_FLAGS
+export COMPOSE_FILE
+docker-compose up -d $BUILD_FLAGS $COMPOSE_FLAGS
 
 echo
 echo "⏳ Waiting for services to be healthy..."
@@ -176,6 +180,13 @@ sleep 10
 # Check service status
 echo "📊 Service Status:"
 docker-compose ps
+
+# If no services are running, show logs for debugging
+if ! docker-compose ps | grep -q "Up"; then
+    echo
+    echo "🔍 No services appear to be running. Showing recent logs for debugging:"
+    docker-compose logs --tail=20
+fi
 
 echo
 echo "🔍 Health Checks:"

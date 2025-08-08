@@ -54,11 +54,11 @@ deploy-dev: ## Deploy development environment (HTTP only)
 
 deploy-prod: ## Deploy production with SSL auto-detection
 	@echo "🚀 Deploying production environment with SSL auto-detection..."
-	./docker/scripts/docker-build.sh prod
+	FORCE_RECREATE=true ./docker/scripts/docker-build.sh prod
 
 deploy-prod-ssl: ## Deploy production with forced SSL setup
 	@echo "🚀 Deploying production environment with automatic SSL setup..."
-	AUTO_SSL=true ./docker/scripts/docker-build.sh prod
+	AUTO_SSL=true FORCE_RECREATE=true ./docker/scripts/docker-build.sh prod
 
 # Direct/Bare-metal Deployments
 setup-direct: ## Generate configs for direct deployment
