@@ -21,8 +21,8 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /etc/ssl/certs /etc/ssl/private && 
 COPY src/tactile_teleop/web_server/web-ui /usr/share/nginx/html
 
 # Copy Docker-specific nginx validation script
-COPY docker/scripts/nginx-docker-entrypoint.sh /docker-entrypoint.d/99-ssl-setup.sh
-RUN chmod +x /docker-entrypoint.d/99-ssl-setup.sh
+COPY docker/scripts/nginx-docker-entrypoint.sh /docker-entrypoint.d/nginx-and-ssl-setup.sh
+RUN chmod +x /docker-entrypoint.d/nginx-and-ssl-setup.sh
 
 EXPOSE 80 443
 

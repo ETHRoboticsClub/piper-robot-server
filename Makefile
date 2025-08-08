@@ -121,12 +121,15 @@ status: ## Show deployment status
 		docker-compose ps; \
 		echo ""; \
 		echo "🔍 Health Checks:"; \
-		if curl -k -f -s https://localhost:8443/health > /dev/null 2>&1; then \
+		HTTP_PORT=$$(docker-compose ps | grep nginx | grep -o '0\.0\.0\.0:[0-9]*->80' | cut -d':' -f2 | cut -d'-' -f1 || echo "8080"); \
+		HTTPS_PORT=$$(docker-compose ps | grep nginx | grep -o '0\.0\.0\.0:[0-9]*->443' | cut -d':' -f2 | cut -d'-' -f1 || echo "8443"); \
+		echo "Detected ports - HTTP: $$HTTP_PORT, HTTPS: $$HTTPS_PORT"; \
+		if curl -k -f -s https://localhost:$$HTTPS_PORT/health > /dev/null 2>&1; then \
 			echo "✅ HTTPS endpoint: Healthy"; \
 		else \
 			echo "❌ HTTPS endpoint: Unhealthy"; \
 		fi; \
-		if curl -f -s http://localhost:8080/health > /dev/null 2>&1; then \
+		if curl -f -s http://localhost:$$HTTP_PORT/health > /dev/null 2>&1; then \
 			echo "✅ HTTP endpoint: Healthy"; \
 		else \
 			echo "❌ HTTP endpoint: Unhealthy"; \

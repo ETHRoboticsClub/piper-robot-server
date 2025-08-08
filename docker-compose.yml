@@ -61,7 +61,7 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
-    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+    command: /bin/sh -c "/docker-entrypoint.d/nginx-and-ssl-setup.sh && (while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;')"
 
 networks:
   tactile-network:
