@@ -64,7 +64,7 @@ case $ENVIRONMENT in
             echo
             
             # Auto setup for CI/CD or if explicitly requested
-            if [[ "$AUTO_SSL" == "true" ]]; then
+            if [ "$AUTO_SSL" = "true" ]; then
                 echo "🤖 Auto-setting up Let's Encrypt SSL certificates for $DOMAIN_NAME (AUTO_SSL=true)"
                 REPLY="y"
             else
