@@ -4,7 +4,7 @@ services:
   fastapi:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/fastapi.dockerfile
     container_name: tactile-teleop-api
     restart: unless-stopped
     env_file:
@@ -36,12 +36,16 @@ services:
     env_file:
       - ${ENV_FILE:-development.env} # Domain and deployment configuration
       - .env # API keys and secrets
+    environment:
+      - SSL_ENABLED=${SSL_ENABLED:-false}
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
     ports:
       - '${NGINX_HTTP_PORT:-8080}:80' # HTTP
       - '${NGINX_HTTPS_PORT:-8443}:443' # HTTPS
     volumes:
-      # Certbot certificates and challenges
-      - ./certbot/conf:/etc/letsencrypt:ro
+      # Let's Encrypt certificates (direct mount from system)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Certbot challenges for renewal
       - ./certbot/www:/var/www/certbot:ro
     depends_on:
       fastapi:
@@ -53,19 +57,6 @@ services:
       retries: 3
     restart: unless-stopped
     command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
-
-  certbot:
-    container_name: certbot
-    image: certbot/certbot
-    networks:
-      - tactile-network
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    restart: unless-stopped
-    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;" # 💡
-    depends_on:
-      - nginx
 
 networks:
   tactile-network:

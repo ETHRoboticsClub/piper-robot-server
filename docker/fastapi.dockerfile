@@ -9,12 +9,18 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV CONDA_ENV_NAME=tactile-teleop
 
-# Install system dependencies
+# Install system dependencies including OpenGL for OpenCV
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     build-essential \
     curl \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directory

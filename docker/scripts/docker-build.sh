@@ -26,6 +26,7 @@ case $ENVIRONMENT in
     "dev"|"development")
         echo "🔧 Building for development environment"
         COMPOSE_FILE="docker-compose.yml:docker-compose.override.yml"
+        SSL_ENABLED=false
         ;;
     "prod"|"production")
         echo "🚀 Building for production environment"
@@ -35,19 +36,32 @@ case $ENVIRONMENT in
         echo
         echo "🔒 Checking SSL certificate configuration..."
         
+        # Set domain configuration
+        DOMAIN_NAME=${DOMAIN_NAME:-teleop.tactilerobotics.ai}
+        EMAIL=${LETSENCRYPT_EMAIL:-zeno@tactilerobotics.ai}
+        AUTO_SSL=${AUTO_SSL:-false}
+        
         SSL_ENABLED=false
-        if [ -f "ssl/cert.pem" ] && [ -f "ssl/key.pem" ]; then
-            echo "✅ Trusted SSL certificates found in ssl/ directory"
-            SSL_ENABLED=true
-        else
-            echo "⚠️  No trusted SSL certificates found - using self-signed certificates"
+        
+        # Check for Let's Encrypt certificates
+        if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
+            echo "✅ Let's Encrypt certificates found for $DOMAIN_NAME"
+            
+            # Check certificate validity (not expiring in next 30 days)
+            if openssl x509 -in "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" -noout -checkend 2592000 2>/dev/null; then
+                echo "✅ Certificate is valid and not expiring soon"
+                SSL_ENABLED=true
+            else
+                echo "⚠️  Let's Encrypt certificate is expired or expiring soon"
+                SSL_ENABLED=true  # Still enable SSL, nginx will show the expired cert warning
+            fi
+        fi
+        
+        # If no valid certificates found, offer to set up Let's Encrypt
+        if [ "$SSL_ENABLED" = false ]; then
+            echo "⚠️  No valid SSL certificates found - will use self-signed certificates"
             echo "   This will cause browser security warnings"
             echo
-            
-            # Check if domain is configured for Let's Encrypt
-            DOMAIN_NAME=${DOMAIN_NAME:-teleop.tactilerobotics.ai}
-            EMAIL=${LETSENCRYPT_EMAIL:-zeno@tactilerobotics.ai}
-            AUTO_SSL=${AUTO_SSL:-false}
             
             # Auto setup for CI/CD or if explicitly requested
             if [[ "$AUTO_SSL" == "true" ]]; then
@@ -65,23 +79,25 @@ case $ENVIRONMENT in
                 docker-compose down 2>/dev/null || true
                 
                 # Run Let's Encrypt setup
-                if ./docker/scripts/setup-letsencrypt.sh "$DOMAIN_NAME" "$EMAIL"; then
+                if ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh "$DOMAIN_NAME" "$EMAIL"; then
                     echo "✅ SSL certificates obtained successfully!"
                     SSL_ENABLED=true
                 else
                     echo "❌ SSL certificate setup failed. Continuing with self-signed certificates."
-                    echo "   You can manually run: ./docker/scripts/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
+                    echo "   You can manually run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
                 fi
             else
                 echo "ℹ️  Continuing with self-signed certificates"
-                echo "   To set up SSL later, run: ./docker/scripts/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
+                echo "   To set up SSL later, run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
             fi
         fi
         
-        # Add SSL compose file if certificates are available
+        # Export SSL_ENABLED for docker-compose
         if [ "$SSL_ENABLED" = true ]; then
-            echo "🔒 Enabling trusted SSL certificates in Docker Compose"
-            COMPOSE_FILE="docker-compose.yml:docker-compose.ssl.yml"
+            echo "🔒 Enabling SSL in Docker containers"
+            export SSL_ENABLED=true
+        else
+            export SSL_ENABLED=false
         fi
         ;;
     *)
@@ -113,6 +129,7 @@ if [ "$REBUILD" = "rebuild" ] || [ "$REBUILD" = "true" ]; then
 fi
 
 echo "📦 Docker Compose files: $COMPOSE_FILE"
+echo "🔒 SSL Enabled: $SSL_ENABLED"
 echo "🔧 Environment file: $ENV_FILE"
 
 # Load environment variables for this script
@@ -137,13 +154,14 @@ fi
 
 # Configure nginx based on environment variables
 echo "⚙️  Configuring nginx with $ENV_FILE..."
-./docker/scripts/configure-nginx-docker.sh "$ENV_FILE"
+IN_DOCKER=true SSL_ENABLED=$SSL_ENABLED ./src/tactile_teleop/web_server/nginx/configure-nginx.sh "$ENV_FILE" docker
 
 echo
 # Build and start services
 echo "🏗️  Building and starting services..."
 export ENV_FILE
 export DOMAIN_NAME
+export SSL_ENABLED
 COMPOSE_FILE=$COMPOSE_FILE docker-compose up -d $BUILD_FLAGS
 
 echo
@@ -161,6 +179,22 @@ echo "🔍 Health Checks:"
 HTTPS_PORT=${NGINX_HTTPS_PORT:-8443}
 if curl -k -f -s https://localhost:$HTTPS_PORT/health > /dev/null; then
     echo "✅ Nginx proxy: Healthy"
+    
+    # SSL Certificate validation if SSL is enabled
+    if [ "$SSL_ENABLED" = true ]; then
+        echo "🔍 Validating SSL certificate..."
+        
+        # Check certificate expiration
+        if echo | openssl s_client -servername "$DOMAIN_NAME" -connect localhost:$HTTPS_PORT 2>/dev/null | openssl x509 -noout -checkend 2592000 2>/dev/null; then
+            echo "✅ SSL certificate: Valid and not expiring soon"
+        else
+            echo "⚠️  SSL certificate: May be expired or expiring soon"
+        fi
+        
+        # Check certificate details
+        echo "📋 SSL certificate details:"
+        echo | openssl s_client -servername "$DOMAIN_NAME" -connect localhost:$HTTPS_PORT 2>/dev/null | openssl x509 -noout -subject -dates 2>/dev/null | head -2
+    fi
 else
     echo "❌ Nginx proxy: Unhealthy"
 fi

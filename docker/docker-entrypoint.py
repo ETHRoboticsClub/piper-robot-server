@@ -9,9 +9,11 @@ sys.path.insert(0, '/app/src')
 
 from tactile_teleop.web_server.main import FastAPIServer
 from tactile_teleop.config import config as global_config
+from tactile_teleop.web_server.main import logger as web_logger
 from dataclasses import replace
 import asyncio
 import logging
+import uvicorn  
 
 async def main():
     """Start FastAPI server in Docker container mode."""
@@ -39,15 +41,11 @@ async def main():
     # Create server in proxy mode but force HTTP mode (bypass SSL logic)
     server = FastAPIServer(cfg, behind_proxy=True, uds_path=None)
     
-    # Override the server start method to force HTTP mode on port 8000
-    import uvicorn
-    from tactile_teleop.web_server.main import logger as web_logger
-    
     # Custom HTTP-only server configuration
     uvicorn_config = uvicorn.Config(
         app=server.app,
         host=cfg.host_ip,
-        port=cfg.https_port,  # Use port 8000 for HTTP
+        port=cfg.https_port,  # Use port 8000 for HTTP  (faster inter docker communication)
         ssl_keyfile=None,     # Force HTTP mode
         ssl_certfile=None,    # Force HTTP mode
         log_level=cfg.log_level.lower(),

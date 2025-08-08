@@ -12,7 +12,7 @@ echo
 CURRENT_USER=${USER:-$(whoami)}
 PROJECT_ROOT=$(pwd)
 SERVER_NAME=${1:-localhost}
-USE_SSL=${2:-true}  # Second parameter to enable SSL
+SSL_ENABLED=${2:-true}  # Second parameter to enable SSL
 
 # Find conda environment path
 if [ -z "$CONDA_PREFIX" ]; then
@@ -50,7 +50,7 @@ echo "Detected configuration:"
 echo "  User: $CURRENT_USER"
 echo "  Project root: $PROJECT_ROOT"
 echo "  Server name: $SERVER_NAME"
-echo "  Use SSL: $USE_SSL"
+echo "  SSL Enabled: $SSL_ENABLED"
 echo "  Conda environment: $CONDA_ENV_PATH"
 echo
 
@@ -58,12 +58,11 @@ echo
 DEPLOY_DIR="$PROJECT_ROOT/src/tactile_teleop/web_server/nginx"
 mkdir -p "$DEPLOY_DIR"
 
-# Generate nginx configuration using configure-nginx.sh
+# Generate nginx configuration files and systemd service
 echo "Generating nginx configuration..."
 cd "$PROJECT_ROOT/src/tactile_teleop/web_server"
-DOMAIN_NAME="$SERVER_NAME" USE_SSL=false ./configure-nginx.sh "$PROJECT_ROOT/development.env"
+DOMAIN_NAME="$SERVER_NAME" SSL_ENABLED="$SSL_ENABLED" ./nginx/configure-nginx.sh "$PROJECT_ROOT/development.env" direct
 
-# Generate systemd service
 echo "Generating systemd service..."
 sed -e "s|{{USER}}|$CURRENT_USER|g" \
     -e "s|{{PROJECT_ROOT}}|$PROJECT_ROOT|g" \
@@ -71,38 +70,36 @@ sed -e "s|{{USER}}|$CURRENT_USER|g" \
     "$DEPLOY_DIR/tactile-teleop.service.template" > "$DEPLOY_DIR/tactile-teleop.service"
 
 echo "Configuration files generated in: $DEPLOY_DIR/"
+
+# Print deployment instructions
 echo
 echo "=== Deployment Instructions ==="
 echo
 echo "1. Install nginx:"
 echo "   sudo apt update && sudo apt install nginx"
 echo
-echo "2. Deploy nginx configuration:"
+echo "2. Deploy tactile-teleop nginx configuration:"
 echo "   sudo cp $DEPLOY_DIR/nginx-tactile-teleop.conf /etc/nginx/sites-available/tactile-teleop"
 echo "   sudo ln -sf /etc/nginx/sites-available/tactile-teleop /etc/nginx/sites-enabled/"
 echo "   sudo nginx -t"
 echo
-echo "3. Deploy systemd service:"
+echo "3. Allow HTTPS traffic:"
+echo "   sudo ufw allow 'Nginx Full'"
+echo "   sudo ufw delete allow 'Nginx HTTP'"
+
+echo "4. Obtain an SSL Certificate:"
+echo "   sudo certbot --nginx -d $SERVER_NAME -d www.$SERVER_NAME"
+echo
+echo "5. Deploy systemd service:"
 echo "   sudo cp $DEPLOY_DIR/tactile-teleop.service /etc/systemd/system/"
 echo "   sudo systemctl daemon-reload"
 echo "   sudo systemctl enable tactile-teleop"
 echo
-if [ "$USE_SSL" = "true" ]; then
-    echo "4. Generate Let's Encrypt SSL certificates:"
-    echo "   sudo bash src/tactile_teleop/web_server/register_ssl.sh \\"
-    echo "     --domains \"$SERVER_NAME www.$SERVER_NAME\" \\"
-    echo "     --email \"admin@$SERVER_NAME\" \\"
-    echo "     --data-path \"/etc/letsencrypt\" \\"
-    echo "     --staging 0"
-else
-    echo "4. SSL certificates: Skipped (HTTP deployment)"
-fi
-echo
-echo "5. Start services:"
+echo "6. Start services:"
 echo "   sudo systemctl start tactile-teleop"
 echo "   sudo systemctl restart nginx"
 echo
-echo "6. Verify deployment:"
+echo "7. Verify deployment:"
 echo "   sudo systemctl status tactile-teleop"
 echo "   sudo systemctl status nginx"
 echo "   curl -k https://$SERVER_NAME/health"
