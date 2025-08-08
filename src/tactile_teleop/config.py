@@ -5,9 +5,10 @@ Loads configuration from config.yaml file with fallback to default values.
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import cv2
 import yaml
 
 from tactile_teleop.utils import get_absolute_path, get_robot_server_path
@@ -40,8 +41,14 @@ DEFAULT_CONFIG = {
         "movement_penalty_weight": 0.01,
     },
     "stereo_video": {
-        "edge_crop_pixels": 60,
-        "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
+        "dual_camera_opencv": {
+            "type": "dual_camera_opencv",
+            "edge_crop_pixels": 60,
+            "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
+            "cam_index_left": 4,
+            "cam_index_right": 6,
+            "cap_backend": cv2.CAP_V4L2,
+        }
     },
 }
 
@@ -223,8 +230,7 @@ class TelegripConfig:
     vr_viewer_debug: bool = True
 
     # Stereo Video Configuration
-    calibration_file: str = _config_data["stereo_video"]["calibration_file"]
-    edge_crop_pixels: int = _config_data["stereo_video"]["edge_crop_pixels"]
+    camera_config: dict = field(default_factory=lambda: _config_data["stereo_video"])
 
     @property
     def ssl_files_exist(self) -> bool:

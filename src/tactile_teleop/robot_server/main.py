@@ -15,15 +15,12 @@ from tactile_teleop.robot_server.inputs.vr_controllers import VRControllerInputP
 logger = logging.getLogger(__name__)
 
 
-def _camera_process_wrapper(cam_infices: dict[str, int], calibration_file: str, room_name: str, participant_name: str):
+def _camera_process_wrapper(room_name: str, participant_name: str, camera_config: dict):
     """Wrapper to run camera streamer in a separate process with asyncio"""
 
     async def run_camera():
         camera_streamer = CameraStreamer(
-            cam_indices=cam_infices,
-            calibration_file=calibration_file,
-            cam_name="robot0-birds-eye",
-            edge_crop_pixels=config.edge_crop_pixels,
+            camera_config=camera_config,
         )
         await camera_streamer.start(room_name, participant_name)
 
@@ -55,8 +52,7 @@ async def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
-    parser.add_argument("--camera-index-left", type=int, default=0, help="Camera index to use")
-    parser.add_argument("--camera-index-right", type=int, default=0, help="Camera index to use")
+    parser.add_argument("--camera-type", default="dual_camera_opencv", help="Camera config")
     parser.add_argument(
         "--log-level",
         default="info",
@@ -71,8 +67,6 @@ async def main():
 
     robot_enabled = not args.no_robot
     visualize = args.vis
-    camera_index_left = args.camera_index_left if args.camera_index_left is not None else 0
-    camera_index_right = args.camera_index_right if args.camera_index_right is not None else 0
 
     logger.info("Initializing server components...")
 
@@ -86,10 +80,9 @@ async def main():
         camera_process = mp.Process(
             target=_camera_process_wrapper,
             args=(
-                dict(left=camera_index_left, right=camera_index_right),
-                config.calibration_file,
                 config.livekit_room,
                 config.camera_streamer_participant,
+                config.camera_config[args.camera_type],
             ),
         )
         camera_process.start()
@@ -129,7 +122,7 @@ def main_cli():
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("👋 telegrip stopped")
+        logging.info("👋 tactile teleop stopped")
 
 
 if __name__ == "__main__":
