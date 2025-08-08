@@ -2,6 +2,7 @@
 
 # SSL Health Check and Renewal Script
 # Checks SSL certificate status and handles renewal if needed
+# Uses local root certificate for secure validation to prevent MITM attacks
 
 set -e
 
@@ -64,15 +65,92 @@ fi
 
 # Validate certificate chain
 echo "🔗 Validating certificate chain..."
-if openssl verify -CAfile <(curl -s https://letsencrypt.org/certs/isrgrootx1.pem) "$CERT_PATH" >/dev/null 2>&1; then
-    echo "✅ Certificate chain is valid"
+
+# Use local root certificate for secure validation
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+ROOT_CERT_PATH="$SCRIPT_DIR/isrgrootx1.pem"
+
+# Check if local root certificate exists
+if [ ! -f "$ROOT_CERT_PATH" ]; then
+    echo "⚠️  Local root certificate not found at $ROOT_CERT_PATH"
+    echo "    Downloading Let's Encrypt root certificate with verification..."
+    
+    # Download with proper CA verification
+    if curl -s --cacert /etc/ssl/certs/ca-certificates.crt \
+            https://letsencrypt.org/certs/isrgrootx1.pem \
+            -o "$ROOT_CERT_PATH.tmp"; then
+        
+        # Verify the downloaded certificate is valid
+        if openssl x509 -in "$ROOT_CERT_PATH.tmp" -noout -subject | grep -q "ISRG Root X1"; then
+            mv "$ROOT_CERT_PATH.tmp" "$ROOT_CERT_PATH"
+            echo "✅ Root certificate downloaded and verified"
+        else
+            rm -f "$ROOT_CERT_PATH.tmp"
+            echo "❌ Downloaded certificate validation failed"
+            echo "⚠️  Skipping certificate chain validation"
+        fi
+    else
+        echo "❌ Failed to download root certificate"
+        echo "⚠️  Skipping certificate chain validation"
+    fi
+fi
+
+# Perform certificate chain validation if root certificate is available
+if [ -f "$ROOT_CERT_PATH" ]; then
+    # Check if local root certificate is still valid (not expired)
+    ROOT_EXPIRY=$(openssl x509 -in "$ROOT_CERT_PATH" -noout -enddate | cut -d= -f2)
+    ROOT_EXPIRY_SECONDS=$(date -d "$ROOT_EXPIRY" +%s 2>/dev/null || echo 0)
+    CURRENT_SECONDS=$(date +%s)
+    
+    if [ $ROOT_EXPIRY_SECONDS -gt $CURRENT_SECONDS ]; then
+        if openssl verify -CAfile "$ROOT_CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
+            echo "✅ Certificate chain is valid"
+        else
+            echo "⚠️  Certificate chain validation failed with local root"
+            
+            # Additional verification using system CA bundle as fallback
+            echo "🔄 Trying fallback verification with system CA bundle..."
+            if openssl verify -CApath /etc/ssl/certs "$CERT_PATH" >/dev/null 2>&1; then
+                echo "✅ Certificate validated against system CA bundle"
+            else
+                echo "❌ Certificate validation failed with both methods"
+            fi
+        fi
+    else
+        echo "⚠️  Local root certificate has expired ($(date -d "$ROOT_EXPIRY" +%Y-%m-%d))"
+        echo "🔄 Using system CA bundle for validation..."
+        if openssl verify -CApath /etc/ssl/certs "$CERT_PATH" >/dev/null 2>&1; then
+            echo "✅ Certificate validated against system CA bundle"
+            echo "💡 Consider updating local root certificate"
+        else
+            echo "❌ Certificate validation failed"
+        fi
+    fi
 else
-    echo "⚠️  Certificate chain validation failed"
+    echo "⚠️  Certificate chain validation skipped (no root certificate available)"
+    echo "🔄 Using system CA bundle for validation..."
+    if openssl verify -CApath /etc/ssl/certs "$CERT_PATH" >/dev/null 2>&1; then
+        echo "✅ Certificate validated against system CA bundle"
+    else
+        echo "❌ Certificate validation failed"
+    fi
 fi
 
 # Check certificate details
 echo "📋 Certificate details:"
 openssl x509 -in "$CERT_PATH" -noout -subject -issuer -dates
+
+# Display root certificate status if available
+if [ -f "$ROOT_CERT_PATH" ]; then
+    ROOT_EXPIRY=$(openssl x509 -in "$ROOT_CERT_PATH" -noout -enddate | cut -d= -f2)
+    ROOT_DAYS_LEFT=$(( ($(date -d "$ROOT_EXPIRY" +%s) - $(date +%s)) / 86400 ))
+    echo "📋 Local root certificate expires in $ROOT_DAYS_LEFT days ($ROOT_EXPIRY)"
+    
+    # Warn if root certificate is approaching expiration (within 1 year)
+    if [ $ROOT_DAYS_LEFT -lt 365 ]; then
+        echo "⚠️  Local root certificate expires soon - consider updating"
+    fi
+fi
 
 echo
 echo "🎉 SSL health check completed"
