@@ -87,6 +87,13 @@ fi
 
 # Determine SSL configuration using SSL_ENABLED environment variable
 # Priority: SSL_ENABLED env var > auto-detection
+# Check if certificates are present (avoid redundant file system calls)
+if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
+    CERTS_PRESENT="true"
+else
+    CERTS_PRESENT="false"
+fi
+
 if [ "${SSL_ENABLED:-}" = "true" ]; then
     USE_SSL="true"
     echo "🔒 SSL explicitly enabled via SSL_ENABLED environment variable"
@@ -95,7 +102,7 @@ elif [ "${SSL_ENABLED:-}" = "false" ]; then
     echo "🔓 SSL explicitly disabled via SSL_ENABLED environment variable"
 else
     # Auto-detect SSL if certificates are available (when SSL_ENABLED not explicitly set)
-    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
+    if [ "$CERTS_PRESENT" = "true" ]; then
         echo "🔍 Auto-detected Let's Encrypt certificates, enabling SSL"
         USE_SSL="true"
     else
@@ -108,7 +115,7 @@ echo "Environment variables:"
 echo "  ENV_FILE: $ENV_FILE"
 echo "  DEPLOYMENT_MODE: $DEPLOYMENT_MODE"
 echo "  DOMAIN_NAME: $DOMAIN_NAME"
-echo "  USE_SSL: $USE_SSL (auto-detected: $([ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && echo "yes" || echo "no"))"
+echo "  USE_SSL: $USE_SSL (auto-detected: $([ "$CERTS_PRESENT" = "true" ] && echo "yes" || echo "no"))"
 echo "  FASTAPI_BACKEND: $FASTAPI_BACKEND"
 echo "  WEB_ROOT: $WEB_ROOT"
 echo "  TEMPLATES: $NGINX_DIR"
@@ -155,7 +162,7 @@ validate_ssl_certificates() {
         echo "🔒 Validating SSL certificates..."
         
         # Check for Let's Encrypt certificates
-        if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem" ]; then
+        if [ "$CERTS_PRESENT" = "true" ]; then
             echo "✅ Using Let's Encrypt certificates for $DOMAIN_NAME"
             
             # Verify certificate is not expired
