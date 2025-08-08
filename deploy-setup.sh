@@ -12,6 +12,7 @@ echo
 CURRENT_USER=${USER:-$(whoami)}
 PROJECT_ROOT=$(pwd)
 SERVER_NAME=${1:-localhost}
+SSL_ENABLED=${2:-true}  # Second parameter to enable SSL
 
 # Find conda environment path
 if [ -z "$CONDA_PREFIX" ]; then
@@ -49,20 +50,19 @@ echo "Detected configuration:"
 echo "  User: $CURRENT_USER"
 echo "  Project root: $PROJECT_ROOT"
 echo "  Server name: $SERVER_NAME"
+echo "  SSL Enabled: $SSL_ENABLED"
 echo "  Conda environment: $CONDA_ENV_PATH"
 echo
 
-# Create deployment directory
-DEPLOY_DIR="$PROJECT_ROOT/deployment"
+# Create nginx directory
+DEPLOY_DIR="$PROJECT_ROOT/src/tactile_teleop/web_server/nginx"
 mkdir -p "$DEPLOY_DIR"
 
-# Generate nginx configuration
+# Generate nginx configuration files and systemd service
 echo "Generating nginx configuration..."
-sed -e "s|{{PROJECT_ROOT}}|$PROJECT_ROOT|g" \
-    -e "s|{{SERVER_NAME}}|$SERVER_NAME|g" \
-    "$DEPLOY_DIR/nginx-tactile-teleop.conf.template" > "$DEPLOY_DIR/nginx-tactile-teleop.conf"
+cd "$PROJECT_ROOT/src/tactile_teleop/web_server"
+DOMAIN_NAME="$SERVER_NAME" SSL_ENABLED="$SSL_ENABLED" ./nginx/configure-nginx.sh "$PROJECT_ROOT/development.env" direct
 
-# Generate systemd service
 echo "Generating systemd service..."
 sed -e "s|{{USER}}|$CURRENT_USER|g" \
     -e "s|{{PROJECT_ROOT}}|$PROJECT_ROOT|g" \
@@ -70,37 +70,36 @@ sed -e "s|{{USER}}|$CURRENT_USER|g" \
     "$DEPLOY_DIR/tactile-teleop.service.template" > "$DEPLOY_DIR/tactile-teleop.service"
 
 echo "Configuration files generated in: $DEPLOY_DIR/"
+
+# Print deployment instructions
 echo
 echo "=== Deployment Instructions ==="
 echo
 echo "1. Install nginx:"
 echo "   sudo apt update && sudo apt install nginx"
 echo
-echo "2. Deploy nginx configuration:"
+echo "2. Deploy tactile-teleop nginx configuration:"
 echo "   sudo cp $DEPLOY_DIR/nginx-tactile-teleop.conf /etc/nginx/sites-available/tactile-teleop"
 echo "   sudo ln -sf /etc/nginx/sites-available/tactile-teleop /etc/nginx/sites-enabled/"
 echo "   sudo nginx -t"
 echo
-echo "3. Deploy systemd service:"
+echo "3. Allow HTTPS traffic:"
+echo "   sudo ufw allow 'Nginx Full'"
+echo "   sudo ufw delete allow 'Nginx HTTP'"
+
+echo "4. Obtain an SSL Certificate:"
+echo "   sudo certbot --nginx -d $SERVER_NAME -d www.$SERVER_NAME"
+echo
+echo "5. Deploy systemd service:"
 echo "   sudo cp $DEPLOY_DIR/tactile-teleop.service /etc/systemd/system/"
 echo "   sudo systemctl daemon-reload"
 echo "   sudo systemctl enable tactile-teleop"
 echo
-echo "4. Generate and install SSL certificates:"
-echo "   cd $PROJECT_ROOT"
-echo "   source $HOME/miniconda3/etc/profile.d/conda.sh && conda activate tactile-teleop"
-echo "   python -c \"from tactile_teleop.config import global_config; global_config.ensure_ssl_certificates()\""
-echo "   sudo mkdir -p /etc/ssl/certs /etc/ssl/private"
-echo "   sudo cp ~/.tactile_teleop/ssl/cert.pem /etc/ssl/certs/tactile-teleop.crt"
-echo "   sudo cp ~/.tactile_teleop/ssl/key.pem /etc/ssl/private/tactile-teleop.key"
-echo "   sudo chmod 644 /etc/ssl/certs/tactile-teleop.crt"
-echo "   sudo chmod 600 /etc/ssl/private/tactile-teleop.key"
-echo
-echo "5. Start services:"
+echo "6. Start services:"
 echo "   sudo systemctl start tactile-teleop"
 echo "   sudo systemctl restart nginx"
 echo
-echo "6. Verify deployment:"
+echo "7. Verify deployment:"
 echo "   sudo systemctl status tactile-teleop"
 echo "   sudo systemctl status nginx"
 echo "   curl -k https://$SERVER_NAME/health"

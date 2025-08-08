@@ -4,19 +4,14 @@ services:
   fastapi:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/fastapi.dockerfile
     container_name: tactile-teleop-api
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-development.env} # Domain and deployment configuration
-      - .env # API keys and secrets (create from .env.example)
+      - .env # API keys and secrets
     environment:
       - PYTHONUNBUFFERED=1
-    volumes:
-      # Mount SSL certificates if you want to use custom ones
-      - ssl_certs:/home/appuser/.tactile_teleop/ssl
-      # Mount for development (optional - uncomment for live code updates)
-      # - ./src:/app/src
     networks:
       - tactile-network
     # For development/debugging - expose FastAPI directly
@@ -30,41 +25,38 @@ services:
       start_period: 40s
 
   nginx:
+    container_name: tactile-teleop-nginx
     build:
       context: .
       dockerfile: docker/nginx.dockerfile
       args:
         DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
-    container_name: tactile-teleop-nginx
-    restart: unless-stopped
+    networks:
+      - tactile-network
     env_file:
       - ${ENV_FILE:-development.env} # Domain and deployment configuration
-      - .env # API keys and secrets (create from .env.example)
+      - .env # API keys and secrets
+    environment:
+      - SSL_ENABLED=${SSL_ENABLED:-false}
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
     ports:
       - '${NGINX_HTTP_PORT:-8080}:80' # HTTP
       - '${NGINX_HTTPS_PORT:-8443}:443' # HTTPS
     volumes:
-      - ssl_certs:/etc/ssl/certs:ro
-      - ssl_keys:/etc/ssl/private:ro
-      # Mount custom SSL certificates (default: off)
-      # - ./ssl/cert.pem:/etc/ssl/certs/tactile-teleop.crt:ro
-      # - ./ssl/key.pem:/etc/ssl/private/tactile-teleop.key:ro
+      # Let's Encrypt certificates (direct mount from system)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Certbot challenges for renewal
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       fastapi:
         condition: service_healthy
-    networks:
-      - tactile-network
     healthcheck:
       test: ['CMD', 'curl', '-k', '-f', 'https://localhost/health']
       interval: 30s
       timeout: 10s
       retries: 3
-
-volumes:
-  ssl_certs:
-    driver: local
-  ssl_keys:
-    driver: local
+    restart: unless-stopped
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
 
 networks:
   tactile-network:
