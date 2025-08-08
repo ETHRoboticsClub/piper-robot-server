@@ -1,11 +1,14 @@
 # Tactile Teleop Unified Deployment System
 # Consolidated deployment interface using docker-build.sh and deploy-setup.sh
 
-.PHONY: help deploy-dev deploy-prod deploy-prod-ssl setup-direct deploy-direct ssl-setup ssl-test ssl-renew clean status logs restart-nginx
+.PHONY: help bootstrap deploy-dev deploy-prod deploy-prod-ssl setup-direct deploy-direct ssl-setup ssl-test ssl-renew clean status logs restart-nginx
 
 help: ## Show available commands
 	@echo "Tactile Teleop Deployment Commands"
 	@echo "=================================="
+	@echo ""
+	@echo "Server Setup:"
+	@echo "  bootstrap DOMAIN=... EMAIL=...  Install prerequisites (Docker, make, etc.)"
 	@echo ""
 	@echo "Docker Deployments (Primary):"
 	@echo "  deploy-dev              Deploy development environment (HTTP)"
@@ -28,10 +31,21 @@ help: ## Show available commands
 	@echo "  restart-nginx           Restart nginx service"
 	@echo ""
 	@echo "Examples:"
+	@echo "  sudo make bootstrap DOMAIN=yourdomain.com EMAIL=admin@yourdomain.com"
 	@echo "  make deploy-dev"
 	@echo "  make deploy-prod"
 	@echo "  make ssl-setup DOMAIN=teleop.tactilerobotics.ai EMAIL=admin@tactilerobotics.ai"
 	@echo "  make setup-direct DOMAIN=teleop.tactilerobotics.ai"
+
+# Server Setup
+bootstrap: ## Install prerequisites (Docker, make, certbot, etc.)
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		echo "Error: Bootstrap must be run as root"; \
+		echo "Usage: sudo make bootstrap DOMAIN=yourdomain.com EMAIL=admin@yourdomain.com"; \
+		exit 1; \
+	fi
+	@echo "🚀 Installing server prerequisites..."
+	./bootstrap-server.sh "$(DOMAIN)" "$(EMAIL)"
 
 # Docker Deployments (Primary)
 deploy-dev: ## Deploy development environment (HTTP only)

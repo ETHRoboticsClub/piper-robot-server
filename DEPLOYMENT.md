@@ -40,17 +40,37 @@ Internet → Nginx (HTTPS/HTTP) → FastAPI Container
 ### System Requirements
 
 - Ubuntu/Debian Linux system (tested on Ubuntu 20.04+)
-- Docker and Docker Compose installed
+- Root/sudo access for initial setup
 - Domain name pointing to your server (for SSL certificates)
 - Ports 80 and 443 accessible from the internet
 
-### Installation
+### Quick Installation (Recommended)
+
+Use the bootstrap script to install all prerequisites automatically:
 
 ```bash
-# Install Docker
-sudo apt update && sudo apt install -y docker.io docker-compose git
+# Clone repository
+git clone <repository-url> tactile-teleop && cd tactile-teleop
+
+# Install all prerequisites (Docker, make, certbot, etc.)
+sudo ./bootstrap-server.sh
+
+# Or install prerequisites and set up SSL in one step
+sudo ./bootstrap-server.sh yourdomain.com admin@yourdomain.com
+```
+
+### Manual Installation
+
+If you prefer to install manually:
+
+```bash
+# Install Docker and prerequisites
+sudo apt update && sudo apt install -y make docker.io docker-compose git certbot python3-certbot-nginx
 sudo systemctl start docker && sudo systemctl enable docker
 sudo usermod -aG docker $USER  # logout/login required
+
+# Configure firewall
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw enable
 
 # Clone repository
 git clone <repository-url> tactile-teleop && cd tactile-teleop
