@@ -2,10 +2,93 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #333;
+  background: #dbdbdb;
+  color: #2b2b2b;
   overflow-x: auto;
   min-width: 320px;
+}
+
+/* Landing screen styles */
+.landing-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2b2b2b;
+  z-index: 10001;
+}
+
+.landing-content {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px;
+  background: #2b2b2b;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.landing-title {
+  font-size: 32px;
+  font-weight: bold;
+  color: white;
+  margin-bottom: 15px;
+  line-height: 1.2;
+}
+
+.landing-subtitle {
+  font-size: 18px;
+  color: white;
+  margin-bottom: 30px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.landing-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.landing-button {
+  padding: 15px 30px;
+  border: none;
+  border-radius: 50px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 180px;
+}
+
+.landing-button.primary {
+  background: #2b2b2b;
+  color: #bfb7ff;
+  border: 2px solid #bfb7ff;
+}
+
+.landing-button.primary:hover {
+  background: rgba(191, 183, 255, 0.2);
+  color: #bfb7ff;
+  border-color: #bfb7ff;
+  transform: translateY(-2px);
+}
+
+.landing-button.secondary {
+  background: #cdff8c;
+  color: #2b2b2b;
+  border: 2px solid #cdff8c;
+}
+
+.landing-button.secondary:hover {
+  background: #b8e877;
+  border-color: #b8e877;
+  color: #2b2b2b;
+  transform: translateY(-2px);
 }
 
 /* Desktop-only interface */
@@ -16,11 +99,8 @@ body {
   width: 100%;
   height: 100vh;
   z-index: 10000;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: #dbdbdb;
   padding: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow-x: auto;
   overflow-y: auto;
   min-width: 320px;
@@ -39,28 +119,51 @@ body {
 .desktop-title {
   font-size: 24px;
   font-weight: bold;
-  color: #2c3e50;
+  color: #2b2b2b;
   margin-bottom: 10px;
 }
 
 .desktop-subtitle {
   font-size: 14px;
-  color: #7f8c8d;
+  color: #2b2b2b;
+  opacity: 0.7;
   margin-bottom: 20px;
+}
+
+/* Back button */
+.back-button {
+  background: white;
+  border: 2px solid #cdff8c;
+  color: #2b2b2b;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  margin-bottom: 20px;
+}
+
+.back-button:hover {
+  background: #bfb7ff;
+  border-color: #bfb7ff;
+  color: white;
+  transform: translateY(-1px);
 }
 
 /* Status indicators */
 .status-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: white;
+  border: 2px solid #cdff8c;
+  color: #2b2b2b;
   padding: 20px;
   border-radius: 12px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 16px rgba(205, 255, 140, 0.1);
   margin: 20px 0;
 }
 
 .status-section h2 {
-  color: white;
+  color: #2b2b2b;
   margin-bottom: 1rem;
   font-size: 1.2rem;
 }
@@ -84,21 +187,24 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background-color: #ff4444;
+  background-color: #dbdbdb;
   transition: background-color 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  border: 2px solid #2b2b2b;
 }
 
 .status-indicator.connected {
-  background-color: #44ff44;
+  background-color: #cdff8c;
+  border-color: #cdff8c;
 }
 
 .status-label {
   font-size: 14px;
   font-weight: 500;
+  color: #2b2b2b;
 }
 
 /* Control toggles */
@@ -107,45 +213,48 @@ body {
   align-items: center;
   gap: 10px;
   padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 2px solid #3498db;
+  background: white;
+  border: 2px solid #cdff8c;
   border-radius: 25px;
   cursor: pointer;
   transition: all 0.3s ease;
   font-weight: 500;
+  color: #2b2b2b;
 }
 
 .control-toggle:hover {
-  background: #3498db;
+  background: #bfb7ff;
+  border-color: #bfb7ff;
   color: white;
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+  box-shadow: 0 5px 15px rgba(191, 183, 255, 0.3);
 }
 
 .control-toggle.active {
-  background: #27ae60;
-  border-color: #27ae60;
-  color: white;
+  background: #cdff8c;
+  border-color: #cdff8c;
+  color: #2b2b2b;
 }
 
 /* Keyboard help section */
 .keyboard-help {
-  background: rgba(255, 255, 255, 0.9);
+  background: white;
+  border: 2px solid #dbdbdb;
   border-radius: 10px;
   padding: 20px;
   margin-top: 20px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 15px rgba(43, 43, 43, 0.1);
   transition: all 0.3s ease;
 }
 
 .keyboard-help.active {
-  background: rgba(76, 175, 80, 0.1);
-  border: 2px solid #4caf50;
-  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
+  background: white;
+  border: 2px solid #cdff8c;
+  box-shadow: 0 4px 20px rgba(205, 255, 140, 0.3);
 }
 
 .keyboard-help.active .help-title {
-  color: #2e7d32;
+  color: #2b2b2b;
 }
 
 .keyboard-help-header {
@@ -180,7 +289,7 @@ body {
   font-size: 18px;
   font-weight: bold;
   margin-bottom: 15px;
-  color: #2c3e50;
+  color: #2b2b2b;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -194,9 +303,9 @@ body {
 
 .help-column h4 {
   margin: 0 0 10px 0;
-  color: #34495e;
+  color: #2b2b2b;
   font-size: 16px;
-  border-bottom: 2px solid #3498db;
+  border-bottom: 2px solid #cdff8c;
   padding-bottom: 5px;
 }
 
@@ -211,32 +320,34 @@ body {
 }
 
 .key {
-  background: #ecf0f1;
+  background: #dbdbdb;
   padding: 2px 6px;
   border-radius: 3px;
   font-family: monospace;
   font-size: 12px;
   font-weight: bold;
-  color: #2c3e50;
+  color: #2b2b2b;
 }
 
 .key-desc {
-  color: #7f8c8d;
+  color: #2b2b2b;
+  opacity: 0.7;
   font-size: 13px;
 }
 
 /* VR Instructions Section */
 .vr-instructions-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: white;
+  border: 2px solid #cdff8c;
+  color: #2b2b2b;
   padding: 20px;
   border-radius: 12px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 16px rgba(205, 255, 140, 0.1);
   margin: 20px 0;
 }
 
 .vr-instructions-section h2 {
-  color: white;
+  color: #2b2b2b;
   margin: 0 0 15px 0;
   font-size: 1.3em;
   font-weight: 600;
@@ -262,10 +373,9 @@ body {
 
 .instruction-item {
   padding: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #dbdbdb;
   border-radius: 8px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #cdff8c;
 }
 
 .instruction-item strong {
@@ -278,6 +388,28 @@ body {
 @media (max-width: 768px) {
   body {
     min-width: 280px;
+  }
+
+  .landing-content {
+    max-width: 90%;
+    padding: 30px 20px;
+  }
+
+  .landing-title {
+    font-size: 24px;
+  }
+
+  .landing-subtitle {
+    font-size: 16px;
+  }
+
+  .landing-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .landing-button {
+    min-width: 100%;
   }
 
   .desktop-interface {
@@ -326,6 +458,17 @@ body {
   .restart-button {
     width: 100%;
   }
+
+  .settings-button {
+    width: 45px;
+    height: 45px;
+    font-size: 18px;
+  }
+
+  .calendly-widget .calendly-inline-widget {
+    min-width: 100%;
+    height: 600px;
+  }
 }
 
 /* Hide desktop interface in VR */
@@ -352,11 +495,12 @@ a-scene {
 }
 
 .engage-btn {
-  background: linear-gradient(45deg, #4caf50, #45a049);
-  border: none;
-  color: white;
+  background: #cdff8c;
+  border: 2px solid #cdff8c;
+  color: #2b2b2b;
   padding: 12px 24px;
   font-size: 16px;
+  font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -365,17 +509,26 @@ a-scene {
 }
 
 .engage-btn:hover {
+  background: #b8e877;
+  border-color: #b8e877;
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 8px rgba(205, 255, 140, 0.3);
 }
 
 .engage-btn.disconnect {
-  background: linear-gradient(45deg, #f44336, #d32f2f);
+  background: #2b2b2b;
+  border-color: #2b2b2b;
+  color: white;
+}
+
+.engage-btn.disconnect:hover {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
 }
 
 .engagement-status {
   font-size: 14px;
-  color: white;
+  color: #2b2b2b;
   font-style: italic;
 }
 
@@ -389,8 +542,8 @@ a-scene {
   top: 20px;
   right: 20px;
   z-index: 10001;
-  background: rgba(255, 255, 255, 0.9);
-  border: 2px solid #3498db;
+  background: white;
+  border: 2px solid #cdff8c;
   border-radius: 50%;
   width: 50px;
   height: 50px;
@@ -399,16 +552,18 @@ a-scene {
   align-items: center;
   justify-content: center;
   font-size: 20px;
+  color: #2b2b2b;
   transition: all 0.3s ease;
   backdrop-filter: blur(10px);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(43, 43, 43, 0.1);
 }
 
 .settings-button:hover {
-  background: #3498db;
+  background: #bfb7ff;
+  border-color: #bfb7ff;
   color: white;
   transform: rotate(45deg);
-  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+  box-shadow: 0 4px 15px rgba(191, 183, 255, 0.3);
 }
 
 /* Settings modal */
@@ -453,7 +608,7 @@ a-scene {
 .settings-title {
   font-size: 24px;
   font-weight: bold;
-  color: #2c3e50;
+  color: #2b2b2b;
 }
 
 .close-button {
@@ -461,7 +616,8 @@ a-scene {
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #7f8c8d;
+  color: #2b2b2b;
+  opacity: 0.7;
   padding: 5px;
   border-radius: 50%;
   width: 35px;
@@ -473,8 +629,9 @@ a-scene {
 }
 
 .close-button:hover {
-  background: #e74c3c;
+  background: #2b2b2b;
   color: white;
+  opacity: 1;
 }
 
 .settings-section {
@@ -482,10 +639,10 @@ a-scene {
 }
 
 .settings-section h3 {
-  color: #34495e;
+  color: #2b2b2b;
   margin-bottom: 15px;
   font-size: 18px;
-  border-left: 4px solid #3498db;
+  border-left: 4px solid #cdff8c;
   padding-left: 10px;
 }
 
@@ -497,22 +654,23 @@ a-scene {
   display: block;
   margin-bottom: 5px;
   font-weight: 500;
-  color: #2c3e50;
+  color: #2b2b2b;
 }
 
 .form-group input {
   width: 100%;
   padding: 8px 12px;
-  border: 2px solid #bdc3c7;
+  border: 2px solid #dbdbdb;
   border-radius: 5px;
   font-size: 14px;
+  color: #2b2b2b;
   transition: border-color 0.3s ease;
   box-sizing: border-box;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #3498db;
+  border-color: #cdff8c;
 }
 
 .form-row {
@@ -528,46 +686,51 @@ a-scene {
 }
 
 .save-button {
-  background: linear-gradient(45deg, #27ae60, #2ecc71);
-  color: white;
-  border: none;
+  background: #cdff8c;
+  color: #2b2b2b;
+  border: 2px solid #cdff8c;
   padding: 12px 25px;
   border-radius: 8px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   width: 48%;
 }
 
 .save-button:hover {
+  background: #b8e877;
+  border-color: #b8e877;
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+  box-shadow: 0 4px 15px rgba(205, 255, 140, 0.3);
 }
 
 .save-button:disabled {
-  background: #95a5a6;
+  background: #dbdbdb;
+  border-color: #dbdbdb;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
 .restart-button {
-  background: linear-gradient(45deg, #f44336, #d32f2f);
+  background: #2b2b2b;
   color: white;
-  border: none;
+  border: 2px solid #2b2b2b;
   padding: 12px 25px;
   border-radius: 8px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   width: 48%;
 }
 
 .restart-button:hover {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
+  box-shadow: 0 4px 15px rgba(43, 43, 43, 0.3);
 }
 
 /* Calendly widget */
@@ -586,20 +749,7 @@ a-scene {
   overflow: hidden;
 }
 
-/* Landing Screen Styles */
-.landing-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10001;
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
+/* Landing Screen Hidden State */
 
 .landing-screen.hidden {
   opacity: 0;
@@ -607,72 +757,9 @@ a-scene {
   pointer-events: none;
 }
 
-.landing-content {
-  text-align: center;
-  color: white;
-  max-width: 600px;
-  padding: 40px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-}
+/* Duplicate landing styles removed */
 
-.landing-title {
-  font-size: 2.5rem;
-  font-weight: bold;
-  margin-bottom: 1rem;
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.landing-subtitle {
-  font-size: 1.2rem;
-  margin-bottom: 2.5rem;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1.5;
-}
-
-.landing-buttons {
-  display: flex;
-  gap: 1.5rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.landing-button {
-  padding: 1rem 2rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  min-width: 200px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-.landing-button.primary {
-  background: #4caf50;
-  color: white;
-}
-
-.landing-button.primary:hover {
-  background: #45a049;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
-}
-
-.landing-button.secondary {
-  background: #3498db;
-  color: white;
-}
-
-.landing-button.secondary:hover {
-  background: #2980b9;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
-}
+/* Duplicate styles removed */
 
 /* Back Button */
 .back-button {
