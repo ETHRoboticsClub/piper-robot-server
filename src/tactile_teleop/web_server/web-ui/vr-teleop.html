@@ -45,39 +45,6 @@
               startButton.id = 'immediate-vr-button';
               startButton.textContent = 'Start VR Experience';
 
-              // Style the button
-              Object.assign(startButton.style, {
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                padding: '20px 40px',
-                fontSize: '24px',
-                fontWeight: 'bold',
-                backgroundColor: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                zIndex: '10000',
-                boxShadow: '0 8px 20px rgba(76, 175, 80, 0.4)',
-                transition: 'all 0.3s ease',
-                fontFamily:
-                  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-              });
-
-              // Add hover effects
-              startButton.addEventListener('mouseenter', () => {
-                startButton.style.backgroundColor = '#45a049';
-                startButton.style.transform =
-                  'translate(-50%, -50%) scale(1.05)';
-              });
-
-              startButton.addEventListener('mouseleave', () => {
-                startButton.style.backgroundColor = '#4CAF50';
-                startButton.style.transform = 'translate(-50%, -50%) scale(1)';
-              });
-
               // Add click handler for VR activation
               startButton.addEventListener('click', async () => {
                 console.log(
@@ -87,7 +54,7 @@
                 try {
                   // Change button text to show loading
                   startButton.textContent = 'Loading VR Environment...';
-                  startButton.style.backgroundColor = '#ff9800';
+                  startButton.classList.add('loading');
 
                   // Load A-Frame dynamically
                   await loadAFrame();
@@ -116,7 +83,7 @@
 
                   // Restore button
                   startButton.textContent = 'Start VR Experience';
-                  startButton.style.backgroundColor = '#4CAF50';
+                  startButton.classList.remove('loading');
                   startButton.style.display = 'block';
                 }
               });
@@ -124,12 +91,24 @@
               document.body.appendChild(startButton);
               console.log('VR button created and added to page');
 
-              // Hide desktop interface for VR users
+              // Hide desktop interface for VR users but keep background styling
               const desktopInterface =
                 document.getElementById('desktopInterface');
               if (desktopInterface) {
                 desktopInterface.style.display = 'none';
               }
+
+              // Add VR-specific styling when desktop interface is hidden
+              document.body.classList.add('vr-browser');
+
+              // Create a persistent back button for VR browsers
+              const vrBackButton = document.createElement('button');
+              vrBackButton.className = 'vr-browser-back-button';
+              vrBackButton.textContent = '← Back to Main';
+              vrBackButton.onclick = () =>
+                (window.location.href = 'index.html');
+
+              document.body.appendChild(vrBackButton);
 
               // Still load start-vr.js for additional functionality (optional enhancement)
               const script = document.createElement('script');
@@ -209,6 +188,7 @@
           // Create A-Frame scene element
           const scene = document.createElement('a-scene');
           scene.setAttribute('vr-mode-ui', 'enabled: true');
+          scene.setAttribute('controller-updater', ''); 
 
           // Add passthrough setup
           const passthrough = document.createElement('a-entity');
