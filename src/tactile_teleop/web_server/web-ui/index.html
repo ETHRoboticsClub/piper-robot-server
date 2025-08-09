@@ -3,168 +3,62 @@
   <head>
     <meta charset="utf-8" />
     <title>Tactile Robotics - Immersive Remote Teleoperation</title>
-    <meta name="description" content="Tactile Robotics - Immersive Remote Teleoperation" />
+    <meta
+      name="description"
+      content="Tactile Robotics - Immersive Remote Teleoperation"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script
-      src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"
-      onload="console.log('LiveKit script loaded')"
-      onerror="console.error('Failed to load LiveKit script')"
+      type="text/javascript"
+      src="https://assets.calendly.com/assets/external/widget.js"
+      async
     ></script>
-    <script>
-      // Debug LiveKit loading
-      window.addEventListener('load', () => {
-        console.log(
-          'Window loaded. LiveKit available:',
-          typeof LiveKitClient !== 'undefined',
-        );
-        console.log(
-          'Available globals:',
-          Object.keys(window).filter((k) => k.includes('Live')),
-        );
-      });
-    </script>
-    <script src="livekit-utils.js"></script>
-    <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
-    <script src="controllers.js" defer></script>
     <script src="interface.js" defer></script>
-    <script src="video-stream.js" defer></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Landing Screen (shown first for both desktop and VR) -->
+    <div class="landing-screen" id="landingScreen">
+      <div class="landing-content">
+        <h1 class="landing-title">
+          Have you scheduled a remote teleoperation session?
+        </h1>
+        <p class="landing-subtitle">
+          To try out our technology, please book a demo session
+        </p>
+        <div class="landing-buttons">
+          <button class="landing-button primary" id="continueToDemo">
+            Yes, continue to Demo
+          </button>
+          <button class="landing-button secondary" id="bookDemo">
+            Book a free demo
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Desktop Interface -->
-    <div class="desktop-interface" id="desktopInterface">
+    <div class="desktop-interface" id="desktopInterface" style="display: none">
       <div class="desktop-header">
         <div class="desktop-title">Tactile Robotics</div>
         <div class="desktop-subtitle">
           Immersive Remote Teleoperation from Anywhere
         </div>
 
+        <!-- Back button for desktop interface -->
+        <button class="back-button" id="backToLanding" style="display: none">
+          ← Back to Start
+        </button>
+
         <!-- Calendly inline widget begin -->
-        <div class="calendly-widget">
-          <div class="calendly-inline-widget" data-url="https://calendly.com/zeno-tactilerobotics/30min?hide_gdpr_banner=1&background_color=2b2b2b&text_color=cdff8c&primary_color=bfb7ff"></div>
+        <div class="calendly-widget" id="calendlySection" style="display: none">
+          <div
+            class="calendly-inline-widget"
+            data-url="https://calendly.com/zeno-tactilerobotics/30min?hide_gdpr_banner=1&background_color=2b2b2b&text_color=cdff8c&primary_color=bfb7ff"
+          ></div>
         </div>
         <!-- Calendly inline widget end -->
-
-        <div class="status-section">
-          <h2>🤖 Robot Status </h2>
-          <div class="status-grid">
-            <div class="status-item">
-              <div class="status-indicator" id="leftArmStatus"></div>
-              <span>Left Arm</span>
-            </div>
-            <div class="status-item">
-              <div class="status-indicator" id="rightArmStatus"></div>
-              <span>Right Arm</span>
-            </div>
-            <div class="status-item">
-              <div class="status-indicator" id="vrStatus"></div>
-              <span>VR Connected</span>
-            </div>
-          </div>
-
-        <!-- VR Instructions Section -->
-        <div class="vr-instructions-section">
-          <h2>🥽 VR Remote Teleoperation Instructions</h2>
-          <div class="instructions-content">
-            <div class="instructions-image">
-              <img
-                src="media/telegrip_instructions.jpg"
-                alt="VR Controller Instructions"
-                style="
-                  max-width: 100%;
-                  height: auto;
-                  border-radius: 8px;
-                  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-                "
-              />
-            </div>
-            <div class="instructions-text">
-              <div class="instruction-item">
-                <strong>Setup:</strong> Go to
-                <span
-                  id="vrServerUrl"
-                  style="
-                    font-family: monospace;
-                    background: rgba(255, 255, 255, 0.2);
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                  "
-                  >https://loading...</span
-                >
-                in your headset's browser and click "Start"
-              </div>
-              <div class="instruction-item">
-                <strong>Grip Button:</strong> The robot arm's gripper tip will
-                track your relative controller movements as long as you hold the
-                grip button
-              </div>
-              <div class="instruction-item">
-                <strong>Controller Orientation:</strong> Roll and pitch of your
-                controller will be matched on the wrist joint of the robot arm
-              </div>
-              <div class="instruction-item">
-                <strong>Trigger Button:</strong> The gripper stays closed while
-                you hold the trigger button. Release the trigger button to open
-                the gripper.
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
-
-    <!-- A-Frame VR Scene -->
-    <a-scene vr-mode-ui="enabled: true;">
-      <!-- Passthrough setup -->
-      <a-entity webxr-passthrough="referenceSpaceType: local-floor"></a-entity>
-
-      <!-- Controllers -->
-      <a-entity id="leftHand" oculus-touch-controls="hand: left">
-        <a-text
-          id="leftHandInfo"
-          value="Pos: ...\nRot: ..."
-          position="0 0.04 -0.05"
-          rotation="0 0 0"
-          scale="0.05 0.05 0.05"
-          color="white"
-          align="center"
-        ></a-text>
-      </a-entity>
-      <a-entity id="rightHand" oculus-touch-controls="hand: right">
-        <a-text
-          id="rightHandInfo"
-          value="Pos: ...\nRot: ..."
-          position="0 0.04 -0.05"
-          rotation="0 0 0"
-          scale="0.05 0.05 0.05"
-          color="white"
-          align="center"
-        ></a-text>
-      </a-entity>
-
-      <!-- Video stream display -->
-      <a-entity
-        teleop-video-stream="roomName: robot-vr-room; participantIdentity: vr-viewer"
-      >
-        <a-plane
-          id="rightVideoPlane"
-          position="0 1.6 -2"
-          width="2"
-          height="1.5"
-          stereo="eye: right"
-        ></a-plane>
-        <a-plane
-          id="leftVideoPlane"
-          position="0 1.6 -2"
-          width="2"
-          height="1.5"
-          stereo="eye: left"
-        ></a-plane>
-      </a-entity>
-    </a-scene>
-
-
   </body>
 </html>

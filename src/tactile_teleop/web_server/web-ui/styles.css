@@ -613,3 +613,209 @@ a-scene {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
+
+/* Landing Screen Styles */
+.landing-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.landing-screen.hidden {
+  opacity: 0;
+  transform: translateY(-20px);
+  pointer-events: none;
+}
+
+.landing-content {
+  text-align: center;
+  color: white;
+  max-width: 600px;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.landing-title {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.landing-subtitle {
+  font-size: 1.2rem;
+  margin-bottom: 2.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+}
+
+.landing-buttons {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.landing-button {
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 200px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.landing-button.primary {
+  background: #4caf50;
+  color: white;
+}
+
+.landing-button.primary:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+}
+
+.landing-button.secondary {
+  background: #3498db;
+  color: white;
+}
+
+.landing-button.secondary:hover {
+  background: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+}
+
+/* Back Button */
+.back-button {
+  padding: 0.5rem 1rem;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 10000;
+}
+
+.back-button:hover {
+  background: #c0392b;
+  transform: translateY(-1px);
+}
+
+/* Demo Booking Button (Bottom Left) */
+.demo-booking-button {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 9998;
+}
+
+/* VR Page Back Button (Top Right) */
+.vr-back-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+}
+
+.vr-back-button button {
+  padding: 0.8rem 1.5rem;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+  transition: all 0.3s ease;
+}
+
+.vr-back-button button:hover {
+  background: #c0392b;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(231, 76, 60, 0.4);
+}
+
+/* VR Start Button (Center Screen) */
+#vr-start-button {
+  /* Styles are applied inline in start-vr.js for better control */
+  /* This ensures the button appears correctly across different VR browsers */
+}
+
+.demo-booking-button button {
+  padding: 0.8rem 1.5rem;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  transition: all 0.3s ease;
+}
+
+.demo-booking-button button:hover {
+  background: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .landing-title {
+    font-size: 2rem;
+  }
+
+  .landing-subtitle {
+    font-size: 1rem;
+  }
+
+  .landing-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .landing-button {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .landing-content {
+    padding: 30px 20px;
+    margin: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .demo-booking-button {
+    bottom: 10px;
+    left: 10px;
+  }
+
+  .demo-booking-button button {
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+  }
+}
