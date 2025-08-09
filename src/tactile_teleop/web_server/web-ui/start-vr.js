@@ -235,18 +235,18 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Only initialize if this is a VR-capable browser
   if (navigator.xr) {
     try {
-      const isVRSupported = await navigator.xr.isSessionSupported(
+      const isARSupported = await navigator.xr.isSessionSupported(
         'immersive-ar',
       );
-      if (isVRSupported) {
-        console.log('VR support detected, initializing VR Teleop Starter...');
+      if (isARSupported) {
+        console.log('AR support detected, initializing VR Teleop Starter...');
         const vrStarter = new VRTeleopStarter();
         await vrStarter.init();
 
         // Make it globally available
         window.vrTeleopStarter = vrStarter;
       } else {
-        console.log('VR not supported on this device');
+        console.log('AR not supported on this device');
       }
     } catch (error) {
       console.error('Error checking VR support:', error);
