@@ -79,7 +79,25 @@
                   console.log('VR mode activated successfully');
                 } catch (error) {
                   console.error('Failed to start VR:', error);
-                  alert(`Failed to start VR: ${error.message}`);
+
+                  // Provide specific error messages for common VR issues
+                  let errorMessage = 'Failed to start VR';
+                  if (error.message.includes('NotSupportedError')) {
+                    errorMessage =
+                      'VR is not supported on this device or browser';
+                  } else if (error.message.includes('NotAllowedError')) {
+                    errorMessage =
+                      'VR access was denied. Please allow VR permissions and try again';
+                  } else if (error.message.includes('SecurityError')) {
+                    errorMessage = 'VR requires a secure connection (HTTPS)';
+                  } else if (error.message.includes('timeout')) {
+                    errorMessage =
+                      'VR initialization timed out. Please try again';
+                  } else if (error.message) {
+                    errorMessage += `: ${error.message}`;
+                  }
+
+                  alert(errorMessage);
 
                   // Restore button
                   startButton.textContent = 'Start VR Experience';
@@ -188,7 +206,6 @@
           // Create A-Frame scene element
           const scene = document.createElement('a-scene');
           scene.setAttribute('vr-mode-ui', 'enabled: true');
-          scene.setAttribute('controller-updater', ''); 
 
           // Add passthrough setup
           const passthrough = document.createElement('a-entity');
@@ -257,6 +274,9 @@
 
           // Add scene to document
           document.body.appendChild(scene);
+
+          // Add controller-updater component after all elements are created
+          scene.setAttribute('controller-updater', '');
         }
 
         function waitForSceneReady(sceneEl) {
