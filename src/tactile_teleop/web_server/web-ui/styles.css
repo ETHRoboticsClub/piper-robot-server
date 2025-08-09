@@ -25,6 +25,7 @@ body {
   overflow-y: auto;
   min-width: 320px;
   box-sizing: border-box;
+  pointer-events: auto;
 }
 
 .desktop-header {
@@ -139,12 +140,12 @@ body {
 
 .keyboard-help.active {
   background: rgba(76, 175, 80, 0.1);
-  border: 2px solid #4CAF50;
+  border: 2px solid #4caf50;
   box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
 }
 
 .keyboard-help.active .help-title {
-  color: #2E7D32;
+  color: #2e7d32;
 }
 
 .keyboard-help-header {
@@ -306,49 +307,49 @@ body {
   body {
     min-width: 280px;
   }
-  
+
   .desktop-interface {
     padding: 15px 10px;
     min-width: 280px;
     overflow-x: auto;
   }
-  
+
   .desktop-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 15px;
     min-width: 260px;
   }
-  
+
   .status-section {
     flex-direction: column;
     align-items: flex-start;
     gap: 15px;
     min-width: 260px;
   }
-  
+
   .help-columns {
     grid-template-columns: 1fr;
   }
-  
+
   .instructions-content {
     flex-direction: column;
   }
-  
+
   .instructions-image {
     order: -1;
   }
-  
+
   .form-row {
     grid-template-columns: 1fr;
     gap: 10px;
   }
-  
+
   .button-row {
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .save-button,
   .restart-button {
     width: 100%;
@@ -370,6 +371,7 @@ a-scene {
   width: 100vw;
   height: 100vh;
   z-index: 1;
+  pointer-events: none;
 }
 
 .robot-controls {
@@ -378,7 +380,7 @@ a-scene {
 }
 
 .engage-btn {
-  background: linear-gradient(45deg, #4CAF50, #45a049);
+  background: linear-gradient(45deg, #4caf50, #45a049);
   border: none;
   color: white;
   padding: 12px 24px;
@@ -392,7 +394,7 @@ a-scene {
 
 .engage-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .engage-btn.disconnect {
@@ -594,4 +596,20 @@ a-scene {
 .restart-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
-} 
+}
+
+/* Calendly widget */
+.calendly-widget {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+  width: 100%;
+}
+
+.calendly-widget .calendly-inline-widget {
+  min-width: 640px;
+  height: 700px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
