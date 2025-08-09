@@ -5,7 +5,7 @@
     <title>telegrip - Robot Arm Teleoperation</title>
     <meta name="description" content="telegrip - Robot Arm Teleoperation" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+
     <script
       src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"
       onload="console.log('LiveKit script loaded')"
@@ -24,10 +24,7 @@
         );
       });
     </script>
-    <script src="controllers.js" defer></script>
     <script src="interface.js" defer></script>
-    <script src="livekit-utils.js"></script>
-    <script src="video-stream.js"></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -386,68 +383,5 @@
         </div>
       </div>
     </div>
-
-    <!-- VR-only content -->
-    <div class="vr-content" id="vrContent">
-      <div class="vr-title">VR Teleoperation</div>
-    </div>
-
-    <!-- A-Frame VR Scene -->
-    <a-scene vr-mode-ui="enabled: true;">
-      <!-- Passthrough setup -->
-      <a-entity webxr-passthrough="referenceSpaceType: local-floor"></a-entity>
-
-      <!-- Controllers -->
-      <a-entity id="leftHand" oculus-touch-controls="hand: left">
-        <a-text
-          id="leftHandInfo"
-          value="Pos: ...\nRot: ..."
-          position="0 0.04 -0.05"
-          rotation="0 0 0"
-          scale="0.05 0.05 0.05"
-          color="white"
-          align="center"
-        ></a-text>
-      </a-entity>
-      <a-entity id="rightHand" oculus-touch-controls="hand: right">
-        <a-text
-          id="rightHandInfo"
-          value="Pos: ...\nRot: ..."
-          position="0 0.04 -0.05"
-          rotation="0 0 0"
-          scale="0.05 0.05 0.05"
-          color="white"
-          align="center"
-        ></a-text>
-      </a-entity>
-
-      <!-- Video stream display -->
-      <a-entity
-      teleop-video-stream="roomName: robot-vr-room; participantIdentity: vr-viewer; authServerPort: 5050"
-      >
-        <a-plane
-          id="rightVideoPlane"
-          position="0 1.6 -2"
-          stereo="eye: right"
-        ></a-plane>
-        <a-plane
-          id="leftVideoPlane"
-          position="0 1.6 -2"
-          stereo="eye: left"
-        ></a-plane>
-    </a-entity>
-
-  </a-scene>
-
-    <script>
-      // Update VR server URL dynamically
-      document.addEventListener('DOMContentLoaded', function () {
-        const vrUrlElement = document.getElementById('vrServerUrl');
-        if (vrUrlElement) {
-          const currentUrl = window.location.origin;
-          vrUrlElement.textContent = currentUrl + '/';
-        }
-      });
-    </script>
   </body>
 </html>
