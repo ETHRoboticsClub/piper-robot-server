@@ -99,7 +99,7 @@ body {
   width: 100%;
   height: 100vh;
   z-index: 10000;
-  background: #dbdbdb;
+  background: #2b2b2b;
   padding: 20px;
   overflow-x: auto;
   overflow-y: auto;
@@ -119,22 +119,22 @@ body {
 .desktop-title {
   font-size: 24px;
   font-weight: bold;
-  color: #2b2b2b;
+  color: white;
   margin-bottom: 10px;
 }
 
 .desktop-subtitle {
   font-size: 14px;
-  color: #2b2b2b;
+  color: white;
   opacity: 0.7;
   margin-bottom: 20px;
 }
 
 /* Back button */
 .back-button {
-  background: white;
-  border: 2px solid #cdff8c;
-  color: #2b2b2b;
+  background: #2b2b2b;
+  border: 2px solid #bfb7ff;
+  color: #bfb7ff;
   padding: 8px 16px;
   border-radius: 20px;
   cursor: pointer;
@@ -145,9 +145,9 @@ body {
 }
 
 .back-button:hover {
-  background: #bfb7ff;
+  background: rgba(191, 183, 255, 0.1);
   border-color: #bfb7ff;
-  color: white;
+  color: #bfb7ff;
   transform: translateY(-1px);
 }
 
@@ -745,7 +745,7 @@ a-scene {
   min-width: 640px;
   height: 700px;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
 
@@ -755,30 +755,6 @@ a-scene {
   opacity: 0;
   transform: translateY(-20px);
   pointer-events: none;
-}
-
-/* Duplicate landing styles removed */
-
-/* Duplicate styles removed */
-
-/* Back Button */
-.back-button {
-  padding: 0.5rem 1rem;
-  background: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
-  transition: all 0.3s ease;
-  position: relative;
-  z-index: 10000;
-}
-
-.back-button:hover {
-  background: #c0392b;
-  transform: translateY(-1px);
 }
 
 /* Demo Booking Button (Bottom Left) */
@@ -892,32 +868,6 @@ body.vr-browser {
   background: #2980b9;
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-  .landing-title {
-    font-size: 2rem;
-  }
-
-  .landing-subtitle {
-    font-size: 1rem;
-  }
-
-  .landing-buttons {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .landing-button {
-    width: 100%;
-    max-width: 280px;
-  }
-
-  .landing-content {
-    padding: 30px 20px;
-    margin: 20px;
-  }
 }
 
 @media (max-width: 480px) {
