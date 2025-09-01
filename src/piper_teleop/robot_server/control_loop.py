@@ -34,12 +34,20 @@ class ControlLoop:
         self.visualize = visualize
         self.api = TactileAPI()
 
-    def update_arm_state(self, relative_transform: Optional[np.ndarray], reset: bool, arm_state: ArmState) -> ArmState:
+    def update_arm_state(
+        self, relative_transform: Optional[np.ndarray], reset: bool, gripper_closed: bool, arm_state: ArmState
+    ) -> ArmState:
         if reset:
             arm_state.target_transform = arm_state.initial_transform
             arm_state.origin_transform = arm_state.initial_transform
         elif relative_transform is not None:
             arm_state.target_transform = arm_state.origin_transform @ relative_transform
+
+        if gripper_closed is False:
+            arm_state.gripper_closed = False
+        else:
+            arm_state.gripper_closed = True
+
         return arm_state
 
     def update_robot(self, left_arm: ArmState, right_arm: ArmState):
@@ -110,8 +118,12 @@ class ControlLoop:
 
             left_arm_goal = await self.api.get_controller_goal("left")
             right_arm_goal = await self.api.get_controller_goal("right")
-            left_arm = self.update_arm_state(left_arm_goal.relative_transform, left_arm_goal.reset, left_arm)
-            right_arm = self.update_arm_state(right_arm_goal.relative_transform, right_arm_goal.reset, right_arm)
+            left_arm = self.update_arm_state(
+                left_arm_goal.relative_transform, left_arm_goal.reset, left_arm_goal.gripper_closed, left_arm
+            )
+            right_arm = self.update_arm_state(
+                right_arm_goal.relative_transform, right_arm_goal.reset, right_arm_goal.gripper_closed, right_arm
+            )
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
