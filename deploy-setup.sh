@@ -53,12 +53,12 @@ echo "  Conda environment: $CONDA_ENV_PATH"
 echo
 
 # Create nginx directory
-DEPLOY_DIR="$PROJECT_ROOT/src/tactile_teleop/web_server/nginx"
+DEPLOY_DIR="$PROJECT_ROOT/src/piper_teleop/web_server/nginx"
 mkdir -p "$DEPLOY_DIR"
 
 # Generate nginx configuration files and systemd service
 echo "Generating nginx configuration..."
-cd "$PROJECT_ROOT/src/tactile_teleop/web_server"
+cd "$PROJECT_ROOT/src/piper_teleop/web_server"
 DOMAIN_NAME="$SERVER_NAME" ./nginx/configure-nginx.sh "$PROJECT_ROOT/development.env" direct
 
 echo "Generating systemd service..."

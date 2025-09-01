@@ -3,12 +3,12 @@ Base classes and data structures for input providers.
 """
 
 import asyncio
-import numpy as np
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+
+import numpy as np
 
 
 class EventType(Enum):
@@ -42,7 +42,7 @@ class BaseInputProvider(ABC):
         self.is_running = False
 
     @abstractmethod
-    async def start(self):
+    async def start(self, *args, **kwargs):
         """Start the input provider."""
         pass
 

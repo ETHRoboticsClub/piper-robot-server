@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import yaml
 
-from tactile_teleop.utils import get_absolute_path, get_robot_server_path
+from piper_teleop.utils import get_absolute_path, get_robot_server_path
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
         "right_arm": {"name": "Right Arm", "enabled": True},
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
-        "ground_height": 0.0,
+        "ground_height": -0.02,
     },
     "control": {
         "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -44,7 +44,7 @@ DEFAULT_CONFIG = {
         "dual_camera_opencv": {
             "type": "dual_camera_opencv",
             "edge_crop_pixels": 60,
-            "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
+            "calibration_file": "src/piper_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
             "cam_index_left": 4,
             "cam_index_right": 6,
             "cap_backend": cv2.CAP_V4L2,
@@ -241,7 +241,7 @@ class TelegripConfig:
 
     def ensure_ssl_certificates(self) -> bool:
         """Ensure SSL certificates exist, generating them if necessary."""
-        from tactile_teleop.utils import ensure_ssl_certificates
+        from piper_teleop.utils import ensure_ssl_certificates
 
         return ensure_ssl_certificates(self.certfile, self.keyfile)
 

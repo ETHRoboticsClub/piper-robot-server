@@ -42,7 +42,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Create directory for SSL certificates and sockets
-RUN mkdir -p /home/appuser/.tactile_teleop/ssl
+RUN mkdir -p /home/appuser/.piper_teleop/ssl
 
 # Expose port (for container networking)
 EXPOSE 8000

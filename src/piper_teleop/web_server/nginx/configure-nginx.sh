@@ -80,7 +80,7 @@ if [ "$DEPLOYMENT_MODE" = "docker" ]; then
 else
     echo "🖥️  Configuring for direct deployment..."
     FASTAPI_BACKEND="unix:/tmp/tactile-teleop.sock"
-    WEB_ROOT="$PROJECT_ROOT/src/tactile_teleop/web_server/web-ui"
+    WEB_ROOT="$PROJECT_ROOT/src/piper_teleop/web_server/web-ui"
     CERTBOT_ROOT="/var/www/certbot"
 fi
 

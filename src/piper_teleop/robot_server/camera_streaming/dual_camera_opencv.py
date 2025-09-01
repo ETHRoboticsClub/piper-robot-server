@@ -4,7 +4,7 @@ import pickle
 
 import cv2
 
-from tactile_teleop.robot_server.camera_streaming.base_camera import BaseCamera
+from piper_teleop.robot_server.camera_streaming.base_camera import BaseCamera
 
 logger = logging.getLogger(__name__)
 

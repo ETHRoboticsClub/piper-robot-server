@@ -176,7 +176,7 @@ if [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_status "Setting up SSL certificates..."
-        if ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh "$DOMAIN" "$EMAIL"; then
+        if ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh "$DOMAIN" "$EMAIL"; then
             print_success "SSL certificates configured for $DOMAIN"
             echo
             echo "Now you can deploy with:"

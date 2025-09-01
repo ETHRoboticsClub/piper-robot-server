@@ -6,7 +6,7 @@ from typing import List
 
 import numpy as np
 
-from tactile_teleop.config import TelegripConfig
+from piper_teleop.config import TelegripConfig
 
 from .core.geometry import convert_to_robot_convention, xyzrpy2transform
 from .core.robot_interface import RobotInterface
@@ -133,14 +133,7 @@ class ControlLoop:
         while True:
             iteration_start = time.perf_counter()
             commands_start = time.perf_counter()
-            try:
-                goals = []
-                while not command_queue.empty():
-                    goals.append(command_queue.get_nowait())
-                left_arm = self.update_arm_state(goals, left_arm)
-                right_arm = self.update_arm_state(goals, right_arm)
-            except Exception as e:
-                logger.error(f"Error processing commands: {e}")
+
             commands_time = time.perf_counter() - commands_start
 
             # Simulates blocking robot communication

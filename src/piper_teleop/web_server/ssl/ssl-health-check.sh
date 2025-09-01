@@ -21,7 +21,7 @@ KEY_PATH="/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem"
 
 if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
     echo "❌ No Let's Encrypt certificates found for $DOMAIN_NAME"
-    echo "   Run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME"
+    echo "   Run: ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME"
     exit 1
 fi
 

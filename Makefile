@@ -88,7 +88,7 @@ ssl-setup: ## Interactive SSL certificate setup
 		exit 1; \
 	fi
 	@echo "🔐 Setting up SSL certificates for $(DOMAIN)..."
-	sudo ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh "$(DOMAIN)" "$(EMAIL)"
+	sudo ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh "$(DOMAIN)" "$(EMAIL)"
 
 ssl-test: ## Test SSL certificates (staging mode)
 	@if [ -z "$(DOMAIN)" ] || [ -z "$(EMAIL)" ]; then \
@@ -97,7 +97,7 @@ ssl-test: ## Test SSL certificates (staging mode)
 		exit 1; \
 	fi
 	@echo "🧪 Testing SSL certificate setup for $(DOMAIN) (staging mode)..."
-	sudo ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh "$(DOMAIN)" "$(EMAIL)" --staging
+	sudo ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh "$(DOMAIN)" "$(EMAIL)" --staging
 
 ssl-renew: ## Renew SSL certificates
 	@echo "🔄 Renewing SSL certificates..."

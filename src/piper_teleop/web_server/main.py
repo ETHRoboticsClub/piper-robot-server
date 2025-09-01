@@ -6,21 +6,23 @@ import signal
 from contextlib import asynccontextmanager
 from dataclasses import replace
 
-from dotenv import load_dotenv
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from tactile_teleop.config import TelegripConfig, config as global_config
-from tactile_teleop.utils import get_local_ip, get_web_server_path
-from tactile_teleop.livekit_auth import generate_token
+from piper_teleop.config import TelegripConfig
+from piper_teleop.config import config as global_config
+from piper_teleop.livekit_auth import generate_token
+from piper_teleop.utils import get_local_ip, get_web_server_path
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,32 +34,30 @@ async def lifespan(app: FastAPI):
 
 def _add_auth_endpoints(app: FastAPI) -> None:
     """Add LiveKit auth endpoints to the FastAPI app."""
+
     @app.post("/api/auth/get-token")
     async def get_token(payload: dict):
         try:
-            room_name = payload.get('room_name')
-            participant_identity = payload.get('participant_identity')
-            canPublish = payload.get('canPublish', False)
-            ttl_minutes = payload.get('ttl', 60)
-            
+            room_name = payload.get("room_name")
+            participant_identity = payload.get("participant_identity")
+            canPublish = payload.get("canPublish", False)
+            ttl_minutes = payload.get("ttl", 60)
+
             if not room_name:
-                raise HTTPException(status_code=400, detail='room_name is required')
-            
+                raise HTTPException(status_code=400, detail="room_name is required")
+
             if not participant_identity:
-                raise HTTPException(status_code=400, detail='participant_identity is required')
-            
+                raise HTTPException(status_code=400, detail="participant_identity is required")
+
             token = generate_token(room_name, participant_identity, canPublish, ttl_minutes)
-            
-            return JSONResponse({
-                'token': token,
-                'livekit_url': LIVEKIT_URL
-            }, status_code=200)
-            
+
+            return JSONResponse({"token": token, "livekit_url": LIVEKIT_URL}, status_code=200)
+
         except ValueError as e:
             raise HTTPException(status_code=500, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @app.get("/api/auth/livekit-config")
     async def livekit_config() -> JSONResponse:
         try:
@@ -85,34 +85,29 @@ def create_app(config: TelegripConfig, behind_proxy: bool = False) -> FastAPI:
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
-    
+
     # Add LiveKit auth endpoints (available in both modes)
     _add_auth_endpoints(app)
-    
+
     # Add health check endpoint (always available for deployment platforms)
     @app.get("/health")
     async def health_check():
         return {"status": "healthy", "timestamp": asyncio.get_event_loop().time()}
-    
+
     if behind_proxy:
         # Add API routes under /api prefix when behind proxy
         @app.get("/api/info")
         async def api_info():
-            return {
-                "app": "Tactile Teleop Web Server",
-                "version": "1.0.0",
-                "status": "running"
-            }
-    
+            return {"app": "Tactile Teleop Web Server", "version": "1.0.0", "status": "running"}
+
     else:
         # serve static files with fastapi
-        web_ui_path = get_web_server_path("web-ui") 
+        web_ui_path = get_web_server_path("web-ui")
         if web_ui_path.exists():
             app.mount("/", StaticFiles(directory=str(web_ui_path), html=True), name="static")
         else:
             logger.error(f"Web UI directory not found: {web_ui_path}")
             raise FileNotFoundError(f"Web UI directory not found: {web_ui_path}")
-        
 
     return app
 
@@ -139,21 +134,21 @@ class FastAPIServer:
                 # Unix domain socket configuration (for nginx proxy)
                 uvicorn_config = uvicorn.Config(
                     app=self.app,
-                    uds=self.uds_path, # listens to unix domain socket
+                    uds=self.uds_path,  # listens to unix domain socket
                     log_level=self.config.log_level.lower(),
                     access_log=getattr(logging, self.config.log_level.upper()) <= logging.INFO,
                     use_colors=False,  # Disable colors for consistent logging
                 )
-                
+
                 # Only log startup info if INFO level or more verbose
                 if getattr(logging, self.config.log_level.upper()) <= logging.INFO:
                     logger.info(f"FastAPI server started on Unix socket: {self.uds_path}")
-                    
+
             else:
                 # TCP socket configuration (direct access to web server)
                 ssl_keyfile = None
                 ssl_certfile = None
-                
+
                 if self.config.ssl_files_exist:
                     ssl_certfile, ssl_keyfile = self.config.get_absolute_ssl_paths()
                 else:
@@ -216,9 +211,7 @@ async def _serve_forever(server: FastAPIServer):
 
     try:
         # Wait for either server completion or stop signal
-        done, pending = await asyncio.wait(
-            [server_task, stop_task], return_when=asyncio.FIRST_COMPLETED
-        )
+        done, pending = await asyncio.wait([server_task, stop_task], return_when=asyncio.FIRST_COMPLETED)
 
         # Cancel remaining tasks
         for task in pending:
@@ -237,17 +230,8 @@ async def _serve_forever(server: FastAPIServer):
 async def main() -> None:
     """Main function for the FastAPI web server."""
     parser = argparse.ArgumentParser(description="Tactile Teleop FastAPI Web Server")
-    parser.add_argument(
-        "--host", 
-        default=global_config.host_ip, 
-        help="IP/interface to bind (default: 0.0.0.0)"
-    )
-    parser.add_argument(
-        "--port", 
-        type=int, 
-        default=global_config.https_port, 
-        help="HTTPS port (default: 8443)"
-    )
+    parser.add_argument("--host", default=global_config.host_ip, help="IP/interface to bind (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=global_config.https_port, help="HTTPS port (default: 8443)")
     parser.add_argument(
         "--log-level",
         default=global_config.log_level,
@@ -273,12 +257,7 @@ async def main() -> None:
     )
 
     # Build config with CLI overrides
-    cfg: TelegripConfig = replace(
-        global_config, 
-        host_ip=args.host, 
-        https_port=args.port, 
-        log_level=args.log_level
-    )
+    cfg: TelegripConfig = replace(global_config, host_ip=args.host, https_port=args.port, log_level=args.log_level)
 
     socket_path = None
     if args.behind_proxy:
@@ -298,7 +277,7 @@ async def main() -> None:
 
         host_display = get_local_ip() if cfg.host_ip == "0.0.0.0" else cfg.host_ip
         protocol = "HTTPS" if cfg.ssl_files_exist else "HTTP"
-        
+
         logger.info("🖥️  Tactile Teleop FastAPI web server starting on %s:%s", host_display, cfg.https_port)
         logger.info("📱 Open the UI in your browser:")
         logger.info("   %s://%s:%s", protocol.lower(), host_display, cfg.https_port)

@@ -7,8 +7,8 @@ import cv2
 from dotenv import load_dotenv
 from livekit import rtc
 
-from tactile_teleop.livekit_auth import generate_token
-from tactile_teleop.robot_server.camera_streaming import DualCameraOpenCV
+from piper_teleop.livekit_auth import generate_token
+from piper_teleop.robot_server.camera_streaming import DualCameraOpenCV
 
 # Load environment variables from the project root
 load_dotenv()

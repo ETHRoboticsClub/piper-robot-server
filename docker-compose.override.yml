@@ -16,4 +16,4 @@ services:
   nginx:
     # Mount local static files for development
     volumes:
-      - ./src/tactile_teleop/web_server/web-ui:/usr/share/nginx/html
+      - ./src/piper_teleop/web_server/web-ui:/usr/share/nginx/html

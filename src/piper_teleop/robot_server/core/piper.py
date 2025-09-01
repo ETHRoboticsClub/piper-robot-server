@@ -1,17 +1,19 @@
 # Implementation of Piper robot
-import numpy as np
-
 from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 #
 from .geometry import xyzrpy2transform
 from .piper_sdk_interface import PiperSDKInterface
 
+
 @dataclass
 class PiperConfig:
     port: str
     id: str
+
 
 class Piper:
     config_class = PiperConfig

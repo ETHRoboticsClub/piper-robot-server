@@ -7,10 +7,10 @@ import asyncio
 import logging
 import multiprocessing as mp
 
-from tactile_teleop.config import config
-from tactile_teleop.robot_server.camera_streaming.camera_streamer import CameraStreamer
-from tactile_teleop.robot_server.control_loop import ControlLoop
-from tactile_teleop.robot_server.inputs.vr_controllers import VRControllerInputProvider
+from piper_teleop.config import config
+from piper_teleop.robot_server.camera_streaming.camera_streamer import CameraStreamer
+from piper_teleop.robot_server.control_loop import ControlLoop
+from piper_teleop.robot_server.inputs.vr_controllers import VRControllerInputProvider
 
 logger = logging.getLogger(__name__)
 
