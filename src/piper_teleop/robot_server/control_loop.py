@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-from tactile_teleop import TactileAPI
 
 from piper_teleop.config import TelegripConfig
+from tactile_teleop import TactileAPI
 
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface
@@ -34,16 +34,19 @@ class ControlLoop:
         self.visualize = visualize
         self.api = TactileAPI()
 
-    def update_arm_state(
-        self, relative_transform: Optional[np.ndarray], reset: bool, gripper_closed: bool, arm_state: ArmState
-    ) -> ArmState:
-        if reset:
+    def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
+        if arm_goal.reset_to_init:
             arm_state.target_transform = arm_state.initial_transform
             arm_state.origin_transform = arm_state.initial_transform
-        elif relative_transform is not None:
-            arm_state.target_transform = arm_state.origin_transform @ relative_transform
+        elif arm_goal.reset_origin:
+            if self.robot_enabled:
+                arm_state.origin_transform = self.robot_interface.get_end_effector_transform(arm_state.arm_name)
+            else:
+                arm_state.origin_transform = arm_state.initial_transform
+        elif arm_goal.relative_transform is not None:
+            arm_state.target_transform = arm_state.origin_transform @ arm_goal.relative_transform
 
-        if gripper_closed is False:
+        if arm_goal.gripper_closed is False:
             arm_state.gripper_closed = False
         else:
             arm_state.gripper_closed = True
@@ -118,12 +121,8 @@ class ControlLoop:
 
             left_arm_goal = await self.api.get_controller_goal("left")
             right_arm_goal = await self.api.get_controller_goal("right")
-            left_arm = self.update_arm_state(
-                left_arm_goal.relative_transform, left_arm_goal.reset, left_arm_goal.gripper_closed, left_arm
-            )
-            right_arm = self.update_arm_state(
-                right_arm_goal.relative_transform, right_arm_goal.reset, right_arm_goal.gripper_closed, right_arm
-            )
+            left_arm = self.update_arm_state(left_arm_goal, left_arm)
+            right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
