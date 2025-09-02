@@ -4,12 +4,9 @@ import os
 from typing import Optional
 
 import cv2
-import numpy as np
 from dotenv import load_dotenv
-from livekit import rtc
 from tactile_teleop import TactileAPI
 
-from piper_teleop.livekit_auth import generate_token
 from piper_teleop.robot_server.camera_streaming import DualCameraOpenCV
 
 # Load environment variables from the project root
@@ -62,7 +59,7 @@ class CameraStreamer:
         """Continuous loop to capture, rectify, and stream camera frames."""
         # Initialize cameras in the correct async context
         self.camera.init_camera()
-        await self.api.connect_camera_streamer()
+        await self.api.connect_camera_streamer(self.camera.frame_height, self.camera.cropped_width)
 
         while True:
             try:

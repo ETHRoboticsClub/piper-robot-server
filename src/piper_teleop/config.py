@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import yaml
 
-from piper_teleop.utils import get_absolute_path, get_robot_server_path
+from piper_teleop.utils import get_absolute_path
 
 logger = logging.getLogger(__name__)
 
