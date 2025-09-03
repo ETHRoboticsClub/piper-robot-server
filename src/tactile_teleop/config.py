@@ -44,7 +44,7 @@ DEFAULT_CONFIG = {
         "dual_camera_opencv": {
             "type": "dual_camera_opencv",
             "edge_crop_pixels": 60,
-            "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250804_145002.pkl",
+            "calibration_file": "/home/alex/git/piper_grip/src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250903_112756.pkl",
             "cam_index_left": 4,
             "cam_index_right": 6,
             "cap_backend": cv2.CAP_V4L2,
