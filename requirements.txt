@@ -11,6 +11,8 @@ fastapi
 uvicorn[standard]
 python-dotenv
 livekit-api
+livekit
+casadi
 # For development
 pytest
 black

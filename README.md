@@ -24,18 +24,28 @@ _telegrip operation of two SO-100 arms using a Quest 3 headset_
 ### Prerequisites
 
 1. **Robot Hardware**: One or two SO100 arm robot with USB-serial connections
-2. **Python Environment**: Python 3.8+ with required packages
-3. **VR Setup** (optional): Meta Quest or other headset with WebXR support (no app installation needed!)
+2. **Conda Environment**: Miniconda or Anaconda (required for pinocchio from conda-forge)
+3. **Python Environment**: Python 3.10 (managed by conda)
+4. **VR Setup** (optional): Meta Quest or other headset with WebXR support (no app installation needed!)
 
 ### Package Installation
 
-Install telegrip (this package):
+Install tactile-teleop with conda environment setup:
 
 ```bash
-# Install in editable mode (recommended for development)
+# Clone the repository
 git clone https://github.com/tactileroboticsai/tactile-teleop.git
+cd tactile-teleop
+
+# Create and activate conda environment (installs pinocchio from conda-forge)
+conda env create -f environment.yml
+conda activate tactile-teleop
+
+# Install the package with remaining dependencies
 pip install -e .
 ```
+
+**Note**: We use conda-forge for pinocchio installation as it provides optimized, pre-compiled binaries that avoid compilation issues common with pip installations.
 
 The system will automatically create self-signed SSL certificates (`cert.pem` and `key.pem`) if they don't exist.
 
@@ -48,6 +58,12 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 3
 ## Usage
 
 ### Basic Usage
+
+Make sure your conda environment is activated:
+
+```bash
+conda activate tactile-teleop
+```
 
 Run the robot server:
 
@@ -223,15 +239,19 @@ class ControlGoal:
 
 ## Production Deployment
 
-For deploying telegrip on external Ubuntu servers or VMs, use the automated deployment setup:
+For deploying tactile-teleop on external Ubuntu servers or VMs, use the automated deployment setup:
 
 ```bash
 # Clone repository to your server
-git clone <repository-url> telegrip
-cd telegrip
+git clone <repository-url> tactile-teleop
+cd tactile-teleop
 
-# Create conda environment (if needed)
+# Create conda environment with pinocchio
 conda env create -f environment.yml
+conda activate tactile-teleop
+
+# Install the package
+pip install -e .
 
 # Generate deployment configuration
 ./deploy-setup.sh your-domain.com  # or ./deploy-setup.sh for localhost
