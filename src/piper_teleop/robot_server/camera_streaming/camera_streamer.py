@@ -5,7 +5,7 @@ from typing import Optional
 
 import cv2
 from dotenv import load_dotenv
-from tactile_teleop import TactileAPI
+from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.robot_server.camera_streaming import DualCameraOpenCV
 

@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.config import TelegripConfig
-from tactile_teleop import TactileAPI
 
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface
