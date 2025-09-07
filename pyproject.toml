@@ -17,6 +17,7 @@ dependencies = [
     "pyaml",
     "python-dotenv",
     "meshcat",
+    "piper_sdk==0.3.3",
 ]
 
 requires-python = ">=3.8"
