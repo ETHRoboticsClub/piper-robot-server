@@ -12,8 +12,6 @@ from piper_teleop.robot_server.camera_streaming import DualCameraOpenCV
 # Load environment variables from the project root
 load_dotenv()
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL")
-
 
 class CameraStreamer:
     def __init__(
@@ -21,7 +19,7 @@ class CameraStreamer:
         camera_config: dict,
     ):
         self.logger = logging.getLogger(__name__)
-        self.api = TactileAPI()
+        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"), robot_name=os.getenv("ROBOT_NAME"))
         self.cam_loop_task: Optional[asyncio.Task] = None
 
         if camera_config["type"] == "dual_camera_opencv":
@@ -59,7 +57,7 @@ class CameraStreamer:
         """Continuous loop to capture, rectify, and stream camera frames."""
         # Initialize cameras in the correct async context
         self.camera.init_camera()
-        await self.api.connect_camera_streamer(self.camera.frame_height, self.camera.cropped_width)
+        await self.api.connect_camera_streamer()
 
         while True:
             try:

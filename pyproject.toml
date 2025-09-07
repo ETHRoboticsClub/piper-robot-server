@@ -13,38 +13,21 @@ authors = [
 keywords = ["robotics", "teleoperation", "vr", "robot-control"]
 
 dependencies = [
-    "numpy",
-    "websockets",
-    "pynput",
-    "pybullet",
-    "scipy",
-    "pyyaml",
-    "livekit-api",
     "opencv-python",
+    "pyaml",
     "python-dotenv",
-    "fastapi",
-    "uvicorn[standard]",
+    "meshcat",
 ]
 
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-asyncio",
-    "black",
-    "flake8",
-    "mypy",
 ]
 
 [project.scripts]
 robotserver = "piper_teleop.robot_server.main:main_cli"
 webserver = "piper_teleop.web_server.main:main_cli"
-
-
-[project.urls]
-Homepage = "https://github.com/your-username/vr_so100_teleoperation"
-Repository = "https://github.com/your-username/vr_so100_teleoperation"
 
 [tool.setuptools.packages.find]
 where = ["src"]

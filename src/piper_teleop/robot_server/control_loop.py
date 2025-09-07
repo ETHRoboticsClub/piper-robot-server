@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass
-from typing import Optional
 
+import dotenv
 import numpy as np
 from tactile_teleop_sdk import TactileAPI
 
@@ -11,6 +12,8 @@ from piper_teleop.config import TelegripConfig
 
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface
+
+dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,7 @@ class ControlLoop:
         self.robot_interface = RobotInterface(config, robot_enabled)
         self.robot_enabled = robot_enabled
         self.visualize = visualize
-        self.api = TactileAPI()
+        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"), robot_name=os.getenv("ROBOT_NAME"))
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
         if arm_goal.reset_to_init:
