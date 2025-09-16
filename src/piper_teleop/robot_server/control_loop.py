@@ -35,19 +35,22 @@ class ControlLoop:
         self.robot_interface = RobotInterface(config, robot_enabled)
         self.robot_enabled = robot_enabled
         self.visualize = visualize
-        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"), robot_name=os.getenv("ROBOT_NAME"))
+        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
         if arm_goal.reset_to_init:
             arm_state.target_transform = arm_state.initial_transform
             arm_state.origin_transform = arm_state.initial_transform
-        elif arm_goal.reset_origin:
+        elif arm_goal.reset_reference:
             if self.robot_enabled:
                 arm_state.origin_transform = self.robot_interface.get_end_effector_transform(arm_state.arm_name)
             else:
                 arm_state.origin_transform = arm_state.initial_transform
         elif arm_goal.relative_transform is not None:
-            arm_state.target_transform = arm_state.origin_transform @ arm_goal.relative_transform
+            relative_transform = np.linalg.inv(xyzrpy2transform(0, 0, 0, 0, np.pi / 2, 0)) @ (
+                arm_goal.relative_transform @ xyzrpy2transform(0, 0, 0, 0, np.pi / 2, 0)
+            )
+            arm_state.target_transform = arm_state.origin_transform @ relative_transform
 
         if arm_goal.gripper_closed is False:
             arm_state.gripper_closed = False

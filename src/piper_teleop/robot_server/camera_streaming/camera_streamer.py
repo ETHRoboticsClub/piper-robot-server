@@ -19,7 +19,7 @@ class CameraStreamer:
         camera_config: dict,
     ):
         self.logger = logging.getLogger(__name__)
-        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"), robot_name=os.getenv("ROBOT_NAME"))
+        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
         self.cam_loop_task: Optional[asyncio.Task] = None
 
         if camera_config["type"] == "dual_camera_opencv":
@@ -57,7 +57,7 @@ class CameraStreamer:
         """Continuous loop to capture, rectify, and stream camera frames."""
         # Initialize cameras in the correct async context
         self.camera.init_camera()
-        await self.api.connect_camera_streamer()
+        await self.api.connect_camera_streamer(self.camera.frame_height, self.camera.cropped_width)
 
         while True:
             try:
@@ -69,7 +69,7 @@ class CameraStreamer:
             try:
                 # Crop outer edges to remove monocular zones
                 cropped_left, cropped_right = self.crop_stereo_edges(frame_left, frame_right)
-                await self.api.send_stereo_frame(cv2.hconcat([cropped_left, cropped_right]))
+                await self.api.send_stereo_frame(cropped_left, cropped_right)
 
             except Exception as e:
                 self.logger.error(f"Error processing frame: {e}")
