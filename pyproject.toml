@@ -3,7 +3,7 @@ requires = ["setuptools >= 61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tactile_teleop"
+name = "piper_teleop"
 version = "1.0.0"
 description = "Accurate and High Throughput Remote Teleoperation Control System"
 authors = [
@@ -13,49 +13,29 @@ authors = [
 keywords = ["robotics", "teleoperation", "vr", "robot-control"]
 
 dependencies = [
-    "numpy",
-    "websockets",
-    "pynput",
-    "pybullet",
-    "scipy",
-    "pyyaml",
-    "livekit",
-    "livekit-api",
-    "piper-sdk==0.3.3",
-    "casadi",
-    "meshcat",
     "opencv-python",
+    "pyaml",
     "python-dotenv",
-    "fastapi",
-    "uvicorn[standard]",
+    "meshcat",
+    "piper_sdk==0.3.3",
 ]
 
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-asyncio",
-    "black",
-    "flake8",
-    "mypy",
 ]
 
 [project.scripts]
-robotserver = "tactile_teleop.robot_server.main:main_cli"
-webserver = "tactile_teleop.web_server.main:main_cli"
-
-
-[project.urls]
-Homepage = "https://github.com/your-username/vr_so100_teleoperation"
-Repository = "https://github.com/your-username/vr_so100_teleoperation"
+robotserver = "piper_teleop.robot_server.main:main_cli"
+webserver = "piper_teleop.web_server.main:main_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tactile_teleop.web_server" = ["web-ui/**/*"]
-"tactile_teleop.robot_server" = ["camera_streaming/calibration/*"] 
+"piper_teleop.web_server" = ["web-ui/**/*"]
+"piper_teleop.robot_server" = ["camera_streaming/calibration/*"] 
 
 [tool.black]
 line-length = 120

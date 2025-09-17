@@ -7,10 +7,9 @@ import asyncio
 import logging
 import multiprocessing as mp
 
-from tactile_teleop.config import config
-from tactile_teleop.robot_server.camera_streaming.camera_streamer import CameraStreamer
-from tactile_teleop.robot_server.control_loop import ControlLoop
-from tactile_teleop.robot_server.inputs.vr_controllers import VRControllerInputProvider
+from piper_teleop.config import config
+from piper_teleop.robot_server.camera_streaming.camera_streamer import CameraStreamer
+from piper_teleop.robot_server.control_loop import ControlLoop
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +35,10 @@ async def _run_control_process(room_name: str, participant_name: str, robot_enab
     """
     Run the controll process (receiving, processing and sending commands to the robot)
     """
-    command_queue = asyncio.Queue()
-    controllers = VRControllerInputProvider(command_queue, config)
     control_loop = ControlLoop(config, robot_enabled, visualize)
+    control_loop_task = asyncio.create_task(control_loop.run())
 
-    controllers_task = asyncio.create_task(controllers.start(room_name=room_name, participant_name=participant_name))
-    control_loop_task = asyncio.create_task(control_loop.run(command_queue))
-
-    await asyncio.gather(controllers_task, control_loop_task)
+    await asyncio.gather(control_loop_task)
 
 
 async def main():

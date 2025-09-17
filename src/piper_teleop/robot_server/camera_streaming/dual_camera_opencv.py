@@ -4,7 +4,7 @@ import pickle
 
 import cv2
 
-from tactile_teleop.robot_server.camera_streaming.base_camera import BaseCamera
+from piper_teleop.robot_server.camera_streaming.base_camera import BaseCamera
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,9 @@ class DualCameraOpenCV(BaseCamera):
             await asyncio.sleep(0.1)
             return None, None
 
-        rect_left, rect_right = self._rectify_frames(frame_left, frame_right)
+        # rect_left, rect_right = self._rectify_frames(frame_left, frame_right)
+        rect_left = frame_left
+        rect_right = frame_right
 
         # Convert BGR to RGB
         frame_rgb_left = cv2.cvtColor(rect_left, cv2.COLOR_BGR2RGB)

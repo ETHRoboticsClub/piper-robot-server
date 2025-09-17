@@ -77,16 +77,16 @@ case $ENVIRONMENT in
                 docker-compose down 2>/dev/null || true
                 
                 # Run Let's Encrypt setup
-                if ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh "$DOMAIN_NAME" "$EMAIL"; then
+                if ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh "$DOMAIN_NAME" "$EMAIL"; then
                     echo "✅ SSL certificates obtained successfully!"
                     CERTS_PRESENT=true
                 else
                     echo "❌ SSL certificate setup failed. Continuing with self-signed certificates."
-                    echo "   You can manually run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
+                    echo "   You can manually run: ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
                 fi
             else
                 echo "ℹ️  Continuing with self-signed certificates"
-                echo "   To set up SSL later, run: ./src/tactile_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
+                echo "   To set up SSL later, run: ./src/piper_teleop/web_server/ssl/setup-letsencrypt.sh $DOMAIN_NAME $EMAIL"
             fi
         fi
         ;;

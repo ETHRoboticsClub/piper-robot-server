@@ -89,4 +89,4 @@ tests/
 .flake8
 
 # generated files
-src/tactile_teleop/web_server/nginx/nginx-tactile-teleop.conf
+src/piper_teleop/web_server/nginx/nginx-tactile-teleop.conf
