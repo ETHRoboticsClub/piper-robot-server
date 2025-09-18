@@ -23,9 +23,11 @@ class DualCameraOpenCV(BaseCamera):
         self.edge_crop_pixels = camera_config["edge_crop_pixels"]
 
         # Load calibration data
-        self._load_calibration_data(self.calibration_file)
+        # self._load_calibration_data(self.calibration_file)
 
         # Calculate cropped dimensions
+        self.frame_width = camera_config["frame_width"]
+        self.frame_height = camera_config["frame_height"]
         self.cropped_width = self.frame_width - self.edge_crop_pixels
 
     def _rectify_frames(self, frame_left, frame_right):
