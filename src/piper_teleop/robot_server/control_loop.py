@@ -47,9 +47,14 @@ class ControlLoop:
             else:
                 arm_state.origin_transform = arm_state.initial_transform
         elif arm_goal.relative_transform is not None:
-            relative_transform = np.linalg.inv(xyzrpy2transform(0, 0, 0, 0, np.pi / 2, 0)) @ (
-                arm_goal.relative_transform @ xyzrpy2transform(0, 0, 0, 0, np.pi / 2, 0)
-            )
+            relative_transform = arm_goal.relative_transform
+
+            # Coordinate transform to local robot frame
+            transformation_matrix = np.eye(4)
+            transformation_matrix[:3, :3] = arm_state.origin_transform[:3, :3]
+
+            relative_transform = np.linalg.inv(transformation_matrix) @ (relative_transform @ transformation_matrix)
+
             arm_state.target_transform = arm_state.origin_transform @ relative_transform
 
         if arm_goal.gripper_closed is False:

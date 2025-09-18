@@ -48,6 +48,8 @@ DEFAULT_CONFIG = {
             "cam_index_left": 4,
             "cam_index_right": 6,
             "cap_backend": cv2.CAP_V4L2,
+            "frame_width": 640,
+            "frame_height": 480,
         }
     },
 }
