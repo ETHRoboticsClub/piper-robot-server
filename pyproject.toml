@@ -18,6 +18,7 @@ dependencies = [
     "python-dotenv",
     "meshcat",
     "piper_sdk==0.3.3",
+    "datasets==3.6.0",
     "lerobot @ git+https://github.com/huggingface/lerobot@0cf864870cf29f4738d3ade893e6fd13fbd7cdb5",
 ]
 

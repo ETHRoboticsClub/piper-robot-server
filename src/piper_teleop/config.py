@@ -7,6 +7,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional, Dict, Any
 
 import cv2
 import yaml
@@ -194,6 +195,18 @@ class TelegripConfig:
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
     ground_height: float = GROUND_HEIGHT
+    
+    # Recorder settings
+    record: bool = False
+    repo_id: str = 'piper'
+    resume: bool = False
+    root: Path = Path(__file__).parents[2] / 'data'
+    single_arm: bool = False
+    cams: Optional[Dict[str, Any]] = None
+    dof: int = 6,
+    fps: int = 30,
+    robot_type: str = 'piper',
+    task: str = 'pick and place'
 
     # Control flags
     enable_pybullet: bool = True

@@ -135,6 +135,12 @@ class ControlLoop:
             left_arm = self.update_arm_state(left_arm_goal, left_arm)
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
+            if self.config.record:
+                left_joints = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
+                right_joints = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
+                cams = {'observation.images.left': self.shared_img[0].numpy(),
+                        'observation.images.right': self.shared_img[1].numpy()}
+
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
             self.update_robot(left_arm, right_arm)
