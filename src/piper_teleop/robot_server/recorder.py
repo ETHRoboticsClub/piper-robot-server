@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 import numpy as np
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.common.robot_devices.control_utils import init_keyboard_listener
-from lerobot.common.utils.utils import say
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.utils.control_utils import init_keyboard_listener
+from lerobot.utils.utils import say
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +87,9 @@ class Recorder:
                                           }
         if self.cams is not None:
             for cam, hwc in self.cams.items():
-                feutures[f'observation.images.{cam}']  = {"dtype": "video" ,
-                                                        "shape": hwc,
-                                                        "names": ["height", "width", "channels"],
+                feutures[f'observation.images.{cam}']  = {"dtype": "image" ,
+                                                          "shape": hwc,
+                                                          "names": ["height", "width", "channels"],
                                                         }
         return feutures
 
@@ -100,7 +100,7 @@ class Recorder:
             features=self.features,
             fps=self.fps,
             robot_type=self.robot_type,
-            use_videos=True,
+            use_videos=False,
             image_writer_processes=self.image_writer_processes,
             image_writer_threads=self.image_writer_threads,
         )
@@ -124,9 +124,8 @@ class Recorder:
             )
             frame = {'observation.state': state,
                      'action': target,
-                     'task': self.task,
                      **cams}
-            self.dataset.add_frame(frame)
+            self.dataset.add_frame(frame, self.task)
 
 
     def _transition(self, next_state, message=None, action=None, message_post=None):

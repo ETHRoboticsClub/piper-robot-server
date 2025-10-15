@@ -1,10 +1,9 @@
 import time
 from unittest.mock import MagicMock
 
-import pytest
 import torch
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 import numpy as np
+from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 
 from piper_teleop.robot_server.recorder import Recorder, RecState
 
@@ -29,9 +28,8 @@ def test_create_temp_dataset_and_read(tmp_path):
         image_writer_threads=4,
     )
     frame  = {'action': np.random.random(7).astype(np.float32),
-              'task':'pick and place',
               }
-    dataset.add_frame(frame)
+    dataset.add_frame(frame, task='pick and place')
     dataset.save_episode()
     # Reading
     ds_meta = LeRobotDatasetMetadata(repo_id=repo_id, root=root)
@@ -79,9 +77,8 @@ def test_create_dataset(tmp_path):
     rec._create_dataset()
     frame  = {'action': np.random.random(7).astype(np.float32),
               'observation.state': np.random.random(7).astype(np.float32),
-              'task':'pick and place',
               }
-    rec.dataset.add_frame(frame)
+    rec.dataset.add_frame(frame, task='pick and place')
     assert root.exists() == True
 
 
@@ -124,7 +121,7 @@ def test_benchmark_lerobot(tmp_path):
                    single_arm=False,
                    play_sound=False, task='test',
                    image_writer_processes=8,
-                   image_writer_threads=4,
+                   image_writer_threads=16,
                    cams={'left': (480, 640, 3),
                          }
                    )
