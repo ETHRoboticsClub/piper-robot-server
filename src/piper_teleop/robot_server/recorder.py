@@ -171,5 +171,5 @@ class Recorder:
             elif self.state == RecState.RESET_ENV:
                 self._transition(RecState.RECORDING, "starting recording")
             elif self.state == RecState.RECORDING:
-                self._transition(RecState.RESET_ENV, "wait saving episode", self._save_episodes, 'episode saved. Resetting Env')
+                self._transition(RecState.RESET_ENV, None, self._save_episodes, 'Episode saved')
             self.events['exit_early'] = False

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import dotenv
 import numpy as np
+from lerobot.utils.robot_utils import busy_wait
 from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.config import TelegripConfig
@@ -174,8 +175,15 @@ class ControlLoop:
             await asyncio.sleep(0.001)
             sleep_time = time.perf_counter() - sleep_start
 
+            if self.config.record:
+                dt_s = time.perf_counter() - iteration_start
+                busy_wait(1 / self.config.fps - dt_s)
+
+
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time
+
+
 
             # # Single consolidated logging statement
             # logger.debug(
