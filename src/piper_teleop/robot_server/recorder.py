@@ -30,6 +30,8 @@ class Recorder:
                  fps=30,
                  robot_type='piper',
                  play_sound=True,
+                 image_writer_processes=0,
+                 image_writer_threads=4,
                  ):
         # Feutures
         self.single_arm = single_arm
@@ -53,6 +55,8 @@ class Recorder:
         self.fps = fps
         self.robot_type=robot_type
         self.dataset: Optional[LeRobotDataset] = None
+        self.image_writer_processes = image_writer_processes
+        self.image_writer_threads = image_writer_threads
 
         listener, events = init_keyboard_listener()
         self.events = events
@@ -97,8 +101,8 @@ class Recorder:
             fps=self.fps,
             robot_type=self.robot_type,
             use_videos=True,
-            image_writer_processes=10,
-            image_writer_threads=16,
+            image_writer_processes=self.image_writer_processes,
+            image_writer_threads=self.image_writer_threads,
         )
         self.dataset = dataset
     

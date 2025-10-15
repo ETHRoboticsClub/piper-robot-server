@@ -45,7 +45,6 @@ class ControlLoop:
                                      root=config.root,
                                      single_arm=config.single_arm,
                                      cams = {'left' : (480, 640,3),
-                                             'right': (480, 640, 3)
                                              }
                                      )
             self.recorder.start_recording()
@@ -151,8 +150,7 @@ class ControlLoop:
             if self.config.record:
                 left_joints = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
                 right_joints = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
-                cams = {'observation.images.left': self.shared_img[0].numpy(),
-                        'observation.images.right': self.shared_img[1].numpy()}
+                cams = {'observation.images.left': self.shared_img[0].numpy()}
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()

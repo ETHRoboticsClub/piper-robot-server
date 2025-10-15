@@ -1,8 +1,7 @@
-import os.path
 import time
-from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
 import torch
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 import numpy as np
@@ -117,6 +116,42 @@ def test_recorder_state(tmp_path):
     assert rec.events['exit_early'] == False
 
 
+@pytest.mark.skip # manual test
+def test_benchmark_lerobot(tmp_path):
+    """Benchmark test for LeRobot dataset operations."""
+    root = tmp_path / 'lerobot'
+    rec = Recorder(repo_id='test', root=root,
+                   single_arm=False,
+                   play_sound=False, task='test',
+                   image_writer_processes=8,
+                   image_writer_threads=4,
+                   cams={'left': (480, 640, 3),
+                         }
+                   )
+    rec.state = RecState.RECORDING
+    rec.start_recording()
+
+    start_frame = time.perf_counter()
+    for i in range(500):
+        img = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
+        left_joints = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        right_joints = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        left_joints_target = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        right_joints_target = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        rec.add_observation(left_joints=left_joints,
+                            right_joints=right_joints,
+                            left_joints_target=left_joints_target,
+                            right_joints_target=right_joints_target,
+                            cams={'observation.images.left': img})
+    end_time = time.perf_counter() - start_frame
+
+    start_save = time.perf_counter()
+    rec.dataset.save_episode()
+    save_time = time.perf_counter() - start_save
+
+
+    print(f"  Mean time per frame: {end_time*1000:.2f} ms")
+    print(f"  Save episode time:   {save_time:.2f} s")
 
 
 
