@@ -1,3 +1,4 @@
+import pytest
 import time
 from unittest.mock import MagicMock
 
@@ -46,7 +47,7 @@ def test_create_temp_dataset_and_read(tmp_path):
     assert torch.equal(data['action'][-1], torch.from_numpy(frame['action']))
 
 def test_init_recorder():
-    rec = Recorder(repo_id='test', task='test')
+    rec = Recorder(repo_id='test', task='test', use_video=True)
     assert rec.joints ==[f"L.joint_{i}" for i in range(7)] + [f"R.joint_{i}" for i in range(7)]
     expected_dict  = {"dtype": "float32",
                     "shape": (14,),
@@ -64,8 +65,8 @@ def test_init_recorder():
     assert rec.features['action'] == expected_dict
     assert rec.features['observation.state'] == expected_dict
 
-    rec = Recorder(repo_id='test', single_arm=True, cams={'front': (480, 740, 3)}, task='test')
-    assert rec.features['observation.images.front'] == {"dtype": "video",
+    rec = Recorder(repo_id='test', single_arm=True, cams={'front': (480, 740, 3)}, task='test', use_video=False)
+    assert rec.features['observation.images.front'] == {"dtype": "image",
                                                         "shape": (480,740,3),
                                                         "names": ["height", "width", "channels"],
                                                 }

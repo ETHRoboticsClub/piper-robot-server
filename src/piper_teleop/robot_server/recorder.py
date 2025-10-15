@@ -1,3 +1,4 @@
+import time
 import atexit
 import logging
 from pathlib import Path
@@ -30,8 +31,9 @@ class Recorder:
                  fps=30,
                  robot_type='piper',
                  play_sound=True,
-                 image_writer_processes=0,
-                 image_writer_threads=4,
+                 use_video=False,
+                 image_writer_processes=4,
+                 image_writer_threads=16,
                  ):
         # Feutures
         self.single_arm = single_arm
@@ -57,6 +59,7 @@ class Recorder:
         self.dataset: Optional[LeRobotDataset] = None
         self.image_writer_processes = image_writer_processes
         self.image_writer_threads = image_writer_threads
+        self.use_video = use_video
 
         listener, events = init_keyboard_listener()
         self.events = events
@@ -87,7 +90,7 @@ class Recorder:
                                           }
         if self.cams is not None:
             for cam, hwc in self.cams.items():
-                feutures[f'observation.images.{cam}']  = {"dtype": "image" ,
+                feutures[f'observation.images.{cam}']  = {"dtype": "video" if self.use_video else "image",
                                                           "shape": hwc,
                                                           "names": ["height", "width", "channels"],
                                                         }
@@ -100,7 +103,7 @@ class Recorder:
             features=self.features,
             fps=self.fps,
             robot_type=self.robot_type,
-            use_videos=False,
+            use_videos=self.use_video,
             image_writer_processes=self.image_writer_processes,
             image_writer_threads=self.image_writer_threads,
         )
@@ -140,7 +143,10 @@ class Recorder:
         self.state = next_state
 
     def _save_episodes(self):
+        start_save = time.perf_counter()
+        save_time = time.perf_counter() - start_save
         self.dataset.save_episode()
+        logger.info(f"Save episode time {save_time:.2f}s frames {self.dataset.num_frames}")
 
     def _delete_episodes(self):
         self.dataset.clear_episode_buffer()

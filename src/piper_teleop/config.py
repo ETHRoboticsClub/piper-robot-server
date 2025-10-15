@@ -207,6 +207,7 @@ class TelegripConfig:
     fps: int = 30,
     robot_type: str = 'piper',
     task: str = 'pick and place'
+    use_video = False
 
     # Control flags
     enable_pybullet: bool = True
