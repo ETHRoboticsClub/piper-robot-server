@@ -97,8 +97,8 @@ class Recorder:
             fps=self.fps,
             robot_type=self.robot_type,
             use_videos=True,
-            image_writer_processes=0,
-            image_writer_threads=4,
+            image_writer_processes=10,
+            image_writer_threads=16,
         )
         self.dataset = dataset
     
@@ -127,10 +127,12 @@ class Recorder:
 
     def _transition(self, next_state, message=None, action=None, message_post=None):
         if message and self.play_sound:
+            logger.info(message)
             say(message)
         if action:
             action()
         if message_post:
+            logger.info(message_post)
             say(message_post)
         self.state = next_state
 
