@@ -203,9 +203,9 @@ class TelegripConfig:
     root: Path = Path(__file__).parents[2] / 'data'
     single_arm: bool = False
     cams: Optional[Dict[str, Any]] = None
-    dof: int = 6,
-    fps: int = 30,
-    robot_type: str = 'piper',
+    dof: int = 7
+    fps: int = 30
+    robot_type: str = 'piper'
     task: str = 'pick and place'
     use_video = False
 

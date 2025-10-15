@@ -144,8 +144,8 @@ class Recorder:
 
     def _save_episodes(self):
         start_save = time.perf_counter()
-        save_time = time.perf_counter() - start_save
         self.dataset.save_episode()
+        save_time = time.perf_counter() - start_save
         logger.info(f"Save episode time {save_time:.2f}s frames {self.dataset.num_frames}")
 
     def _delete_episodes(self):

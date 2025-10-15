@@ -44,8 +44,11 @@ class ControlLoop:
                                      task=config.task,
                                      root=config.root,
                                      single_arm=config.single_arm,
-                                     cams = {'left' : (480, 640,3),
-                                             }
+                                     cams = {'left' : (480, 640,3)},
+                                     dof=config.dof,
+                                     fps=config.fps,
+                                     robot_type=config.robot_type,
+                                     use_video=config.use_video,
                                      )
             self.recorder.start_recording()
 
