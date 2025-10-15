@@ -125,11 +125,13 @@ class Recorder:
             self.dataset.add_frame(frame)
 
 
-    def _transition(self, next_state, message=None, action=None):
+    def _transition(self, next_state, message=None, action=None, message_post=None):
         if message and self.play_sound:
             say(message)
         if action:
             action()
+        if message_post:
+            say(message_post)
         self.state = next_state
 
     def _save_episodes(self):
@@ -158,5 +160,5 @@ class Recorder:
             elif self.state == RecState.RESET_ENV:
                 self._transition(RecState.RECORDING, "starting recording")
             elif self.state == RecState.RECORDING:
-                self._transition(RecState.RESET_ENV, "saving episode. reset environment", self._save_episodes)
+                self._transition(RecState.RESET_ENV, "wait saving episode", self._save_episodes, 'episode saved. Resetting Env')
             self.events['exit_early'] = False
