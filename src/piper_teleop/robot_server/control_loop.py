@@ -43,9 +43,12 @@ class ControlLoop:
             arm_state.origin_transform = arm_state.initial_transform
         elif arm_goal.reset_reference:
             if self.robot_enabled:
-                arm_state.origin_transform = self.robot_interface.get_end_effector_transform(arm_state.arm_name)
-            else:
-                arm_state.origin_transform = arm_state.initial_transform
+                # NOTE: We use the last target transform as the origin transform since there is an offset between the target and the EEF transform
+                arm_state.origin_transform = (
+                    arm_state.target_transform
+                    if arm_state.target_transform is not None
+                    else arm_state.initial_transform
+                )
         elif arm_goal.relative_transform is not None:
             relative_transform = arm_goal.relative_transform
 
