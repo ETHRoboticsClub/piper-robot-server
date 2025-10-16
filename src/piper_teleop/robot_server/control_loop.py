@@ -59,9 +59,12 @@ class ControlLoop:
             arm_state.origin_transform = arm_state.initial_transform
         elif arm_goal.reset_reference:
             if self.robot_enabled:
-                arm_state.origin_transform = self.robot_interface.get_end_effector_transform(arm_state.arm_name)
-            else:
-                arm_state.origin_transform = arm_state.initial_transform
+                # NOTE: We use the last target transform as the origin transform since there is an offset between the target and the EEF transform
+                arm_state.origin_transform = (
+                    arm_state.target_transform
+                    if arm_state.target_transform is not None
+                    else arm_state.initial_transform
+                )
         elif arm_goal.relative_transform is not None:
             relative_transform = arm_goal.relative_transform
 
@@ -115,11 +118,11 @@ class ControlLoop:
         total_time = time.perf_counter() - start_time_total
         overhead_time = total_time - ik_time - send_time
 
-        # # # Print all at once to minimize timing impact
-        # logger.debug(
-        #     f"IK: {ik_time*1000:.1f}ms, CAN: {send_time*1000:.1f}ms, "
-        #     f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
-        # )
+        # # Print all at once to minimize timing impact
+        logger.debug(
+            f"IK: {ik_time*1000:.1f}ms, CAN: {send_time*1000:.1f}ms, "
+            f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
+        )
 
     async def run(self):
         """Control loop for the teleoperation system."""
@@ -183,17 +186,15 @@ class ControlLoop:
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time
 
-
-
-            # # Single consolidated logging statement
-            # logger.debug(
-            #     f"Loop: {total_time*1000:.1f}ms ({1/total_time:.1f}Hz) | "
-            #     f"Cmd: {commands_time*1000:.1f}ms | "
-            #     f"Robot: {robot_time*1000:.1f}ms | "
-            #     f"Sleep: {sleep_time*1000:.1f}ms | "
-            #     f"Overhead: {overhead_time*1000:.1f}ms"
-            #     "\n================================================================================="
-            # )
+            # Single consolidated logging statement
+            logger.debug(
+                f"Loop: {total_time*1000:.1f}ms ({1/total_time:.1f}Hz) | "
+                f"Cmd: {commands_time*1000:.1f}ms | "
+                f"Robot: {robot_time*1000:.1f}ms | "
+                f"Sleep: {sleep_time*1000:.1f}ms | "
+                f"Overhead: {overhead_time*1000:.1f}ms"
+                "\n================================================================================="
+            )
 
     async def stop(self):
         """Stop the control loop."""
