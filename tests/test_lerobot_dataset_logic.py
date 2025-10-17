@@ -82,6 +82,27 @@ def test_create_dataset(tmp_path):
     rec.dataset.add_frame(frame, task='pick and place')
     assert root.exists() == True
 
+def test_rerecord(tmp_path):
+    root = tmp_path / 'lerobot'
+    rec = Recorder(repo_id='test', root=root, single_arm=False, play_sound=False, task='test',
+                   cams={'left': (480, 640, 3)} )
+    rec.start_recording()
+    rec.state = RecState.RECORDING
+    for i in range(20):
+        time.sleep(1/30)
+        img = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
+        left_joints = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        right_joints = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        left_joints_target = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        right_joints_target = {f'joint_{j}.pos': np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        rec.add_observation(left_joints=left_joints,
+                            right_joints=right_joints,
+                            left_joints_target=left_joints_target,
+                            right_joints_target=right_joints_target,
+                            cams={'observation.images.left': img})
+
+    rec.events['rerecord_episode'] = True
+    rec.handle_keyboard_event()
 
 def test_recorder_state(tmp_path):
     root = tmp_path / 'lerobot'
@@ -112,6 +133,7 @@ def test_recorder_state(tmp_path):
     rec.handle_keyboard_event()
     assert rec.state == RecState.RESET_ENV
     assert rec.events['exit_early'] == False
+
 
 
 @pytest.mark.skip # manual test

@@ -112,7 +112,7 @@ class Recorder:
     def start_recording(self):
         logger.info('start recording')
         self._create_dataset()
-    
+
     def add_observation(self, left_joints, right_joints, left_joints_target, right_joints_target, cams):
         if self.state == RecState.RECORDING:
             state = np.array(
@@ -149,6 +149,8 @@ class Recorder:
         logger.info(f"Save episode time {save_time:.2f}s frames {self.dataset.num_frames}")
 
     def _delete_episodes(self):
+        # Gives lerobot dataset time to catch up before deleting
+        time.sleep(0.2)
         self.dataset.clear_episode_buffer()
 
     def handle_keyboard_event(self):
