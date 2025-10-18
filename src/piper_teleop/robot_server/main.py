@@ -26,16 +26,16 @@ def _camera_process_wrapper(room_name: str, participant_name: str, camera_config
     asyncio.run(run_camera())
 
 
-def _control_process_wrapper(room_name: str, participant_name: str, robot_enabled: bool, visualize: bool):
+def _control_process_wrapper(room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, use_keyboard: bool):
     """Wrapper to run control process in a separate process with asyncio"""
-    asyncio.run(_run_control_process(room_name, participant_name, robot_enabled, visualize))
+    asyncio.run(_run_control_process(room_name, participant_name, robot_enabled, visualize, use_keyboard))
 
 
-async def _run_control_process(room_name: str, participant_name: str, robot_enabled: bool, visualize: bool) -> None:
+async def _run_control_process(room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, use_keyboard: bool) -> None:
     """
     Run the controll process (receiving, processing and sending commands to the robot)
     """
-    control_loop = ControlLoop(config, robot_enabled, visualize)
+    control_loop = ControlLoop(config, robot_enabled, visualize, use_keyboard)
     control_loop_task = asyncio.create_task(control_loop.run())
 
     await asyncio.gather(control_loop_task)
@@ -47,6 +47,7 @@ async def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
+    parser.add_argument("--keyboard", action="store_true", help="Enable keyboard control")
     parser.add_argument("--camera-type", default="dual_camera_opencv", help="Camera config")
     parser.add_argument(
         "--log-level",
@@ -62,6 +63,7 @@ async def main():
 
     robot_enabled = not args.no_robot
     visualize = args.vis
+    use_keyboard = args.keyboard
 
     logger.info("Initializing server components...")
 
@@ -85,7 +87,7 @@ async def main():
         # run control loop as process
         control_process = mp.Process(
             target=_control_process_wrapper,
-            args=(config.livekit_room, config.controllers_processing_participant, robot_enabled, visualize),
+            args=(config.livekit_room, config.controllers_processing_participant, robot_enabled, visualize, use_keyboard),
         )
         control_process.start()
 

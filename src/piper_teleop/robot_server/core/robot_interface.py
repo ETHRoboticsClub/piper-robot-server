@@ -69,10 +69,14 @@ class RobotInterface:
         self.right_arm_connected = False
 
         # Joint state
-        self.left_arm_angles = np.zeros(NUM_JOINTS)
-        self.right_arm_angles = np.zeros(NUM_JOINTS)
+        self.arm_angles = np.zeros(NUM_JOINTS) * 2
+        # arm angles
+        # 0-5: left arm joints
+        # 6-11: right arm joints
+        # 12: left gripper
+        # 13: right gripper
 
-        self.ik_solvers = {"left": None, "right": None}
+        self.ik_solver = None
 
         # Control timing
         self.last_send_time = 0
@@ -86,7 +90,7 @@ class RobotInterface:
 
         # Initial positions for safe shutdown - restored original values
         self.initial_left_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
-        self.initial_right_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
+        self.initial_right_arm = xyzrpy2transform(0.19, -0.5, 0.2, 0, 1.57, 0)
 
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
@@ -149,8 +153,7 @@ class RobotInterface:
         """Setup kinematics solvers using PyBullet components for both arms."""
         # Setup solvers for both arms
         ground_height = self.config.ground_height
-        for arm in ["left", "right"]:
-            self.ik_solvers[arm] = Arm_IK(self.config.urdf_path, ground_height)
+        self.ik_solver = Arm_IK(self.config.urdf_path, ground_height)
         logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 
     def get_end_effector_transform(self, arm: str) -> np.ndarray:
@@ -174,23 +177,25 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
 
-    def solve_ik(self, arm: str, target_pose: np.ndarray, visualize: bool) -> np.ndarray:
-        """Solve inverse kinematics for specified arm."""
-        position, quaternion = transform2pose(target_pose)
+    def solve_ik(self, target_pose_1: np.ndarray, target_pose_2: np.ndarray, visualize: bool) -> np.ndarray:
+        """Solve inverse kinematics for both arms."""
+        position_1, quaternion_1 = transform2pose(target_pose_1)
+        position_2, quaternion_2 = transform2pose(target_pose_2)
         # transform2pose returns XYZW, but pin.Quaternion expects WXYZ
-        target = pin.SE3(
-            pin.Quaternion(quaternion[3], quaternion[0], quaternion[1], quaternion[2]),
-            position,
+        target_1 = pin.SE3(
+            pin.Quaternion(quaternion_1[3], quaternion_1[0], quaternion_1[1], quaternion_1[2]),
+            position_1,
         )
-        sol_q, is_collision = self.ik_solvers[arm].ik_fun(target.homogeneous, 0, visualize=visualize)
+        target_2 = pin.SE3(
+            pin.Quaternion(quaternion_2[3], quaternion_2[0], quaternion_2[1], quaternion_2[2]),
+            position_2,
+        )
+        sol_q, is_collision = self.ik_solver.ik_fun(target_1.homogeneous, target_2.homogeneous, visualize=visualize)
         return sol_q, is_collision
 
-    def update_arm_angles(self, arm: str, joint_angles: np.ndarray):
+    def update_arm_angles(self, joint_angles: np.ndarray):
         """Update joint angles for specified arm."""
-        if arm == "left":
-            self.left_arm_angles = joint_angles
-        else:
-            self.right_arm_angles = joint_angles
+        self.arm_angles = joint_angles
 
     def send_command(self) -> bool:
         """Send current joint angles to robot using dictionary format."""
@@ -209,13 +214,13 @@ class RobotInterface:
             if self.left_robot and self.left_arm_connected:
                 try:
                     action_dict = {
-                        "joint_0.pos": float(self.left_arm_angles[0]),
-                        "joint_1.pos": float(self.left_arm_angles[1]),
-                        "joint_2.pos": float(self.left_arm_angles[2]),
-                        "joint_3.pos": float(self.left_arm_angles[3]),
-                        "joint_4.pos": float(self.left_arm_angles[4]),
-                        "joint_5.pos": float(self.left_arm_angles[5]),
-                        "joint_6.pos": float(self.left_arm_angles[6]),
+                        "joint_0.pos": float(self.arm_angles[0]),
+                        "joint_1.pos": float(self.arm_angles[1]),
+                        "joint_2.pos": float(self.arm_angles[2]),
+                        "joint_3.pos": float(self.arm_angles[3]),
+                        "joint_4.pos": float(self.arm_angles[4]),
+                        "joint_5.pos": float(self.arm_angles[5]),
+                        "joint_6.pos": float(self.arm_angles[12]),
                     }
                     with suppress_stdout_stderr():
                         self.left_robot.send_action(action_dict)
@@ -231,13 +236,13 @@ class RobotInterface:
             if self.right_robot and self.right_arm_connected:
                 try:
                     action_dict = {
-                        "joint_0.pos": float(self.right_arm_angles[0]),
-                        "joint_1.pos": float(self.right_arm_angles[1]),
-                        "joint_2.pos": float(self.right_arm_angles[2]),
-                        "joint_3.pos": float(self.right_arm_angles[3]),
-                        "joint_4.pos": float(self.right_arm_angles[4]),
-                        "joint_5.pos": float(self.right_arm_angles[5]),
-                        "joint_6.pos": float(self.right_arm_angles[6]),
+                        "joint_0.pos": float(self.arm_angles[6]),
+                        "joint_1.pos": float(self.arm_angles[7]),
+                        "joint_2.pos": float(self.arm_angles[8]),
+                        "joint_3.pos": float(self.arm_angles[9]),
+                        "joint_4.pos": float(self.arm_angles[10]),
+                        "joint_5.pos": float(self.arm_angles[11]),
+                        "joint_6.pos": float(self.arm_angles[13]),
                     }
                     with suppress_stdout_stderr():
                         self.right_robot.send_action(action_dict)
@@ -265,9 +270,9 @@ class RobotInterface:
         angle = 0.0 if closed else 0.07
 
         if arm == "left":
-            self.left_arm_angles[6] = angle
+            self.arm_angles[12] = angle
         elif arm == "right":
-            self.right_arm_angles[6] = angle
+            self.arm_angles[13] = angle
         else:
             raise ValueError(f"Invalid arm: {arm}")
 
@@ -275,19 +280,13 @@ class RobotInterface:
         """Return both arms to initial position."""
         logger.info("⏪ Returning robot to initial position...")
 
-        left_arm_angles, left_collision = self.solve_ik("left", self.initial_left_arm, visualize=True)
-        right_arm_angles, right_collision = self.solve_ik("right", self.initial_right_arm, visualize=True)
+        arm_angles, collision = self.solve_ik(self.initial_left_arm, self.initial_right_arm, visualize=True)
 
-        if left_collision:
-            logger.error("❌ Left arm collision detected during return to initial position, setting angles to zero")
-            self.left_arm_angles = np.zeros(NUM_JOINTS)
+        if collision:
+            logger.error("❌ Cannot return to initial position due to collision in IK solution")
+            self.arm_angles = np.zeros(NUM_JOINTS) * 2
 
-        if right_collision:
-            logger.error("❌ Right arm collision detected during return to initial position, setting angles to zero")
-            self.right_arm_angles = np.zeros(NUM_JOINTS)
-
-        self.left_arm_angles = np.concatenate((left_arm_angles, [0.0]))
-        self.right_arm_angles = np.concatenate((right_arm_angles, [0.0]))
+        self.arm_angles = np.concatenate((arm_angles, [0.0, 0.0]))
 
         try:
             # Send commands for a few iterations to ensure movement
