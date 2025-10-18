@@ -57,19 +57,6 @@ def create_transformation_matrix(x, y, z, roll, pitch, yaw):
     return transformation_matrix
 
 
-def calc_pose_incre(base_pose, pose_data):
-    begin_matrix = create_transformation_matrix(
-        base_pose[0], base_pose[1], base_pose[2], base_pose[3], base_pose[4], base_pose[5]
-    )
-    zero_matrix = create_transformation_matrix(0.19, 0.0, 0.2, 0, 0, 0)
-    end_matrix = create_transformation_matrix(
-        pose_data[0], pose_data[1], pose_data[2], pose_data[3], pose_data[4], pose_data[5]
-    )
-    result_matrix = np.dot(zero_matrix, np.dot(np.linalg.inv(begin_matrix), end_matrix))
-    xyzrpy = matrix_to_xyzrpy(result_matrix)
-    return xyzrpy
-
-
 def quaternion_from_matrix(matrix):
     qw = math.sqrt(1 + matrix[0, 0] + matrix[1, 1] + matrix[2, 2]) / 2
     qx = (matrix[2, 1] - matrix[1, 2]) / (4 * qw)
@@ -135,7 +122,13 @@ class Arm_IK:
             if os.path.exists(temp_urdf_path):
                 os.unlink(temp_urdf_path)
 
-        self.mixed_jointsToLockIDs = ["joint7", "joint8"]
+        for joint in self.robot.model.names:
+            print("Joint name:", joint)
+
+        for link in self.robot.model.frames:
+            print("Link name:", link.name)
+
+        self.mixed_jointsToLockIDs = ["joint7", "joint8", "arm2_joint7", "arm2_joint8"]
 
         self.reduced_robot = self.robot.buildReducedRobot(
             list_of_joints_to_lock=self.mixed_jointsToLockIDs,
@@ -144,7 +137,7 @@ class Arm_IK:
 
         # Add ground plane geometry to collision model
         self.ground_height = ground_height
-        self.exclude_from_ground_collision = ["base_link_0"]
+        self.exclude_from_ground_collision = ["base_link_0", "arm2_base_link_0"]
         self._add_ground_plane()
         self._init_collision_pairs()
 
@@ -158,9 +151,20 @@ class Arm_IK:
                 "ee",
                 self.reduced_robot.model.getJointId("joint6"),
                 pin.SE3(
-                    # pin.Quaternion(1, 0, 0, 0),
                     pin.Quaternion(q[3], q[0], q[1], q[2]),
-                    np.array([self.last_matrix[0, 3], self.last_matrix[1, 3], self.last_matrix[2, 3]]),  # -y
+                    np.array([self.last_matrix[0, 3], self.last_matrix[1, 3], self.last_matrix[2, 3]]),
+                ),
+                pin.FrameType.OP_FRAME,
+            )
+        )
+
+        self.reduced_robot.model.addFrame(
+            pin.Frame(
+                "arm2_ee",
+                self.reduced_robot.model.getJointId("arm2_joint6"),
+                pin.SE3(
+                    pin.Quaternion(q[3], q[0], q[1], q[2]),
+                    np.array([self.last_matrix[0, 3], self.last_matrix[1, 3], self.last_matrix[2, 3]]),
                 ),
                 pin.FrameType.OP_FRAME,
             )
@@ -181,7 +185,7 @@ class Arm_IK:
         self.vis.display(pin.neutral(self.reduced_robot.model))
 
         # Enable display of end effector target frames with short axis lengths
-        frame_viz_names = ["ee_target"]
+        frame_viz_names = ["ee_target_1", "ee_target_2"]
         FRAME_AXIS_POSITIONS = (
             np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]]).astype(np.float32).T
         )
@@ -208,66 +212,103 @@ class Arm_IK:
         self.cmodel = cpin.Model(self.reduced_robot.model)
         self.cdata = self.cmodel.createData()
 
-        # Creating symbolic variables
-        self.cq = casadi.SX.sym("q", self.reduced_robot.model.nq, 1)
-        self.cTf = casadi.SX.sym("tf", 4, 4)
-        cpin.framesForwardKinematics(self.cmodel, self.cdata, self.cq)
+        # Create generic symbolic variables
+        cq = casadi.SX.sym("q", self.reduced_robot.model.nq, 1)
+        cpin.framesForwardKinematics(self.cmodel, self.cdata, cq)
 
-        # Get the hand joint ID and define the error function
-        self.gripper_id = self.reduced_robot.model.getFrameId("ee")
-        self.error = casadi.Function(
-            "error",
-            [self.cq, self.cTf],
-            [
-                casadi.vertcat(
-                    cpin.log6(self.cdata.oMf[self.gripper_id].inverse() * cpin.SE3(self.cTf)).vector,
-                )
-            ],
-        )
+        # Create a unified solver for both arms
+        self.solver = self._create_dual_ik_solver(cq)
 
-        # Defining the optimization problem
-        self.opti = casadi.Opti()
-        self.var_q = self.opti.variable(self.reduced_robot.model.nq)
-        # For smooth motion (commented out)
-        # self.var_q_last = self.opti.parameter(self.reduced_robot.model.nq)
-        self.param_tf = self.opti.parameter(4, 4)
+    def _create_dual_ik_solver(self, cq):
+        """Creates and configures a unified IK solver for both end-effectors."""
+        # Define symbolic variables for the target poses first
+        cTf1 = casadi.SX.sym("tf1", 4, 4)
+        cTf2 = casadi.SX.sym("tf2", 4, 4)
 
-        # self.totalcost = casadi.sumsqr(self.error(self.var_q, self.param_tf))
-        # self.regularization = casadi.sumsqr(self.var_q)
+        # Define the error function for the first arm using the pre-defined cTf1
+        gripper_id_1 = self.reduced_robot.model.getFrameId("ee")
+        error_expr1 = casadi.vertcat(cpin.log6(self.cdata.oMf[gripper_id_1].inverse() * cpin.SE3(cTf1)).vector)
+        error1 = casadi.Function("error1", [cq, cTf1], [error_expr1])
 
-        error_vec = self.error(self.var_q, self.param_tf)
-        pos_error = error_vec[:3]
-        ori_error = error_vec[3:]
+        # Define the error function for the second arm using the pre-defined cTf2
+        gripper_id_2 = self.reduced_robot.model.getFrameId("arm2_ee")
+        error_expr2 = casadi.vertcat(cpin.log6(self.cdata.oMf[gripper_id_2].inverse() * cpin.SE3(cTf2)).vector)
+        error2 = casadi.Function("error2", [cq, cTf2], [error_expr2])
+
+        # Define the optimization problem
+        opti = casadi.Opti()
+        var_q = opti.variable(self.reduced_robot.model.nq)
+        param_tf1 = opti.parameter(4, 4)
+        param_tf2 = opti.parameter(4, 4)
+
+        # Define the cost function for both arms
+        error_vec1 = error1(var_q, param_tf1)
+        pos_error1 = error_vec1[:3]
+        ori_error1 = error_vec1[3:]
+
+        error_vec2 = error2(var_q, param_tf2)
+        pos_error2 = error_vec2[:3]
+        ori_error2 = error_vec2[3:]
+
         weight_position = 1.0
         weight_orientation = 0.1
-        self.totalcost = casadi.sumsqr(weight_position * pos_error) + casadi.sumsqr(weight_orientation * ori_error)
-        self.regularization = casadi.sumsqr(self.var_q)
-        self.opti.subject_to(
-            self.opti.bounded(
-                self.reduced_robot.model.lowerPositionLimit, self.var_q, self.reduced_robot.model.upperPositionLimit
+
+        cost_arm1 = casadi.sumsqr(weight_position * pos_error1) + casadi.sumsqr(weight_orientation * ori_error1)
+        cost_arm2 = casadi.sumsqr(weight_position * pos_error2) + casadi.sumsqr(weight_orientation * ori_error2)
+
+        total_cost = cost_arm1 + cost_arm2
+        regularization = casadi.sumsqr(var_q)
+
+        # Add constraints
+        opti.subject_to(
+            opti.bounded(
+                self.reduced_robot.model.lowerPositionLimit, var_q, self.reduced_robot.model.upperPositionLimit
             )
         )
-        # Debug prints (commented out)
-        # print("lowerPositionLimit:", self.reduced_robot.model.lowerPositionLimit)
-        # print("upperPositionLimit:", self.reduced_robot.model.upperPositionLimit)
-        self.opti.minimize(20 * self.totalcost + 0.01 * self.regularization)
-        # For smooth motion (commented out)
-        # self.opti.minimize(20 * self.totalcost + 0.01 * self.regularization + 0.1 * self.smooth_cost)
 
+        # Set the objective
+        opti.minimize(20 * total_cost + 0.01 * regularization)
+
+        # Configure the solver
         opts = {"ipopt": {"print_level": 0, "max_iter": 50, "tol": 1e-4}, "print_time": False}
-        self.opti.solver("ipopt", opts)
+        opti.solver("ipopt", opts)
+
+        # Return a dictionary containing all necessary components for this solver
+        return {"opti": opti, "var_q": var_q, "param_tf1": param_tf1, "param_tf2": param_tf2}
 
     def _init_collision_pairs(self):
-        # Add collision pairs for self-collision detection
-        for i in range(4, 9):
-            for j in range(0, 3):
-                self.geom_model.addCollisionPair(pin.CollisionPair(i, j))
+        for i in range(self.geom_model.ngeoms):
+            print("Geometry object:", self.geom_model.geometryObjects[i].name)
+
+        arm1_indices = [0] + list(range(11, 20))
+        arm2_indices = list(range(1, 11))
+
+        for i in range(0, 3):
+            for j in range(4, 9):
+                geom1_idx = arm1_indices[i]
+                geom2_idx = arm1_indices[j]
+                # Avoid checking adjacent links
+                if abs(geom1_idx - geom2_idx) > 1:
+                    self.geom_model.addCollisionPair(pin.CollisionPair(geom1_idx, geom2_idx))
+
+        for i in range(0, 3):
+            for j in range(4, 9):
+                geom1_idx = arm2_indices[i]
+                geom2_idx = arm2_indices[j]
+                # Avoid checking adjacent links
+                if abs(geom1_idx - geom2_idx) > 1:
+                    self.geom_model.addCollisionPair(pin.CollisionPair(geom1_idx, geom2_idx))
+
+        for geom1_idx in arm1_indices:
+            for geom2_idx in arm2_indices:
+                # Exclude collision check between the two base links
+                if geom1_idx == 0 and geom2_idx == 1:
+                    continue
+                self.geom_model.addCollisionPair(pin.CollisionPair(geom1_idx, geom2_idx))
 
         # Add collision pairs between robot links and ground plane
-        # Ground plane is the last geometry object added
         ground_plane_idx = self.geom_model.ngeoms - 1
         for i in range(self.geom_model.ngeoms - 1):  # All robot links
-            # Check if this geometry should be excluded from ground collision
             geom_name = self.geom_model.geometryObjects[i].name
 
             if geom_name not in self.exclude_from_ground_collision:
@@ -277,66 +318,61 @@ class Arm_IK:
 
     def _add_ground_plane(self):
         """Add a ground plane geometry to the collision model for ground collision detection."""
-        # Create a large box representing the ground plane at the specified height
-        # The box extends from ground_height-0.05 to ground_height+0.05 to create a thin ground plane
-        ground_size = [10.0, 10.0, 0.1]  # Large XY plane, thin in Z
+        ground_size = [10.0, 10.0, 0.1]
         ground_pose = pin.SE3.Identity()
         ground_pose.translation = np.array([0.0, 0.0, self.ground_height - 0.05])
 
-        # Create ground plane geometry
-        ground_geometry = pin.GeometryObject(
-            "ground_plane", 0, pin.hppfcl.Box(*ground_size), ground_pose  # Attach to world frame (frame 0)
-        )
-
-        # Add to geometry model
+        ground_geometry = pin.GeometryObject("ground_plane", 0, pin.hppfcl.Box(*ground_size), ground_pose)
         self.geom_model.addGeometryObject(ground_geometry)
         logger.info(f"Added ground plane at height {self.ground_height}")
 
-    def ik_fun(self, target_pose, gripper=0, motorstate=None, motorV=None, visualize=True):
+    def ik_fun(self, target_pose_1, target_pose_2, gripper=0, motorstate=None, motorV=None, visualize=True):
+        opti = self.solver["opti"]
+        var_q = self.solver["var_q"]
+        param_tf1 = self.solver["param_tf1"]
+        param_tf2 = self.solver["param_tf2"]
+
         gripper = np.array([gripper / 2.0, -gripper / 2.0])
         if motorstate is not None:
             self.init_data = motorstate
-        self.opti.set_initial(self.var_q, self.init_data)
+        opti.set_initial(var_q, self.init_data)
 
         if visualize:
-            # For visualization
-            self.vis.viewer["ee_target"].set_transform(target_pose)
+            self.vis.viewer["ee_target_1"].set_transform(target_pose_1)
+            self.vis.viewer["ee_target_2"].set_transform(target_pose_2)
 
-        self.opti.set_value(self.param_tf, target_pose)
-        # For smooth motion (commented out)
-        # self.opti.set_value(self.var_q_last, self.init_data)
+        opti.set_value(param_tf1, target_pose_1)
+        opti.set_value(param_tf2, target_pose_2)
 
         try:
-            # sol = self.opti.solve()
-            self.opti.solve_limited()
-            sol_q = self.opti.value(self.var_q)
+            opti.solve_limited()
+            sol_q = opti.value(var_q)
 
             if self.init_data is not None:
                 max_diff = max(abs(self.history_data - sol_q))
-                # print("max_diff:", max_diff)
                 self.init_data = sol_q
                 if max_diff > 30.0 / 180.0 * 3.1415:
-                    # print("Excessive changes in joint angle:", max_diff)
                     self.init_data = np.zeros(self.reduced_robot.model.nq)
             else:
                 self.init_data = sol_q
             self.history_data = sol_q
 
             if visualize:
-                self.vis.display(sol_q)  # for visualization
+                # print("sol_q:", sol_q)
+                self.vis.display(sol_q)
 
-            is_collision = self.check_collision(sol_q, gripper)
+            is_collision = self.check_collision(sol_q, gripper_1=gripper, gripper_2=gripper)
             return sol_q, is_collision
 
         except Exception as e:
             print(f"ERROR in convergence, plotting debug info.{e}")
-            # return original value (commented out)
-            # sol_q = self.opti.debug.value(self.var_q)
             return None, False
 
-    def check_collision(self, q, gripper=np.array([0, 0])):
+    def check_collision(self, q, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
         """Check for collisions including self-collision and ground plane collision."""
-        pin.forwardKinematics(self.robot.model, self.robot.data, np.concatenate([q, gripper], axis=0))
+        pin.forwardKinematics(
+            self.robot.model, self.robot.data, np.concatenate([q[0:6], gripper_1, q[6:12], gripper_2], axis=0)
+        )
         pin.updateGeometryPlacements(self.robot.model, self.robot.data, self.geom_model, self.geometry_data)
         collision = pin.computeCollisions(self.geom_model, self.geometry_data, False)
         if collision:
@@ -344,7 +380,6 @@ class Arm_IK:
         return collision
 
     def get_dist(self, q, xyz):
-        # print("q:", q)
         pin.forwardKinematics(self.reduced_robot.model, self.reduced_robot.data, np.concatenate([q], axis=0))
         dist = math.sqrt(
             pow((xyz[0] - self.reduced_robot.data.oMi[6].translation[0]), 2)

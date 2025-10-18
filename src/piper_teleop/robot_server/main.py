@@ -30,20 +30,22 @@ def _camera_process_wrapper(config, room_name: str, participant_name: str, camer
     asyncio.run(run_camera())
 
 
-def _control_process_wrapper(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, shared_img):
+def _control_process_wrapper(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, use_keyboard: bool, shared_img):
     """Wrapper to run control process in a separate process with asyncio"""
+    print("uSing keyboard:", use_keyboard)
     asyncio.run(_run_control_process(config=config,
                                      room_name=room_name, participant_name=participant_name,
                                      robot_enabled=robot_enabled, visualize=visualize,
                                      shared_img=shared_img,
+                                     use_keyboard=use_keyboard
                                      ))
 
 
-async def _run_control_process(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, shared_img) -> None:
+async def _run_control_process(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, shared_img,  use_keyboard: bool) -> None:
     """
     Run the controll process (receiving, processing and sending commands to the robot)
     """
-    control_loop = ControlLoop(config=config, robot_enabled=robot_enabled, visualize=visualize, shared_img=shared_img)
+    control_loop = ControlLoop(config=config, robot_enabled=robot_enabled, visualize=visualize, shared_img=shared_img, use_keyboard=use_keyboard)
     control_loop_task = asyncio.create_task(control_loop.run())
 
     await asyncio.gather(control_loop_task)
@@ -62,6 +64,7 @@ async def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
+    parser.add_argument("--keyboard", action="store_true", help="Enable keyboard control")
     parser.add_argument("--camera-type", default="dual_camera_opencv", help="Camera config")
     parser.add_argument("--record", action="store_true", help="Enable recording")
     parser.add_argument("--resume", action="store_true", help="Resume recording")
@@ -83,6 +86,7 @@ async def main():
     config.record = args.record
     config.resume = args.resume
     config.repo_id = args.repo_id
+    use_keyboard = args.keyboard
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
     logger.info("Initializing server components...")
@@ -116,7 +120,9 @@ async def main():
                   config.controllers_processing_participant,
                   robot_enabled,
                   visualize,
-                  shared_img),
+                  use_keyboard,
+                  shared_img,
+                  ), 
         )
         control_process.start()
 
