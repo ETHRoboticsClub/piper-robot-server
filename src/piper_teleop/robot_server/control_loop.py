@@ -21,7 +21,6 @@ dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-
 @dataclass
 class ArmState:
     arm_name: str
@@ -81,11 +80,7 @@ class ControlLoop:
 
             arm_state.target_transform = arm_state.origin_transform @ relative_transform
 
-        if arm_goal.gripper_closed is False:
-            arm_state.gripper_closed = False
-        else:
-            arm_state.gripper_closed = True
-
+        arm_state.gripper_closed = arm_goal.gripper_closed
         return arm_state
 
     def update_robot(self, left_arm: ArmState, right_arm: ArmState):
@@ -99,18 +94,15 @@ class ControlLoop:
 
         ik_solution, is_collision = self.robot_interface.solve_ik(
             left_arm.target_transform, right_arm.target_transform, visualize=self.visualize)
-        
 
-        
         current_gripper_1 = 0.0 if left_arm.gripper_closed else 0.07
         current_gripper_2 = 0.0 if right_arm.gripper_closed else 0.07
-        
+
         if not is_collision:
             self.robot_interface.update_arm_angles(np.concatenate([ik_solution, [current_gripper_1, current_gripper_2]]))
         else:
             print("IK solution results in collision, not updating robot commands.")
             return
-
 
         ik_time = time.perf_counter() - start_time_ik
 
@@ -134,7 +126,6 @@ class ControlLoop:
         left_arm = ArmState(arm_name="left")
         right_arm = ArmState(arm_name="right")
 
-        
         right_arm.initial_transform = xyzrpy2transform(0.19, -0.5, 0.2, 0, 1.57, 0)
         right_arm.origin_transform = right_arm.initial_transform
 
@@ -153,7 +144,6 @@ class ControlLoop:
         if self.robot_enabled:
             self.robot_interface.return_to_initial_position()
 
-        
         left_arm.target_transform = left_arm.initial_transform
         right_arm.target_transform = right_arm.initial_transform
 
@@ -169,7 +159,6 @@ class ControlLoop:
             else:
                 left_arm_goal_vr = await self.api.get_controller_goal("left")
                 right_arm_goal_vr = await self.api.get_controller_goal("right")
-
 
                 left_arm_goal = left_arm_goal_vr
                 right_arm_goal = right_arm_goal_vr
