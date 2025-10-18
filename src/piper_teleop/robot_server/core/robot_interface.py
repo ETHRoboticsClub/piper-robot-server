@@ -22,6 +22,18 @@ from .piper import Piper, PiperConfig
 logger = logging.getLogger(__name__)
 
 
+def arm_angles_to_action_dict(arm_angles):
+    action_dict = {
+        "joint_0.pos": float(arm_angles[0]),
+        "joint_1.pos": float(arm_angles[1]),
+        "joint_2.pos": float(arm_angles[2]),
+        "joint_3.pos": float(arm_angles[3]),
+        "joint_4.pos": float(arm_angles[4]),
+        "joint_5.pos": float(arm_angles[5]),
+        "joint_6.pos": float(arm_angles[6]),
+    }
+    return action_dict
+
 @contextlib.contextmanager
 def suppress_stdout_stderr():
     """Context manager to suppress stdout and stderr output at the file descriptor level."""

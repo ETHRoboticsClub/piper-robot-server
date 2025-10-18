@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Optional
 
-import cv2
+import torch
 from dotenv import load_dotenv
 from tactile_teleop_sdk import TactileAPI
 
@@ -17,10 +17,15 @@ class CameraStreamer:
     def __init__(
         self,
         camera_config: dict,
+        record:bool,
+        shared_img
     ):
         self.logger = logging.getLogger(__name__)
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
         self.cam_loop_task: Optional[asyncio.Task] = None
+        self.record=record
+        self.shared_img=shared_img
+
 
         if camera_config["type"] == "dual_camera_opencv":
             self.camera = DualCameraOpenCV(camera_config)
@@ -70,6 +75,11 @@ class CameraStreamer:
                 # Crop outer edges to remove monocular zones
                 cropped_left, cropped_right = self.crop_stereo_edges(frame_left, frame_right)
                 await self.api.send_stereo_frame(cropped_left, cropped_right)
+                if self.record:
+                    left = torch.from_numpy(frame_left)
+                    right = torch.from_numpy(frame_right)
+                    stereo = torch.stack([left, right], dim=0)
+                    self.shared_img.copy_(stereo)
 
             except Exception as e:
                 self.logger.error(f"Error processing frame: {e}")

@@ -18,6 +18,7 @@ dependencies = [
     "python-dotenv",
     "meshcat",
     "piper_sdk==0.3.3",
+    "lerobot==0.3.3",
 ]
 
 requires-python = ">=3.8"
@@ -28,7 +29,6 @@ dev = [
 
 [project.scripts]
 robotserver = "piper_teleop.robot_server.main:main_cli"
-webserver = "piper_teleop.web_server.main:main_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
