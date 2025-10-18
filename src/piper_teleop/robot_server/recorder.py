@@ -200,6 +200,7 @@ class Recorder:
             convert_image_dataset_to_video(self.dataset)
             # avoid twice conversion
             self.convert_images_to_video = False
+        self.events['stop_recording'] = False
 
 
     def _save_episodes(self):
