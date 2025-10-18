@@ -57,19 +57,6 @@ def create_transformation_matrix(x, y, z, roll, pitch, yaw):
     return transformation_matrix
 
 
-def calc_pose_incre(base_pose, pose_data):
-    begin_matrix = create_transformation_matrix(
-        base_pose[0], base_pose[1], base_pose[2], base_pose[3], base_pose[4], base_pose[5]
-    )
-    zero_matrix = create_transformation_matrix(0.19, 0.0, 0.2, 0, 0, 0)
-    end_matrix = create_transformation_matrix(
-        pose_data[0], pose_data[1], pose_data[2], pose_data[3], pose_data[4], pose_data[5]
-    )
-    result_matrix = np.dot(zero_matrix, np.dot(np.linalg.inv(begin_matrix), end_matrix))
-    xyzrpy = matrix_to_xyzrpy(result_matrix)
-    return xyzrpy
-
-
 def quaternion_from_matrix(matrix):
     qw = math.sqrt(1 + matrix[0, 0] + matrix[1, 1] + matrix[2, 2]) / 2
     qx = (matrix[2, 1] - matrix[1, 2]) / (4 * qw)
@@ -268,7 +255,7 @@ class Arm_IK:
 
         cost_arm1 = casadi.sumsqr(weight_position * pos_error1) + casadi.sumsqr(weight_orientation * ori_error1)
         cost_arm2 = casadi.sumsqr(weight_position * pos_error2) + casadi.sumsqr(weight_orientation * ori_error2)
-        
+
         total_cost = cost_arm1 + cost_arm2
         regularization = casadi.sumsqr(var_q)
 
@@ -335,9 +322,7 @@ class Arm_IK:
         ground_pose = pin.SE3.Identity()
         ground_pose.translation = np.array([0.0, 0.0, self.ground_height - 0.05])
 
-        ground_geometry = pin.GeometryObject(
-            "ground_plane", 0, pin.hppfcl.Box(*ground_size), ground_pose
-        )
+        ground_geometry = pin.GeometryObject("ground_plane", 0, pin.hppfcl.Box(*ground_size), ground_pose)
         self.geom_model.addGeometryObject(ground_geometry)
         logger.info(f"Added ground plane at height {self.ground_height}")
 
@@ -373,7 +358,7 @@ class Arm_IK:
             self.history_data = sol_q
 
             if visualize:
-                #print("sol_q:", sol_q)
+                # print("sol_q:", sol_q)
                 self.vis.display(sol_q)
 
             is_collision = self.check_collision(sol_q, gripper_1=gripper, gripper_2=gripper)
@@ -385,7 +370,9 @@ class Arm_IK:
 
     def check_collision(self, q, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
         """Check for collisions including self-collision and ground plane collision."""
-        pin.forwardKinematics(self.robot.model, self.robot.data, np.concatenate([q[0:6], gripper_1, q[6:12], gripper_2], axis=0))
+        pin.forwardKinematics(
+            self.robot.model, self.robot.data, np.concatenate([q[0:6], gripper_1, q[6:12], gripper_2], axis=0)
+        )
         pin.updateGeometryPlacements(self.robot.model, self.robot.data, self.geom_model, self.geometry_data)
         collision = pin.computeCollisions(self.geom_model, self.geometry_data, False)
         if collision:

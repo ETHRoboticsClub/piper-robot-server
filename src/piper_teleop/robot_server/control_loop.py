@@ -33,7 +33,14 @@ class ArmState:
 class ControlLoop:
     """Control loop for the teleoperation system."""
 
-    def __init__(self, config: TelegripConfig, robot_enabled: bool = False, visualize: bool = False, shared_img=None,  use_keyboard: bool = False):
+    def __init__(
+        self,
+        config: TelegripConfig,
+        robot_enabled: bool = False,
+        visualize: bool = False,
+        shared_img=None,
+        use_keyboard: bool = False,
+    ):
         self.config = config
         self.robot_interface = RobotInterface(config, robot_enabled)
         self.robot_enabled = robot_enabled
@@ -44,17 +51,18 @@ class ControlLoop:
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
         self.shared_img = shared_img
         if self.config.record:
-            self.recorder = Recorder(repo_id=config.repo_id,
-                                     resume=config.resume,
-                                     task=config.task,
-                                     root=config.root,
-                                     single_arm=config.single_arm,
-                                     cams = {'left' : (480, 640,3)},
-                                     dof=config.dof,
-                                     fps=config.fps,
-                                     robot_type=config.robot_type,
-                                     use_video=config.use_video,
-                                     )
+            self.recorder = Recorder(
+                repo_id=config.repo_id,
+                resume=config.resume,
+                task=config.task,
+                root=config.root,
+                single_arm=config.single_arm,
+                cams={"left": (480, 640, 3)},
+                dof=config.dof,
+                fps=config.fps,
+                robot_type=config.robot_type,
+                use_video=config.use_video,
+            )
             self.recorder.start_recording()
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
@@ -89,17 +97,17 @@ class ControlLoop:
         # Measure all IK time together
         start_time_ik = time.perf_counter()
 
-        # print("Left Target", left_arm.target_transform)
-        # print("Right Target", right_arm.target_transform)
-
         ik_solution, is_collision = self.robot_interface.solve_ik(
-            left_arm.target_transform, right_arm.target_transform, visualize=self.visualize)
+            left_arm.target_transform, right_arm.target_transform, visualize=self.visualize
+        )
 
         current_gripper_1 = 0.0 if left_arm.gripper_closed else 0.07
         current_gripper_2 = 0.0 if right_arm.gripper_closed else 0.07
 
         if not is_collision:
-            self.robot_interface.update_arm_angles(np.concatenate([ik_solution, [current_gripper_1, current_gripper_2]]))
+            self.robot_interface.update_arm_angles(
+                np.concatenate([ik_solution, [current_gripper_1, current_gripper_2]])
+            )
         else:
             print("IK solution results in collision, not updating robot commands.")
             return
@@ -157,20 +165,15 @@ class ControlLoop:
                 left_arm_goal = self.keyboard_controller.get_goal("left", left_arm.target_transform)
                 right_arm_goal = self.keyboard_controller.get_goal("right", right_arm.target_transform)
             else:
-                left_arm_goal_vr = await self.api.get_controller_goal("left")
-                right_arm_goal_vr = await self.api.get_controller_goal("right")
-
-                left_arm_goal = left_arm_goal_vr
-                right_arm_goal = right_arm_goal_vr
+                left_arm_goal = await self.api.get_controller_goal("left")
+                right_arm_goal = await self.api.get_controller_goal("right")
 
             left_arm = self.update_arm_state(left_arm_goal, left_arm)
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
-           
-
             if self.config.record:
-                joints = arm_angles_to_action_dict(self.robot_interface.arm_angles)
-                cams = {'observation.images.left': self.shared_img[0].numpy()}
+                left_joints, right_joints = arm_angles_to_action_dict(self.robot_interface.arm_angles)
+                cams = {"observation.images.left": self.shared_img[0].numpy()}
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
@@ -178,10 +181,14 @@ class ControlLoop:
             robot_time = time.perf_counter() - robot_start
 
             if self.config.record:
-                joints_target = arm_angles_to_action_dict(self.robot_interface.arm_angles)
-                self.recorder.add_observation( joints=joints,
-                                               joints_target=joints_target,
-                                               cams=cams)
+                left_joints_target, right_joints_target = arm_angles_to_action_dict(self.robot_interface.arm_angles)
+                self.recorder.add_observation(
+                    left_joints=left_joints,
+                    right_joints=right_joints,
+                    left_joints_target=left_joints_target,
+                    right_joints_target=right_joints_target,
+                    cams=cams,
+                )
                 self.recorder.handle_keyboard_event()
 
             sleep_start = time.perf_counter()
@@ -191,7 +198,6 @@ class ControlLoop:
             if self.config.record:
                 dt_s = time.perf_counter() - iteration_start
                 busy_wait(1 / self.config.fps - dt_s)
-
 
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time

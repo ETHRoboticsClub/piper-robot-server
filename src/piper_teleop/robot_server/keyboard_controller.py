@@ -3,13 +3,13 @@ from dataclasses import dataclass
 
 import numpy as np
 from pynput import keyboard
-
 from tactile_teleop_sdk.inputs.base import ArmGoal
 
 
 @dataclass
 class KeyboardState:
     """Represents the current state of an arm's keyboard controls."""
+
     gripper_closed: bool = True
     reset_to_init: bool = False
 
@@ -26,14 +26,14 @@ class KeyboardController:
     ----------------------------------------------------
     | Action              | Left Arm      | Right Arm    |
     |---------------------|---------------|--------------|
-    | Move Forward (+X)   | w             | up arrow     |
-    | Move Backward (-X)  | s             | down arrow   |
-    | Move Left (+Y)      | a             | left arrow   |
-    | Move Right (-Y)     | d             | right arrow  |
-    | Move Up (+Z)        | q             | page up      |
-    | Move Down (-Z)      | e             | page down    |
+    | Move Forward (+X)   | w             | t            |
+    | Move Backward (-X)  | s             | g            |
+    | Move Left (+Y)      | a             | f            |
+    | Move Right (-Y)     | d             | h            |
+    | Move Up (+Z)        | q             | r            |
+    | Move Down (-Z)      | e             | z            |
     | Toggle Gripper      | space         | enter        |
-    | Reset Position      | r             | backspace    |
+    | Reset Position      | x             | b            |
     ----------------------------------------------------
     """
 
@@ -75,10 +75,10 @@ class KeyboardController:
                 self.states["right"].gripper_closed = not self.states["right"].gripper_closed
                 status = "Closed" if self.states["right"].gripper_closed else "Open"
                 print(f"Right gripper: {status}")
-            elif key.char == 'r':
+            elif key.char == "x":
                 self.states["left"].reset_to_init = True
                 print("--- Resetting Left arm ---")
-            elif key == keyboard.Key.backspace:
+            elif key.char == "b":
                 self.states["right"].reset_to_init = True
                 print("--- Resetting Right arm ---")
         except AttributeError:
@@ -90,9 +90,9 @@ class KeyboardController:
             self._pressed_keys.remove(key)
         try:
             # Reset the reset flag on key release
-            if key.char == 'r':
+            if key.char == "x":
                 self.states["left"].reset_to_init = False
-            elif key == keyboard.Key.backspace:
+            elif key.char == "b":
                 self.states["right"].reset_to_init = False
         except AttributeError:
             pass
@@ -127,19 +127,31 @@ class KeyboardController:
         keys = self._pressed_keys
 
         if arm_name == "left":
-            if keyboard.KeyCode.from_char('w') in keys: translation[0] += self.trans_step
-            if keyboard.KeyCode.from_char('s') in keys: translation[0] -= self.trans_step
-            if keyboard.KeyCode.from_char('a') in keys: translation[1] += self.trans_step
-            if keyboard.KeyCode.from_char('d') in keys: translation[1] -= self.trans_step
-            if keyboard.KeyCode.from_char('q') in keys: translation[2] += self.trans_step
-            if keyboard.KeyCode.from_char('e') in keys: translation[2] -= self.trans_step
+            if keyboard.KeyCode.from_char("w") in keys:
+                translation[0] += self.trans_step
+            if keyboard.KeyCode.from_char("s") in keys:
+                translation[0] -= self.trans_step
+            if keyboard.KeyCode.from_char("a") in keys:
+                translation[1] += self.trans_step
+            if keyboard.KeyCode.from_char("d") in keys:
+                translation[1] -= self.trans_step
+            if keyboard.KeyCode.from_char("q") in keys:
+                translation[2] += self.trans_step
+            if keyboard.KeyCode.from_char("e") in keys:
+                translation[2] -= self.trans_step
         elif arm_name == "right":
-            if keyboard.Key.up in keys: translation[0] += self.trans_step
-            if keyboard.Key.down in keys: translation[0] -= self.trans_step
-            if keyboard.Key.left in keys: translation[1] += self.trans_step
-            if keyboard.Key.right in keys: translation[1] -= self.trans_step
-            if keyboard.Key.page_up in keys: translation[2] += self.trans_step
-            if keyboard.Key.page_down in keys: translation[2] -= self.trans_step
+            if keyboard.KeyCode.from_char("t") in keys:
+                translation[0] += self.trans_step
+            if keyboard.KeyCode.from_char("g") in keys:
+                translation[0] -= self.trans_step
+            if keyboard.KeyCode.from_char("f") in keys:
+                translation[1] += self.trans_step
+            if keyboard.KeyCode.from_char("h") in keys:
+                translation[1] -= self.trans_step
+            if keyboard.KeyCode.from_char("r") in keys:
+                translation[2] += self.trans_step
+            if keyboard.KeyCode.from_char("z") in keys:
+                translation[2] -= self.trans_step
 
         # If there is movement, update the internal target transform
         if np.any(translation):
