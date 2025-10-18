@@ -161,10 +161,6 @@ class Recorder:
         )
         self.dataset = dataset
 
-    def convert_images_to_video(self):
-
-        pass
-
     def start_recording(self):
         logger.info('start recording')
         self._create_dataset()
