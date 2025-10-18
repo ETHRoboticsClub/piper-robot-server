@@ -126,7 +126,7 @@ class ControlLoop:
         left_arm = ArmState(arm_name="left")
         right_arm = ArmState(arm_name="right")
 
-        right_arm.initial_transform = xyzrpy2transform(0.19, -0.5, 0.2, 0, 1.57, 0)
+        right_arm.initial_transform = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
         right_arm.origin_transform = right_arm.initial_transform
 
         self.robot_interface.setup_kinematics()

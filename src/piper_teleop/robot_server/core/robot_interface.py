@@ -102,7 +102,7 @@ class RobotInterface:
 
         # Initial positions for safe shutdown - restored original values
         self.initial_left_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
-        self.initial_right_arm = xyzrpy2transform(0.19, -0.5, 0.2, 0, 1.57, 0)
+        self.initial_right_arm = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
 
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
@@ -226,13 +226,13 @@ class RobotInterface:
             if self.left_robot and self.left_arm_connected:
                 try:
                     action_dict = {
-                        "joint_0.pos": float(self.arm_angles[0]),
-                        "joint_1.pos": float(self.arm_angles[1]),
-                        "joint_2.pos": float(self.arm_angles[2]),
-                        "joint_3.pos": float(self.arm_angles[3]),
-                        "joint_4.pos": float(self.arm_angles[4]),
-                        "joint_5.pos": float(self.arm_angles[5]),
-                        "joint_6.pos": float(self.arm_angles[12]),
+                        "joint_0.pos": float(self.arm_angles[6]),
+                        "joint_1.pos": float(self.arm_angles[7]),
+                        "joint_2.pos": float(self.arm_angles[8]),
+                        "joint_3.pos": float(self.arm_angles[9]),
+                        "joint_4.pos": float(self.arm_angles[10]),
+                        "joint_5.pos": float(self.arm_angles[11]),
+                        "joint_6.pos": float(self.arm_angles[13]),
                     }
                     with suppress_stdout_stderr():
                         self.left_robot.send_action(action_dict)
@@ -248,13 +248,13 @@ class RobotInterface:
             if self.right_robot and self.right_arm_connected:
                 try:
                     action_dict = {
-                        "joint_0.pos": float(self.arm_angles[6]),
-                        "joint_1.pos": float(self.arm_angles[7]),
-                        "joint_2.pos": float(self.arm_angles[8]),
-                        "joint_3.pos": float(self.arm_angles[9]),
-                        "joint_4.pos": float(self.arm_angles[10]),
-                        "joint_5.pos": float(self.arm_angles[11]),
-                        "joint_6.pos": float(self.arm_angles[13]),
+                        "joint_0.pos": float(self.arm_angles[0]),
+                        "joint_1.pos": float(self.arm_angles[1]),
+                        "joint_2.pos": float(self.arm_angles[2]),
+                        "joint_3.pos": float(self.arm_angles[3]),
+                        "joint_4.pos": float(self.arm_angles[4]),
+                        "joint_5.pos": float(self.arm_angles[5]),
+                        "joint_6.pos": float(self.arm_angles[12]),
                     }
                     with suppress_stdout_stderr():
                         self.right_robot.send_action(action_dict)
