@@ -32,10 +32,12 @@ def _camera_process_wrapper(config, room_name: str, participant_name: str, camer
 
 def _control_process_wrapper(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, use_keyboard: bool, shared_img):
     """Wrapper to run control process in a separate process with asyncio"""
+    print("uSing keyboard:", use_keyboard)
     asyncio.run(_run_control_process(config=config,
                                      room_name=room_name, participant_name=participant_name,
                                      robot_enabled=robot_enabled, visualize=visualize,
                                      shared_img=shared_img,
+                                     use_keyboard=use_keyboard
                                      ))
 
 
@@ -118,8 +120,9 @@ async def main():
                   config.controllers_processing_participant,
                   robot_enabled,
                   visualize,
+                  use_keyboard,
                   shared_img,
-                  use_keyboard),
+                  ), 
         )
         control_process.start()
 
