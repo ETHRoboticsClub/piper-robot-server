@@ -102,7 +102,12 @@ def test_rerecord(tmp_path):
                             cams={'observation.images.left': img})
 
     rec.events['rerecord_episode'] = True
+    rec.events['exit_early'] = True
     rec.handle_keyboard_event()
+    rec.handle_keyboard_event()
+    assert rec.state == RecState.RESET_ENV
+    assert rec.events['rerecord_episode'] == False
+    assert rec.events['exit_early'] == False
 
 def test_recorder_state(tmp_path):
     root = tmp_path / 'lerobot'
@@ -133,7 +138,6 @@ def test_recorder_state(tmp_path):
     rec.handle_keyboard_event()
     assert rec.state == RecState.RESET_ENV
     assert rec.events['exit_early'] == False
-
 
 
 @pytest.mark.skip # manual test

@@ -166,6 +166,7 @@ class Recorder:
             # From anywhere, go reset env to rerecord
             self._transition(RecState.RESET_ENV, "rerecording, reset environment", self._delete_episodes)
             self.events['rerecord_episode'] = False
+            self.events['exit_early'] = False
 
         if self.events['exit_early']:
             if self.state == RecState.INIT:
