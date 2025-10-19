@@ -14,6 +14,8 @@ from piper_teleop.config import TelegripConfig
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
+from lerobot.utils.visualization_utils import log_rerun_data
+
 
 dotenv.load_dotenv()
 
@@ -124,6 +126,10 @@ class ControlLoop:
             f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
         )
 
+    def _format_keys(self, data: dict, suffix: str) -> dict:
+        """Return a new dict with keys suffixed by .{suffix}."""
+        return {f"{k}.{suffix}": v for k, v in data.items()}
+
     async def run(self):
         """Control loop for the teleoperation system."""
         left_arm = ArmState(arm_name="left")
@@ -157,7 +163,9 @@ class ControlLoop:
             if self.config.record:
                 left_joints = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
                 right_joints = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
-                cams = {'observation.images.left': self.shared_img[0].numpy()}
+                cams = {'observation.images.left': self.shared_img[0].numpy(),
+                        'observation.images.right': self.shared_img[1].numpy()
+                        }
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
@@ -173,6 +181,24 @@ class ControlLoop:
                                                right_joints_target=right_joints_target,
                                                cams=cams)
                 self.recorder.handle_keyboard_event()
+                if self.config.display_data:
+                    print("displaying data")
+                    obs_raw = self.robot_interface.get_observation()
+                    observation_left = obs_raw["left_arm_obs"]
+                    observation_right = obs_raw["right_arm_obs"]
+
+                    obs = {
+                        **self._format_keys(observation_left, "left"),
+                        **self._format_keys(observation_right, "right"),
+                        **cams,
+                    }
+                    action = {
+                        **self._format_keys(left_joints_target, "left"),
+                        **self._format_keys(right_joints_target, "right"),
+                    }
+
+                    log_rerun_data(observation=obs, action=action)
+                    
 
             sleep_start = time.perf_counter()
             await asyncio.sleep(0.001)
@@ -181,8 +207,7 @@ class ControlLoop:
             if self.config.record:
                 dt_s = time.perf_counter() - iteration_start
                 busy_wait(1 / self.config.fps - dt_s)
-
-
+            
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time
 
@@ -201,3 +226,5 @@ class ControlLoop:
         await self.api.disconnect_vr_controller()
         if self.robot_enabled:
             self.robot_interface.disconnect()
+
+

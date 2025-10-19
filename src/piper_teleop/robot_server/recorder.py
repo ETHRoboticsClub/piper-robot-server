@@ -8,6 +8,7 @@ import numpy as np
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
+from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class Recorder:
                  use_video=False,
                  image_writer_processes=4,
                  image_writer_threads=16,
+                 display_data = False
                  ):
         # Feutures
         self.single_arm = single_arm
@@ -65,6 +67,7 @@ class Recorder:
         self.events = events
         self.state = RecState.INIT
         self.play_sound = play_sound
+        self.display_data = display_data
 
         atexit.register(self.exit)
 
@@ -97,6 +100,8 @@ class Recorder:
         return feutures
 
     def _create_dataset(self):
+        if self.display_data:
+            init_rerun(session_name="recording")
         dataset = LeRobotDataset.create(
             repo_id=self.repo_id,
             root=self.root,
