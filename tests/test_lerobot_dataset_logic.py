@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 import torch
 import numpy as np
 from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
-from lerobot.datasets.utils import DEFAULT_VIDEO_PATH, load_info, write_info
+from lerobot.datasets.utils import load_info
 
 from piper_teleop.robot_server.recorder import Recorder, RecState, convert_image_dataset_to_video
 
@@ -121,7 +121,7 @@ def test_create_temp_dataset_and_read(tmp_path):
     assert torch.equal(data['action'][-1], torch.from_numpy(frame['action']))
 
 def test_init_recorder():
-    rec = Recorder(repo_id='test', task='test', use_video=True)
+    rec = Recorder(repo_id='test', task='test', use_video=True, play_sound=False)
     assert rec.joints ==[f"L.joint_{i}" for i in range(7)] + [f"R.joint_{i}" for i in range(7)]
     expected_dict  = {"dtype": "float32",
                     "shape": (14,),
@@ -130,7 +130,7 @@ def test_init_recorder():
     assert rec.features['action'] == expected_dict
     assert rec.features['observation.state'] == expected_dict
 
-    rec = Recorder(repo_id='test', single_arm=True, task='test')
+    rec = Recorder(repo_id='test', single_arm=True, task='test', play_sound=False)
     expected_dict = {"dtype": "float32",
                      "shape": (7,),
                      "names": [f"joint_{i}" for i in range(7)],
@@ -139,7 +139,7 @@ def test_init_recorder():
     assert rec.features['action'] == expected_dict
     assert rec.features['observation.state'] == expected_dict
 
-    rec = Recorder(repo_id='test', single_arm=True, cams={'front': (480, 740, 3)}, task='test', use_video=False)
+    rec = Recorder(repo_id='test', single_arm=True, cams={'front': (480, 740, 3)}, task='test', use_video=False, play_sound=False)
     assert rec.features['observation.images.front'] == {"dtype": "image",
                                                         "shape": (480,740,3),
                                                         "names": ["height", "width", "channels"],
@@ -147,7 +147,7 @@ def test_init_recorder():
 
 def test_create_dataset(tmp_path):
     root = tmp_path / 'lerobot'
-    rec = Recorder(repo_id='test',root=root, single_arm=True, task='test')
+    rec = Recorder(repo_id='test',root=root, single_arm=True, task='test', play_sound=False)
     assert root.exists() == False
     rec._create_dataset()
     frame  = {'action': np.random.random(7).astype(np.float32),

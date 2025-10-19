@@ -17,6 +17,8 @@ from enum import Enum, auto
 
 def convert_image_dataset_to_video(dataset: LeRobotDataset):
     """Convert a dataset recorded with image frames into the canonical video layout."""
+    if dataset.num_episodes == 0:
+        return
     logger.info("converting images to video")
     import shutil
 
@@ -86,6 +88,8 @@ class Recorder:
         if use_video is False:
             logger.info('Init recorder in fast mode. Images will be converted to video at the end of recording')
             self.convert_images_to_video = True
+        else:
+            self.convert_images_to_video = False
         self.single_arm = single_arm
         if self.single_arm:
             self.joints = [f'joint_{i}' for i in range(dof)]
@@ -189,7 +193,7 @@ class Recorder:
             say(message)
         if action:
             action()
-        if message_post:
+        if message_post and self.play_sound:
             logger.info(message_post)
             say(message_post)
         self.state = next_state
