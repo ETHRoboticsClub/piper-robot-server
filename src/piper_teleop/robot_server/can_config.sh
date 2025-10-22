@@ -108,8 +108,8 @@ fi
 # Predefined USB ports, target interface names and their bitrates (used for multiple CAN modules)
 if [ "$EXPECTED_CAN_COUNT" -ne 1 ]; then
     declare -A USB_PORTS 
-    USB_PORTS["3-4.3:1.0"]="left_piper:1000000"
-    USB_PORTS["3-4.1:1.0"]="right_piper:1000000"
+    USB_PORTS["3-2.3:1.0"]="left_piper:1000000"
+    USB_PORTS["3-2.1:1.0"]="right_piper:1000000"
 fi
 
 # Get the current number of CAN modules in the system
