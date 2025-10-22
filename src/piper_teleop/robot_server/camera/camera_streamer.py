@@ -39,7 +39,7 @@ class SharedCameraData:
         return self.data[name]
 
     def get_camera_dict(self) -> dict[str, np.ndarray]:
-        return {name: self.data[name].numpy() for name in self.data}
+        return {f'observation.images.{name}': self.data[name].numpy() for name in self.data}
 
 
 class CameraStreamer:
