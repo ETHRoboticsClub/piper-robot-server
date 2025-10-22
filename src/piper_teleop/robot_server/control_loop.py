@@ -10,6 +10,7 @@ from lerobot.utils.robot_utils import busy_wait
 from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.config import TelegripConfig
+from piper_teleop.robot_server.camera import SharedCameraData
 from piper_teleop.robot_server.keyboard_controller import KeyboardController
 
 from .core.geometry import xyzrpy2transform
@@ -36,20 +37,18 @@ class ControlLoop:
     def __init__(
         self,
         config: TelegripConfig,
-        robot_enabled: bool = False,
-        visualize: bool = False,
-        shared_img=None,
-        use_keyboard: bool = False,
+        shared_data: SharedCameraData,
     ):
         self.config = config
-        self.robot_interface = RobotInterface(config, robot_enabled)
-        self.robot_enabled = robot_enabled
-        self.visualize = visualize
-        self.use_keyboard = use_keyboard
+        self.robot_interface = RobotInterface(config)
+        self.robot_enabled = config.enable_robot
+        self.use_keyboard = config.enable_keyboard
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
+        self.visualize = config.enable_visualization
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
-        self.shared_img = shared_img
+
+        self.shared_data = shared_data
         if self.config.record:
             self.recorder = Recorder(
                 repo_id=config.repo_id,
@@ -57,7 +56,7 @@ class ControlLoop:
                 task=config.task,
                 root=config.root,
                 single_arm=config.single_arm,
-                cams={"left": (480, 640, 3)},
+                cameras=config.camera_configs,
                 dof=config.dof,
                 fps=config.fps,
                 robot_type=config.robot_type,
@@ -173,7 +172,7 @@ class ControlLoop:
 
             if self.config.record:
                 obs_dict = self.robot_interface.get_observation()
-                cams = {"observation.images.left": self.shared_img[0].numpy()}
+                cams = self.shared_data.get_camera_dict()
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
