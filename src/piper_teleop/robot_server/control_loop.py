@@ -185,7 +185,7 @@ class ControlLoop:
                     right_joints=right_joints,
                     left_joints_target=left_joints_target,
                     right_joints_target=right_joints_target,
-                    data=self.shared_data.get_camera_dict(),
+                    cams=self.shared_data.get_camera_dict(),
                 )
                 self.recorder.handle_keyboard_event()
 

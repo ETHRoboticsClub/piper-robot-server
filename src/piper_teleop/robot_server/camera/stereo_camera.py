@@ -12,11 +12,9 @@ from piper_teleop.robot_server.camera.camera_config import CameraConfig
 class StereoCamera(Camera):
     """Stereo camera class."""
 
-    capture: cv2.VideoCapture
-
     def __init__(self, config: CameraConfig):
         super().__init__(config)
-        self.capture = None
+        self.capture: cv2.VideoCapture | None = None
 
     def get_single_width(self) -> int:
         return self.frame_width // 2
@@ -33,7 +31,7 @@ class StereoCamera(Camera):
         if self.capture is not None:  # already initialised
             return
         self.capture = cv2.VideoCapture(index=self.cam_index, apiPreference=self.capture_api)
-        if not self.capture.isOpened():  # failed to open camera
+        if self.capture is None or not self.capture.isOpened():  # failed to open camera
             raise RuntimeError(f"failed to open camera {self.name} at index {self.cam_index}")
 
         # set camera properties

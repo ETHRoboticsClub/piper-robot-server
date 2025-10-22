@@ -1,25 +1,11 @@
 import abc
 import logging
 
-import cv2
-
-# Replace line 5:
-from piper_teleop.robot_server.camera.camera_config import CameraConfig, CameraMode
+from piper_teleop.robot_server.camera.camera_config import CameraConfig
 
 
 class Camera(abc.ABC):
     """A base class for cameras."""
-
-    logger: logging.Logger
-
-    name: str
-    mode: CameraMode
-    fps: int
-    frame_width: int
-    frame_height: int
-    cam_index: int
-    edge_crop: int
-    capture_api: int
 
     def __init__(self, camera_config: CameraConfig):
         self.name = camera_config.name

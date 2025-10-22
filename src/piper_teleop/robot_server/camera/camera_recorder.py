@@ -1,17 +1,14 @@
 from piper_teleop.robot_server.camera import (
-    Camera,
     CameraConfig,
-    SharedCameraData,
     CameraMode,
     CameraType,
-    StereoCamera,
     MonocularCamera,
+    SharedCameraData,
+    StereoCamera,
 )
 
 
 class CameraRecorder:
-
-    cameras: list[Camera]
 
     def __init__(self, configs: list[CameraConfig], shared_data: SharedCameraData):
         self.cameras = []

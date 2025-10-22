@@ -10,11 +10,9 @@ from piper_teleop.robot_server.camera.camera_config import CameraConfig
 class MonocularCamera(Camera):
     """Monocular camera class."""
 
-    capture: cv2.VideoCapture
-
     def __init__(self, config: CameraConfig):
         super().__init__(config)
-        self.capture = None
+        self.capture: cv2.VideoCapture | None = None
 
     def get_cropped_width(self) -> int:
         return self.frame_width - self.edge_crop
@@ -29,7 +27,7 @@ class MonocularCamera(Camera):
             return  # already initialised
 
         self.capture = cv2.VideoCapture(index=self.cam_index, apiPreference=self.capture_api)
-        if not self.capture.isOpened():  # failed to open camera
+        if self.capture is None or not self.capture.isOpened():  # failed to open camera
             raise RuntimeError(f'failed to open camera "{self.name}" at index {self.cam_index}')
 
         self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.capture_frame_width)
@@ -46,7 +44,7 @@ class MonocularCamera(Camera):
         if not ret or frame is None:
             self.logger.warning("cannot receive frame (stream end?). retrying...")
             await asyncio.sleep(0.1)
-            return None, None
+            return None
 
         # convert BGR to RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

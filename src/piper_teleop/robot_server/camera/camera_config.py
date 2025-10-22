@@ -11,14 +11,6 @@ class CameraType(Enum):
         return self.name.lower()
 
 
-def type_from_str(name: str) -> CameraType:
-    if name.lower() == "monocular":
-        return CameraType.MONOCULAR
-    elif name.lower() == "stereo":
-        return CameraType.STEREO
-    raise ValueError(f"Invalid camera type: {name}")
-
-
 class CameraMode(Enum):
     STREAMING = "streaming"
     RECORDING = "recording"
@@ -26,16 +18,6 @@ class CameraMode(Enum):
 
     def __str__(self):
         return self.name.lower()
-
-
-def mode_from_str(name: str) -> CameraMode:
-    if name.lower() == "streaming":
-        return CameraMode.STREAMING
-    elif name.lower() == "recording":
-        return CameraMode.RECORDING
-    elif name.lower() == "hybrid":
-        return CameraMode.HYBRID
-    raise ValueError(f"Invalid camera mode: {name}")
 
 
 DEFAULT_CAMERA_TYPE = CameraType.MONOCULAR
@@ -48,18 +30,26 @@ DEFAULT_CAMERA_CAM_INDEX = 0
 DEFAULT_CAMERA_EDGE_CROP = 0
 
 
+def type_from_str(name: str) -> CameraType:
+    if name.lower() == "monocular":
+        return CameraType.MONOCULAR
+    elif name.lower() == "stereo":
+        return CameraType.STEREO
+    raise ValueError(f"Invalid camera type: {name}")
+
+
+def mode_from_str(name: str) -> CameraMode:
+    if name.lower() == "streaming":
+        return CameraMode.STREAMING
+    elif name.lower() == "recording":
+        return CameraMode.RECORDING
+    elif name.lower() == "hybrid":
+        return CameraMode.HYBRID
+    raise ValueError(f"Invalid camera mode: {name}")
+
+
 class CameraConfig:
     """A configuration object for a single camera."""
-
-    name: str
-    type: CameraType
-    mode: CameraMode
-    fps: int
-    frame_width: int
-    frame_height: int
-    capture_api: int
-    cam_index: int
-    edge_crop: int
 
     def __init__(
         self,
