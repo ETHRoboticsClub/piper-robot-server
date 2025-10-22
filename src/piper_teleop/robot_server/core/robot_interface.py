@@ -41,7 +41,7 @@ def arm_angles_to_action_dict(arm_angles):
         "joint_5.pos": float(arm_angles[5]),
         "joint_6.pos": float(arm_angles[12]),
     }
-    return left_action_dict, right_action_dict
+    return {'left': left_action_dict, 'right': right_action_dict}
 
 
 @contextlib.contextmanager
@@ -235,9 +235,9 @@ class RobotInterface:
             # Send left arm command - suppress low-level CAN debug output
             if self.left_robot and self.left_arm_connected:
                 try:
-                    left_action_dict, _ = arm_angles_to_action_dict(self.arm_angles)
+                    action_dict = arm_angles_to_action_dict(self.arm_angles)
                     with suppress_stdout_stderr():
-                        self.left_robot.send_action(left_action_dict)
+                        self.left_robot.send_action(action_dict['left'])
                 except Exception as e:
                     logger.error(f"Error sending left arm command: {e}")
                     self.left_arm_errors += 1
@@ -249,9 +249,9 @@ class RobotInterface:
             # Send right arm command - suppress low-level CAN debug output
             if self.right_robot and self.right_arm_connected:
                 try:
-                    _, right_action_dict = arm_angles_to_action_dict(self.arm_angles)
+                    action_dict = arm_angles_to_action_dict(self.arm_angles)
                     with suppress_stdout_stderr():
-                        self.right_robot.send_action(right_action_dict)
+                        self.right_robot.send_action(action_dict['right'])
                 except Exception as e:
                     logger.error(f"Error sending right arm command: {e}")
                     self.right_arm_errors += 1
@@ -357,7 +357,9 @@ class RobotInterface:
 
     def get_observation(self) -> dict[str, Any]:
         """Get observation from robot."""
+        if self.left_robot is None or self.right_robot is None:
+            action_dict = arm_angles_to_action_dict(self.arm_angles)
         return {
-            "left_arm_obs": self.left_robot.get_observation() if self.left_robot else None,
-            "right_arm_obs": self.right_robot.get_observation() if self.right_robot else None,
+            "left": self.left_robot.get_observation() if self.left_robot else action_dict['left'],
+            "right": self.right_robot.get_observation() if self.right_robot else action_dict['right'],
         }
