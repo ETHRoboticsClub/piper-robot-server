@@ -1,6 +1,7 @@
 import abc
-import cv2
 import logging
+
+import cv2
 
 # Replace line 5:
 from piper_teleop.robot_server.camera.camera_config import CameraConfig, CameraMode
@@ -18,7 +19,7 @@ class Camera(abc.ABC):
     frame_height: int
     cam_index: int
     edge_crop: int
-    capture_api: cv2.VideoCaptureAPIs
+    capture_api: int
 
     def __init__(self, camera_config: CameraConfig):
         self.name = camera_config.name
@@ -30,6 +31,8 @@ class Camera(abc.ABC):
         self.cam_index = camera_config.cam_index
         self.edge_crop = camera_config.edge_crop
         self.capture_api = camera_config.capture_api
+        self.capture_frame_width = camera_config.capture_frame_width
+        self.capture_frame_height = camera_config.capture_frame_height
 
     @abc.abstractmethod
     def get_cropped_width(self) -> int:

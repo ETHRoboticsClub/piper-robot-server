@@ -7,13 +7,13 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 import cv2
 import yaml
 
+from piper_teleop.robot_server.camera import CameraConfig, CameraMode, CameraType, from_config
 from piper_teleop.utils import get_absolute_path
-from piper_teleop.robot_server.camera import CameraConfig, from_config, CameraType, CameraMode
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,34 @@ DEFAULT_CONFIG = {
         "movement_penalty_weight": 0.01,
     },
     "cameras": {
-        "dual_camera_opencv": {
-            "type": "stereo",
-            "mode": "streaming",
+        "wrist1": {
+            "type": "monocular",
+            "mode": "recording",
             "fps": "30",
             "frame_width": "640",
             "frame_height": "480",
             "capture_api": cv2.CAP_V4L2,
-            "cam_index": "0",
+            "cam_index": "4",
+        },
+        "wrist2": {
+            "type": "monocular",
+            "mode": "recording",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "6",
+        },
+        "stereo": {
+            "type": "stereo",
+            "mode": "hybrid",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+            "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "8",
         },
     },
 }
@@ -198,15 +218,15 @@ class TelegripConfig:
 
     # Recorder settings
     record: bool = False
-    repo_id: str = 'piper'
+    repo_id: str = "piper"
     resume: bool = False
-    root: Path = Path(__file__).parents[2] / 'data'
+    root: Path = Path(__file__).parents[2] / "data"
     single_arm: bool = False
     cams: Optional[Dict[str, Any]] = None
     dof: int = 7
     fps: int = 30
-    robot_type: str = 'piper'
-    task: str = 'pick and place'
+    robot_type: str = "piper"
+    task: str = "pick and place"
     use_video = False
 
     # Control flags

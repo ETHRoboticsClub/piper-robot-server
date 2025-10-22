@@ -1,20 +1,16 @@
 import asyncio
 import logging
 import os
-import numpy as np
 
+import numpy as np
 import torch
 from dotenv import load_dotenv
 from tactile_teleop_sdk import TactileAPI
 
-from piper_teleop.robot_server.camera import (
-    Camera,
-    StereoCamera,
-    MonocularCamera,
-    CameraConfig,
-    CameraType,
-    CameraMode,
-)
+from piper_teleop.robot_server.camera.camera import Camera
+from piper_teleop.robot_server.camera.camera_config import CameraConfig, CameraMode, CameraType
+from piper_teleop.robot_server.camera.monocular_camera import MonocularCamera
+from piper_teleop.robot_server.camera.stereo_camera import StereoCamera
 
 # Load environment variables from the project root
 load_dotenv()
@@ -30,11 +26,10 @@ class SharedCameraData:
 
         self.data = {}
         for config in configs:
-            i = configs.index(config)
             if config.mode == CameraMode.RECORDING or config.mode == CameraMode.HYBRID:
                 width = config.frame_width
                 height = config.frame_height
-                self.data[config.name] = torch.empty((width, height)).share_memory()
+                self.data[config.name] = torch.empty((height, width, 3), dtype=torch.uint8).share_memory_()
 
     def copy(self, name: str, new_data: torch.Tensor) -> None:
         if name not in self.data:
@@ -82,15 +77,14 @@ class CameraStreamer:
         while self.is_running:
             try:
                 if isinstance(camera, StereoCamera):
-                    left_frame, right_frame = await camera.capture_frame()
-                    if left_frame is None or right_frame is None:
+                    left_frame, right_frame, cropped_left, cropped_right = await camera.capture_frame()
+                    if left_frame is None or right_frame is None or cropped_left is None or cropped_right is None:
                         continue
                     if camera.mode == CameraMode.STREAMING or camera.mode == CameraMode.HYBRID:
-                        await self.api.send_stereo_frame(left_frame, right_frame)
+                        await self.api.send_stereo_frame(cropped_left, cropped_right)
                     if camera.mode == CameraMode.RECORDING or camera.mode == CameraMode.HYBRID:
-                        self.shared_data.copy(
-                            camera.name, torch.from_numpy(np.concatenate([left_frame, right_frame], dim=1))
-                        )
+                        self.shared_data.copy(camera.name, torch.from_numpy(left_frame))
+
                 elif isinstance(camera, MonocularCamera):
                     frame = await camera.capture_frame()
                     if frame is None:

@@ -1,8 +1,10 @@
-import cv2
 import asyncio
+
+import cv2
 import numpy as np
 
-from piper_teleop.robot_server.camera import Camera, CameraConfig
+from piper_teleop.robot_server.camera.camera import Camera
+from piper_teleop.robot_server.camera.camera_config import CameraConfig
 
 
 class MonocularCamera(Camera):
@@ -30,8 +32,8 @@ class MonocularCamera(Camera):
         if not self.capture.isOpened():  # failed to open camera
             raise RuntimeError(f'failed to open camera "{self.name}" at index {self.cam_index}')
 
-        self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-        self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+        self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.capture_frame_width)
+        self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.capture_frame_height)
         self.capture.set(cv2.CAP_PROP_FPS, self.fps)
         self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         self.logger.info(f"monocular camera initialised at index {self.cam_index}")

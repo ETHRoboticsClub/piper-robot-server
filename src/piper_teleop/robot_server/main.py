@@ -8,11 +8,9 @@ import datetime
 import logging
 import multiprocessing as mp
 
-from piper_teleop.config import config, TelegripConfig
-from piper_teleop.robot_server.camera import (
-    CameraStreamer,
-    SharedCameraData,
-)
+from piper_teleop.config import TelegripConfig, config
+from piper_teleop.robot_server.camera import CameraStreamer, SharedCameraData
+from piper_teleop.robot_server.camera.camera_config import CameraMode
 from piper_teleop.robot_server.control_loop import ControlLoop
 
 logger = logging.getLogger(__name__)
@@ -48,9 +46,7 @@ async def _run_control_process(config: TelegripConfig, shared_data: SharedCamera
     """
     Run the controll process (receiving, processing and sending commands to the robot)
     """
-    control_loop = ControlLoop(
-        config=config, robot_enabled=config.enable_robot, visualize=config.enable_visualization, shared_data=shared_data
-    )
+    control_loop = ControlLoop(config=config, shared_data=shared_data)
     control_loop_task = asyncio.create_task(control_loop.run())
 
     await asyncio.gather(control_loop_task)
@@ -62,7 +58,6 @@ async def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
-    parser.add_argument("--camera-type", default="dual_camera_opencv", help="Camera config")
     parser.add_argument("--record", action="store_true", help="Enable recording")
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
@@ -85,10 +80,16 @@ async def main():
     config.repo_id = args.repo_id
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
-    logger.info("Initializing server components...")
+    if config.record:
+        num_recording_cams = 0
+        for cam_config in config.camera_configs:
+            if cam_config.mode == CameraMode.RECORDING or cam_config.mode == CameraMode.HYBRID:
+                num_recording_cams += 1
+        assert num_recording_cams > 0, "There must be at least one camera in recording or hybrid mode"
 
     shared_data = SharedCameraData(configs=config.camera_configs)
 
+    logger.info("Initializing server components...")
     try:
         # running background (daemon) processes
         logger.info("Starting camera streamer and control loop in parallel...")
