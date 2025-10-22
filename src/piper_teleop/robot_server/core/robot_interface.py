@@ -41,7 +41,7 @@ def arm_angles_to_action_dict(arm_angles):
         "joint_5.pos": float(arm_angles[5]),
         "joint_6.pos": float(arm_angles[12]),
     }
-    return {'left': left_action_dict, 'right': right_action_dict}
+    return {"left": left_action_dict, "right": right_action_dict}
 
 
 @contextlib.contextmanager
@@ -237,7 +237,7 @@ class RobotInterface:
                 try:
                     action_dict = arm_angles_to_action_dict(self.arm_angles)
                     with suppress_stdout_stderr():
-                        self.left_robot.send_action(action_dict['left'])
+                        self.left_robot.send_action(action_dict["left"])
                 except Exception as e:
                     logger.error(f"Error sending left arm command: {e}")
                     self.left_arm_errors += 1
@@ -251,7 +251,7 @@ class RobotInterface:
                 try:
                     action_dict = arm_angles_to_action_dict(self.arm_angles)
                     with suppress_stdout_stderr():
-                        self.right_robot.send_action(action_dict['right'])
+                        self.right_robot.send_action(action_dict["right"])
                 except Exception as e:
                     logger.error(f"Error sending right arm command: {e}")
                     self.right_arm_errors += 1
@@ -360,6 +360,6 @@ class RobotInterface:
         if self.left_robot is None or self.right_robot is None:
             action_dict = arm_angles_to_action_dict(self.arm_angles)
         return {
-            "left": self.left_robot.get_observation() if self.left_robot else action_dict['left'],
-            "right": self.right_robot.get_observation() if self.right_robot else action_dict['right'],
+            "left": self.left_robot.get_observation() if self.left_robot else action_dict["left"],
+            "right": self.right_robot.get_observation() if self.right_robot else action_dict["right"],
         }
