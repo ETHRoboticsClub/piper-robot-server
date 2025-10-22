@@ -7,11 +7,12 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import cv2
 import yaml
 
+from piper_teleop.robot_server.camera import CameraConfig, CameraMode, CameraType, from_config
 from piper_teleop.utils import get_absolute_path
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ DEFAULT_CONFIG = {
         "vr": {"enabled": True},
         "pybullet": {"enabled": True},
     },
-    "paths": {"urdf_path": "URDF/Piper/piper_description.urdf"},
+    "paths": {"urdf_path": "URDF/Piper/dual_piper.urdf"},
     "gripper": {"open_angle": 0.0, "closed_angle": 45.0},
     "ik": {
         "use_reference_poses": False,
@@ -41,17 +42,36 @@ DEFAULT_CONFIG = {
         "hysteresis_threshold": 0.01,
         "movement_penalty_weight": 0.01,
     },
-    "stereo_video": {
-        "dual_camera_opencv": {
-            "type": "dual_camera_opencv",
-            "edge_crop_pixels": 60,
-            "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250903_112756.pkl",
-            "cam_index_left": 4,
-            "cam_index_right": 6,
-            "cap_backend": cv2.CAP_V4L2,
-            "frame_width": 640,
-            "frame_height": 480,
-        }
+    "cameras": {
+        "wrist1": {
+            "type": "monocular",
+            "mode": "recording",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "4",
+        },
+        "wrist2": {
+            "type": "monocular",
+            "mode": "recording",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "6",
+        },
+        "stereo": {
+            "type": "stereo",
+            "mode": "hybrid",
+            "fps": "60",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+            "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "8",
+        },
     },
 }
 
@@ -195,18 +215,18 @@ class TelegripConfig:
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
     ground_height: float = GROUND_HEIGHT
-    
+
     # Recorder settings
     record: bool = False
-    repo_id: str = 'piper'
+    repo_id: str = "piper"
     resume: bool = False
-    root: Path = Path(__file__).parents[2] / 'data'
+    root: Path = Path(__file__).parents[2] / "data"
     single_arm: bool = False
     cams: Optional[Dict[str, Any]] = None
     dof: int = 7
     fps: int = 30
-    robot_type: str = 'piper'
-    task: str = 'pick and place'
+    robot_type: str = "piper"
+    task: str = "pick and place"
     use_video = False
     display_data = False
 
@@ -216,6 +236,7 @@ class TelegripConfig:
     enable_robot: bool = True
     enable_vr: bool = True
     enable_keyboard: bool = True
+    enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"
 
@@ -238,7 +259,7 @@ class TelegripConfig:
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
 
-    # LiveKit Configurations
+    # LiveKit configuration
     livekit_room: str = "robot-vr-teleop-room"
     camera_streamer_participant: str = "camera-streamer"
     controllers_processing_participant: str = "controllers-processing"
@@ -246,8 +267,8 @@ class TelegripConfig:
     vr_viewer_participant: str = "vr-viewer"
     vr_viewer_debug: bool = True
 
-    # Stereo Video Configuration
-    camera_config: dict = field(default_factory=lambda: _config_data["stereo_video"])
+    # Camera configuration
+    camera_configs: list[CameraConfig] = field(default_factory=lambda: from_config(_config_data["cameras"]))
 
     @property
     def ssl_files_exist(self) -> bool:

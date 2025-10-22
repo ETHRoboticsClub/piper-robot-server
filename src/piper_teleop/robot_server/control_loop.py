@@ -10,6 +10,8 @@ from lerobot.utils.robot_utils import busy_wait
 from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.config import TelegripConfig
+from piper_teleop.robot_server.camera import SharedCameraData
+from piper_teleop.robot_server.keyboard_controller import KeyboardController
 
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
@@ -34,25 +36,34 @@ class ArmState:
 class ControlLoop:
     """Control loop for the teleoperation system."""
 
-    def __init__(self, config: TelegripConfig, robot_enabled: bool = False, visualize: bool = False, shared_img=None):
+    def __init__(
+        self,
+        config: TelegripConfig,
+        shared_data: SharedCameraData,
+    ):
         self.config = config
-        self.robot_interface = RobotInterface(config, robot_enabled)
-        self.robot_enabled = robot_enabled
-        self.visualize = visualize
+        self.robot_interface = RobotInterface(config)
+        self.robot_enabled = config.enable_robot
+        self.use_keyboard = config.enable_keyboard
+        if self.use_keyboard:
+            self.keyboard_controller = KeyboardController()
+        self.visualize = config.enable_visualization
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
-        self.shared_img = shared_img
+
+        self.shared_data = shared_data
         if self.config.record:
-            self.recorder = Recorder(repo_id=config.repo_id,
-                                     resume=config.resume,
-                                     task=config.task,
-                                     root=config.root,
-                                     single_arm=config.single_arm,
-                                     cams = {'left' : (480, 640,3)},
-                                     dof=config.dof,
-                                     fps=config.fps,
-                                     robot_type=config.robot_type,
-                                     use_video=config.use_video,
-                                     )
+            self.recorder = Recorder(
+                repo_id=config.repo_id,
+                resume=config.resume,
+                task=config.task,
+                root=config.root,
+                single_arm=config.single_arm,
+                cameras=config.camera_configs,
+                dof=config.dof,
+                fps=config.fps,
+                robot_type=config.robot_type,
+                use_video=config.use_video,
+            )
             self.recorder.start_recording()
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
@@ -78,11 +89,7 @@ class ControlLoop:
 
             arm_state.target_transform = arm_state.origin_transform @ relative_transform
 
-        if arm_goal.gripper_closed is False:
-            arm_state.gripper_closed = False
-        else:
-            arm_state.gripper_closed = True
-
+        arm_state.gripper_closed = arm_goal.gripper_closed
         return arm_state
 
     def update_robot(self, left_arm: ArmState, right_arm: ArmState):
@@ -91,23 +98,20 @@ class ControlLoop:
         # Measure all IK time together
         start_time_ik = time.perf_counter()
 
-        # Left arm IK
-        if left_arm.target_transform is not None:
-            ik_solution, is_collision = self.robot_interface.solve_ik(
-                "left", left_arm.target_transform, visualize=self.visualize
-            )
-            current_gripper = 0.0 if left_arm.gripper_closed else 0.07
-            if not is_collision:
-                self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
+        ik_solution, is_collision = self.robot_interface.solve_ik(
+            left_arm.target_transform, right_arm.target_transform, visualize=self.visualize
+        )
 
-        # Right arm IK
-        if right_arm.target_transform is not None:
-            ik_solution, is_collision = self.robot_interface.solve_ik(
-                "right", right_arm.target_transform, visualize=self.visualize
+        current_gripper_1 = 0.0 if left_arm.gripper_closed else 0.07
+        current_gripper_2 = 0.0 if right_arm.gripper_closed else 0.07
+
+        if not is_collision:
+            self.robot_interface.update_arm_angles(
+                np.concatenate([ik_solution, [current_gripper_1, current_gripper_2]])
             )
-            current_gripper = 0.0 if right_arm.gripper_closed else 0.07
-            if not is_collision:
-                self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
+        else:
+            print("IK solution results in collision, not updating robot commands.")
+            return
 
         ik_time = time.perf_counter() - start_time_ik
 
@@ -134,6 +138,10 @@ class ControlLoop:
         """Control loop for the teleoperation system."""
         left_arm = ArmState(arm_name="left")
         right_arm = ArmState(arm_name="right")
+
+        right_arm.initial_transform = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
+        right_arm.origin_transform = right_arm.initial_transform
+
         self.robot_interface.setup_kinematics()
         await self.api.connect_vr_controller()
         if self.robot_enabled:
@@ -149,6 +157,9 @@ class ControlLoop:
         if self.robot_enabled:
             self.robot_interface.return_to_initial_position()
 
+        left_arm.target_transform = left_arm.initial_transform
+        right_arm.target_transform = right_arm.initial_transform
+
         while True:
             iteration_start = time.perf_counter()
             commands_start = time.perf_counter()
@@ -161,11 +172,8 @@ class ControlLoop:
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
             if self.config.record:
-                left_joints = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
-                right_joints = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
-                cams = {'observation.images.left': self.shared_img[0].numpy(),
-                        'observation.images.right': self.shared_img[1].numpy()
-                        }
+                obs_dict = self.robot_interface.get_observation()
+                cams = self.shared_data.get_camera_dict()
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
@@ -173,13 +181,14 @@ class ControlLoop:
             robot_time = time.perf_counter() - robot_start
 
             if self.config.record:
-                left_joints_target = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
-                right_joints_target = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
-                self.recorder.add_observation( left_joints=left_joints,
-                                               right_joints=right_joints,
-                                               left_joints_target=left_joints_target,
-                                               right_joints_target=right_joints_target,
-                                               cams=cams)
+                action_dict = arm_angles_to_action_dict(self.robot_interface.arm_angles)
+                self.recorder.add_observation(
+                    left_joints=obs_dict['left'],
+                    right_joints=obs_dict['right'],
+                    left_joints_target=action_dict['left'],
+                    right_joints_target=action_dict['right'],
+                    cams=cams,
+                )
                 self.recorder.handle_keyboard_event()
                 if self.config.display_data:
                     print("displaying data")
@@ -198,7 +207,7 @@ class ControlLoop:
                     }
 
                     log_rerun_data(observation=obs, action=action)
-                    
+
 
             sleep_start = time.perf_counter()
             await asyncio.sleep(0.001)
@@ -207,7 +216,7 @@ class ControlLoop:
             if self.config.record:
                 dt_s = time.perf_counter() - iteration_start
                 busy_wait(1 / self.config.fps - dt_s)
-            
+
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time
 
@@ -223,8 +232,8 @@ class ControlLoop:
 
     async def stop(self):
         """Stop the control loop."""
+        if self.use_keyboard:
+            self.keyboard_controller.stop()
         await self.api.disconnect_vr_controller()
         if self.robot_enabled:
             self.robot_interface.disconnect()
-
-

@@ -7,62 +7,61 @@ import asyncio
 import datetime
 import logging
 import multiprocessing as mp
+
 import torch
 
-from piper_teleop.config import config
-from piper_teleop.robot_server.camera_streaming.camera_streamer import CameraStreamer
+from piper_teleop.config import TelegripConfig, config
+from piper_teleop.robot_server.camera import CameraStreamer, SharedCameraData
+from piper_teleop.robot_server.camera.camera_config import CameraMode
 from piper_teleop.robot_server.control_loop import ControlLoop
 
 logger = logging.getLogger(__name__)
 
 
-def _camera_process_wrapper(config, room_name: str, participant_name: str, camera_config: dict, shared_img):
+def _camera_process_wrapper(
+    config: TelegripConfig,
+    shared_data: SharedCameraData,
+) -> None:
     """Wrapper to run camera streamer in a separate process with asyncio"""
 
     async def run_camera():
         camera_streamer = CameraStreamer(
-            camera_config=camera_config,
-            record=config.record,
-            shared_img=shared_img
+            configs=config.camera_configs,
+            shared_data=shared_data,
         )
-        await camera_streamer.start(room_name, participant_name)
+        await camera_streamer.start(config.livekit_room, config.camera_streamer_participant)
 
     asyncio.run(run_camera())
 
 
-def _control_process_wrapper(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, shared_img):
+def _control_process_wrapper(config: TelegripConfig, shared_data: SharedCameraData) -> None:
     """Wrapper to run control process in a separate process with asyncio"""
-    asyncio.run(_run_control_process(config=config,
-                                     room_name=room_name, participant_name=participant_name,
-                                     robot_enabled=robot_enabled, visualize=visualize,
-                                     shared_img=shared_img,
-                                     ))
+    asyncio.run(
+        _run_control_process(
+            config=config,
+            shared_data=shared_data,
+        )
+    )
 
 
-async def _run_control_process(config, room_name: str, participant_name: str, robot_enabled: bool, visualize: bool, shared_img) -> None:
+async def _run_control_process(config: TelegripConfig, shared_data: SharedCameraData) -> None:
     """
     Run the controll process (receiving, processing and sending commands to the robot)
     """
-    control_loop = ControlLoop(config=config, robot_enabled=robot_enabled, visualize=visualize, shared_img=shared_img)
+    control_loop = ControlLoop(config=config, shared_data=shared_data)
     control_loop_task = asyncio.create_task(control_loop.run())
 
     await asyncio.gather(control_loop_task)
 
-def get_shared_memory_for_recording(config):
-    torch.multiprocessing.set_start_method('spawn')
-    W = config.camera_config['dual_camera_opencv']['frame_width']
-    H = config.camera_config['dual_camera_opencv']['frame_height']
-    shared = torch.empty((2, H, W, 3), dtype=torch.uint8).share_memory_()
-
-    return shared
 
 async def main():
+    torch.multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser(description="Robot Server - Tactile Robotics Teleoperation System")
 
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
-    parser.add_argument("--camera-type", default="dual_camera_opencv", help="Camera config")
+    parser.add_argument("--keyboard", action="store_true", help="Enable keyboard control")
     parser.add_argument("--record", action="store_true", help="Enable recording")
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
@@ -78,17 +77,24 @@ async def main():
         level=getattr(logging, args.log_level.upper()), format="%(asctime)s - %(message)s", datefmt="%H:%M:%S"
     )
 
-    robot_enabled = not args.no_robot
-    visualize = args.vis
+    config.enable_robot = not args.no_robot
+    config.enable_visualization = args.vis
     config.record = args.record
     config.resume = args.resume
     config.repo_id = args.repo_id
+    use_keyboard = args.keyboard
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
+    if config.record:
+        num_recording_cams = 0
+        for cam_config in config.camera_configs:
+            if cam_config.mode == CameraMode.RECORDING or cam_config.mode == CameraMode.HYBRID:
+                num_recording_cams += 1
+        assert num_recording_cams > 0, "There must be at least one camera in recording or hybrid mode"
+
+    shared_data = SharedCameraData(configs=config.camera_configs)
+
     logger.info("Initializing server components...")
-
-    shared_img = get_shared_memory_for_recording(config) if config.record else None
-
     try:
         # running background (daemon) processes
         logger.info("Starting camera streamer and control loop in parallel...")
@@ -100,10 +106,7 @@ async def main():
             target=_camera_process_wrapper,
             args=(
                 config,
-                config.livekit_room,
-                config.camera_streamer_participant,
-                config.camera_config[args.camera_type],
-                shared_img,
+                shared_data,
             ),
         )
         camera_process.start()
@@ -111,12 +114,10 @@ async def main():
         # run control loop as process
         control_process = mp.Process(
             target=_control_process_wrapper,
-            args=(config,
-                  config.livekit_room,
-                  config.controllers_processing_participant,
-                  robot_enabled,
-                  visualize,
-                  shared_img),
+            args=(
+                config,
+                shared_data,
+            ),
         )
         control_process.start()
 
