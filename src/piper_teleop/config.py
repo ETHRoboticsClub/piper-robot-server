@@ -235,7 +235,7 @@ class TelegripConfig:
     enable_pybullet_gui: bool = True
     enable_robot: bool = True
     enable_vr: bool = True
-    enable_keyboard: bool = True
+    enable_keyboard: bool = False
     enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"

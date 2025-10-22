@@ -61,7 +61,9 @@ async def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
-    parser.add_argument("--keyboard", action="store_true", help="Enable keyboard control")
+    parser.add_argument(
+        "--keyboard", action="store_true", default=False, help="Enable keyboard control (defaults to False)"
+    )
     parser.add_argument("--record", action="store_true", help="Enable recording")
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
@@ -82,7 +84,7 @@ async def main():
     config.record = args.record
     config.resume = args.resume
     config.repo_id = args.repo_id
-    use_keyboard = args.keyboard
+    config.enable_keyboard = args.keyboard
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
     if config.record:
