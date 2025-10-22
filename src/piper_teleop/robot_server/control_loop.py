@@ -16,8 +16,6 @@ from piper_teleop.robot_server.keyboard_controller import KeyboardController
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
-from lerobot.utils.visualization_utils import log_rerun_data
-
 
 dotenv.load_dotenv()
 
@@ -63,6 +61,7 @@ class ControlLoop:
                 fps=config.fps,
                 robot_type=config.robot_type,
                 use_video=config.use_video,
+                display_data=config.display_data
             )
             self.recorder.start_recording()
 
@@ -130,10 +129,6 @@ class ControlLoop:
             f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
         )
 
-    def _format_keys(self, data: dict, suffix: str) -> dict:
-        """Return a new dict with keys suffixed by .{suffix}."""
-        return {f"{k}.{suffix}": v for k, v in data.items()}
-
     async def run(self):
         """Control loop for the teleoperation system."""
         left_arm = ArmState(arm_name="left")
@@ -166,8 +161,13 @@ class ControlLoop:
 
             commands_time = time.perf_counter() - commands_start
 
-            left_arm_goal = await self.api.get_controller_goal("left")
-            right_arm_goal = await self.api.get_controller_goal("right")
+            if self.use_keyboard:
+                left_arm_goal = self.keyboard_controller.get_goal("left", left_arm.target_transform)
+                right_arm_goal = self.keyboard_controller.get_goal("right", right_arm.target_transform)
+            else:
+                left_arm_goal = await self.api.get_controller_goal("left")
+                right_arm_goal = await self.api.get_controller_goal("right")
+
             left_arm = self.update_arm_state(left_arm_goal, left_arm)
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
@@ -191,22 +191,11 @@ class ControlLoop:
                 )
                 self.recorder.handle_keyboard_event()
                 if self.config.display_data:
-                    print("displaying data")
-                    obs_raw = self.robot_interface.get_observation()
-                    observation_left = obs_raw["left_arm_obs"]
-                    observation_right = obs_raw["right_arm_obs"]
-
-                    obs = {
-                        **self._format_keys(observation_left, "left"),
-                        **self._format_keys(observation_right, "right"),
-                        **cams,
-                    }
-                    action = {
-                        **self._format_keys(left_joints_target, "left"),
-                        **self._format_keys(right_joints_target, "right"),
-                    }
-
-                    log_rerun_data(observation=obs, action=action)
+                    self.recorder.show_data(left_joints=obs_dict['left'],
+                                               right_joints=obs_dict['right'],
+                                               left_joints_target=action_dict['left'],
+                                               right_joints_target=action_dict['right'],
+                                               cams=cams)
 
 
             sleep_start = time.perf_counter()
