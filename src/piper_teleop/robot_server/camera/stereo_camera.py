@@ -4,7 +4,8 @@ from typing import Tuple
 
 import numpy as np
 
-from piper_teleop.robot_server.camera import Camera, CameraConfig
+from piper_teleop.robot_server.camera.camera import Camera
+from piper_teleop.robot_server.camera.camera_config import CameraConfig
 
 
 class StereoCamera(Camera):

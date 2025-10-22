@@ -18,7 +18,7 @@ class Camera(abc.ABC):
     frame_height: int
     cam_index: int
     edge_crop: int
-    capture_api: cv2.VideoCaptureAPIs
+    capture_api: int
 
     def __init__(self, camera_config: CameraConfig):
         self.name = camera_config.name

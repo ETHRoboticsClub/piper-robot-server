@@ -7,14 +7,10 @@ import torch
 from dotenv import load_dotenv
 from tactile_teleop_sdk import TactileAPI
 
-from piper_teleop.robot_server.camera import (
-    Camera,
-    StereoCamera,
-    MonocularCamera,
-    CameraConfig,
-    CameraType,
-    CameraMode,
-)
+from piper_teleop.robot_server.camera.camera import Camera
+from piper_teleop.robot_server.camera.stereo_camera import StereoCamera
+from piper_teleop.robot_server.camera.monocular_camera import MonocularCamera
+from piper_teleop.robot_server.camera.camera_config import CameraConfig, CameraType, CameraMode
 
 # Load environment variables from the project root
 load_dotenv()

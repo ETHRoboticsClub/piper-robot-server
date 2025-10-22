@@ -1,6 +1,6 @@
 from enum import Enum, auto
 
-from cv2 import VideoCaptureAPIs
+import cv2
 
 
 class CameraType(Enum):
@@ -43,7 +43,7 @@ DEFAULT_CAMERA_MODE = CameraMode.STREAMING
 DEFAULT_CAMERA_FPS = 30
 DEFAULT_CAMERA_FRAME_WIDTH = 640
 DEFAULT_CAMERA_FRAME_HEIGHT = 480
-DEFAULT_CAMERA_CAPTURE_API = VideoCaptureAPIs.V4L2
+DEFAULT_CAMERA_CAPTURE_API = cv2.CAP_V4L2
 DEFAULT_CAMERA_CAM_INDEX = 0
 DEFAULT_CAMERA_EDGE_CROP = 0
 
@@ -57,7 +57,7 @@ class CameraConfig:
     fps: int
     frame_width: int
     frame_height: int
-    capture_api: VideoCaptureAPIs
+    capture_api: int
     cam_index: int
     edge_crop: int
 
@@ -69,7 +69,7 @@ class CameraConfig:
         fps: int = DEFAULT_CAMERA_FPS,
         frame_width: int = DEFAULT_CAMERA_FRAME_WIDTH,
         frame_height: int = DEFAULT_CAMERA_FRAME_HEIGHT,
-        capture_api: VideoCaptureAPIs = DEFAULT_CAMERA_CAPTURE_API,
+        capture_api: int = DEFAULT_CAMERA_CAPTURE_API,
         cam_index: int = DEFAULT_CAMERA_CAM_INDEX,
         edge_crop: int = DEFAULT_CAMERA_EDGE_CROP,
     ):

@@ -1,12 +1,8 @@
-from piper_teleop.robot_server.camera import (
-    Camera,
-    CameraConfig,
-    SharedCameraData,
-    CameraMode,
-    CameraType,
-    StereoCamera,
-    MonocularCamera,
-)
+from piper_teleop.robot_server.camera.camera import Camera
+from piper_teleop.robot_server.camera.camera_config import CameraConfig, CameraMode, CameraType
+from piper_teleop.robot_server.camera.camera_streamer import SharedCameraData
+from piper_teleop.robot_server.camera.stereo_camera import StereoCamera
+from piper_teleop.robot_server.camera.monocular_camera import MonocularCamera
 
 
 class CameraRecorder:
