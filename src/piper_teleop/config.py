@@ -7,12 +7,13 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import cv2
 import yaml
 
 from piper_teleop.utils import get_absolute_path
+from piper_teleop.robot_server.camera import CameraConfig, from_config, CameraType, CameraMode
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +42,16 @@ DEFAULT_CONFIG = {
         "hysteresis_threshold": 0.01,
         "movement_penalty_weight": 0.01,
     },
-    "stereo_video": {
+    "cameras": {
         "dual_camera_opencv": {
-            "type": "dual_camera_opencv",
-            "edge_crop_pixels": 60,
-            "calibration_file": "src/tactile_teleop/robot_server/camera_streaming/calibration/stereo_calibration_vr_20250903_112756.pkl",
-            "cam_index_left": 4,
-            "cam_index_right": 6,
-            "cap_backend": cv2.CAP_V4L2,
-            "frame_width": 640,
-            "frame_height": 480,
-        }
+            "type": "stereo",
+            "mode": "streaming",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "0",
+        },
     },
 }
 
@@ -195,7 +195,7 @@ class TelegripConfig:
     vr_to_robot_scale: float = VR_TO_ROBOT_SCALE
     send_interval: float = SEND_INTERVAL
     ground_height: float = GROUND_HEIGHT
-    
+
     # Recorder settings
     record: bool = False
     repo_id: str = 'piper'
@@ -215,6 +215,7 @@ class TelegripConfig:
     enable_robot: bool = True
     enable_vr: bool = True
     enable_keyboard: bool = True
+    enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"
 
@@ -237,7 +238,7 @@ class TelegripConfig:
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
 
-    # LiveKit Configurations
+    # LiveKit configuration
     livekit_room: str = "robot-vr-teleop-room"
     camera_streamer_participant: str = "camera-streamer"
     controllers_processing_participant: str = "controllers-processing"
@@ -245,8 +246,8 @@ class TelegripConfig:
     vr_viewer_participant: str = "vr-viewer"
     vr_viewer_debug: bool = True
 
-    # Stereo Video Configuration
-    camera_config: dict = field(default_factory=lambda: _config_data["stereo_video"])
+    # Camera configuration
+    camera_configs: list[CameraConfig] = field(default_factory=lambda: from_config(_config_data["cameras"]))
 
     @property
     def ssl_files_exist(self) -> bool:

@@ -69,11 +69,11 @@ def suppress_stdout_stderr():
 class RobotInterface:
     """High-level interface for robot control with safety features."""
 
-    def __init__(self, config: TelegripConfig, robot_enabled: bool = False):
+    def __init__(self, config: TelegripConfig):
         self.config = config
         self.left_robot = None
         self.right_robot = None
-        self.is_enabled = robot_enabled
+        self.is_enabled = config.enable_robot
         self.is_connected = False
 
         # Individual arm connection status

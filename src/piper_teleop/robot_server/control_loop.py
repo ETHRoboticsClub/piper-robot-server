@@ -10,7 +10,9 @@ from lerobot.utils.robot_utils import busy_wait
 from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.config import TelegripConfig
-
+from piper_teleop.robot_server.camera import (
+    SharedCameraData,
+)
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
@@ -32,25 +34,31 @@ class ArmState:
 class ControlLoop:
     """Control loop for the teleoperation system."""
 
-    def __init__(self, config: TelegripConfig, robot_enabled: bool = False, visualize: bool = False, shared_img=None):
+    def __init__(
+        self,
+        config: TelegripConfig,
+        shared_data: SharedCameraData,
+    ):
         self.config = config
-        self.robot_interface = RobotInterface(config, robot_enabled)
-        self.robot_enabled = robot_enabled
-        self.visualize = visualize
+        self.robot_interface = RobotInterface(config)
+        self.robot_enabled = config.enable_robot
+        self.visualize = config.enable_visualization
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
-        self.shared_img = shared_img
+
+        self.shared_data = shared_data
         if self.config.record:
-            self.recorder = Recorder(repo_id=config.repo_id,
-                                     resume=config.resume,
-                                     task=config.task,
-                                     root=config.root,
-                                     single_arm=config.single_arm,
-                                     cams = {'left' : (480, 640,3)},
-                                     dof=config.dof,
-                                     fps=config.fps,
-                                     robot_type=config.robot_type,
-                                     use_video=config.use_video,
-                                     )
+            self.recorder = Recorder(
+                repo_id=config.repo_id,
+                resume=config.resume,
+                task=config.task,
+                root=config.root,
+                single_arm=config.single_arm,
+                cameras=config.camera_configs,
+                dof=config.dof,
+                fps=config.fps,
+                robot_type=config.robot_type,
+                use_video=config.use_video,
+            )
             self.recorder.start_recording()
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
@@ -157,7 +165,6 @@ class ControlLoop:
             if self.config.record:
                 left_joints = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
                 right_joints = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
-                cams = {'observation.images.left': self.shared_img[0].numpy()}
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
@@ -167,11 +174,13 @@ class ControlLoop:
             if self.config.record:
                 left_joints_target = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
                 right_joints_target = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
-                self.recorder.add_observation( left_joints=left_joints,
-                                               right_joints=right_joints,
-                                               left_joints_target=left_joints_target,
-                                               right_joints_target=right_joints_target,
-                                               cams=cams)
+                self.recorder.add_observation(
+                    left_joints=left_joints,
+                    right_joints=right_joints,
+                    left_joints_target=left_joints_target,
+                    right_joints_target=right_joints_target,
+                    data=self.shared_data,
+                )
                 self.recorder.handle_keyboard_event()
 
             sleep_start = time.perf_counter()
@@ -181,7 +190,6 @@ class ControlLoop:
             if self.config.record:
                 dt_s = time.perf_counter() - iteration_start
                 busy_wait(1 / self.config.fps - dt_s)
-
 
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time

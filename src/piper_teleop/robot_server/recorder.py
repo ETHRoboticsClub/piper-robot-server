@@ -2,9 +2,11 @@ import time
 import atexit
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 
 import numpy as np
+
+from piper_teleop.robot_server.camera import CameraConfig, SharedCameraData
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
@@ -20,33 +22,41 @@ class RecState(Enum):
 
 
 class Recorder:
-    def __init__(self,
-                 repo_id:str,
-                 task: str,
-                 resume=False,
-                 root=Path(__file__).parents[3] / 'data',
-                 single_arm=False,
-                 cams: Optional[Dict[str, Any]] = None,
-                 dof=7,
-                 fps=30,
-                 robot_type='piper',
-                 play_sound=True,
-                 use_video=False,
-                 image_writer_processes=4,
-                 image_writer_threads=16,
-                 ):
-        # Feutures
+
+    repo_id: str
+    task: str
+    resume: bool
+
+    data: SharedCameraData
+
+    def __init__(
+        self,
+        repo_id: str,
+        task: str,
+        resume=False,
+        root=Path(__file__).parents[3] / "data",
+        single_arm=False,
+        cameras: list[CameraConfig] = None,
+        dof=7,
+        fps=30,
+        robot_type="piper",
+        play_sound=True,
+        use_video=False,
+        image_writer_processes=4,
+        image_writer_threads=16,
+    ):
+        # Features
         self.single_arm = single_arm
         if self.single_arm:
             self.joints = [f'joint_{i}' for i in range(dof)]
         else:
             self.joints = [f'L.joint_{i}' for i in range(dof)] + [f'R.joint_{i}' for i in range(dof)]
 
-        if cams is not None:
-            for cam in cams.values():
+        if cameras is not None:
+            for cam in cameras.values():
                 assert isinstance(cam, tuple), 'cam values need to be tuples (H, W, C)'
                 assert len(cam) == 3, 'cam values need to be tuples (H, W, C)'
-        self.cams = cams
+        self.cams = cameras
         self.dof = dof
 
         # lerobot dataset
@@ -108,13 +118,25 @@ class Recorder:
             image_writer_threads=self.image_writer_threads,
         )
         self.dataset = dataset
-    
+
     def start_recording(self):
         logger.info('start recording')
         self._create_dataset()
 
-    def add_observation(self, left_joints, right_joints, left_joints_target, right_joints_target, cams):
+    def add_observation(
+        self,
+        left_joints,
+        right_joints,
+        left_joints_target,
+        right_joints_target,
+        data: SharedCameraData,
+    ) -> None:
         if self.state == RecState.RECORDING:
+
+            cams = dict()
+            for name in data.data.keys():
+                cams[f"observation.images.{name}"] = data.data[name].numpy()
+
             state = np.array(
                 [left_joints[f'joint_{i}.pos'] for i in range(self.dof)] +
                 [right_joints[f'joint_{i}.pos'] for i in range(self.dof)],
@@ -125,11 +147,8 @@ class Recorder:
                 [right_joints_target[f'joint_{i}.pos'] for i in range(self.dof)],
                 dtype=np.float32
             )
-            frame = {'observation.state': state,
-                     'action': target,
-                     **cams}
+            frame = {"observation.state": state, "action": target, **cams}
             self.dataset.add_frame(frame, self.task)
-
 
     def _transition(self, next_state, message=None, action=None, message_post=None):
         if message and self.play_sound:
