@@ -228,6 +228,7 @@ class TelegripConfig:
     robot_type: str = "piper"
     task: str = "pick and place"
     use_video = False
+    display_data = True
 
     # Control flags
     enable_pybullet: bool = True

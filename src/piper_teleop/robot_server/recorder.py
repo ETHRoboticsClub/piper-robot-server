@@ -10,6 +10,7 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import DEFAULT_VIDEO_PATH, write_info
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
+from lerobot.utils.visualization_utils import log_rerun_data, _init_rerun
 
 from piper_teleop.robot_server.camera.camera_config import CameraConfig
 from piper_teleop.robot_server.camera.camera_streamer import SharedCameraData
@@ -90,6 +91,7 @@ class Recorder:
         use_video=False,
         image_writer_processes=4,
         image_writer_threads=16,
+        display_data=False
     ):
         if use_video is False:
             logger.info("Init recorder in fast mode. Images will be converted to video at the end of recording")
@@ -130,6 +132,7 @@ class Recorder:
         self.events = events
         self.state = RecState.INIT
         self.play_sound = play_sound
+        self.display_data = display_data
 
         atexit.register(self.exit)
 
@@ -177,6 +180,9 @@ class Recorder:
             image_writer_processes=self.image_writer_processes,
             image_writer_threads=self.image_writer_threads,
         )
+        if self.display_data:
+            _init_rerun(session_name="recording")
+
         self.dataset = dataset
 
     def start_recording(self):
@@ -205,6 +211,21 @@ class Recorder:
             )
             frame = {"observation.state": state, "action": target, **cams}
             self.dataset.add_frame(frame, self.task)  # type: ignore
+
+    def show_data(self,
+                     left_joints,
+                     right_joints,
+                     left_joints_target,
+                     right_joints_target,
+                     cams: dict[str, np.ndarray],
+                     ):
+        left_joints = {"L" + k: v for k,v in left_joints.items()}
+        right_joints = {"R" + k: v for k,v in right_joints.items()}
+        obs = {**left_joints, **right_joints, **cams}
+        left_joints_action = {"L" + k: v for k,v in left_joints_target.items()}
+        right_joints_action = {"R" + k: v for k,v in right_joints_target.items()}
+        action = {**left_joints_action, **right_joints_action}
+        log_rerun_data(observation=obs, action=action)
 
     def _transition(self, next_state, message=None, action=None, message_post=None):
         if message and self.play_sound:

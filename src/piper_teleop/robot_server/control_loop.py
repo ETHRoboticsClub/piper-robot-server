@@ -61,6 +61,7 @@ class ControlLoop:
                 fps=config.fps,
                 robot_type=config.robot_type,
                 use_video=config.use_video,
+                display_data=config.display_data
             )
             self.recorder.start_recording()
 
@@ -189,6 +190,13 @@ class ControlLoop:
                     cams=cams,
                 )
                 self.recorder.handle_keyboard_event()
+                if self.config.display_data:
+                    self.recorder.show_data(left_joints=obs_dict['left'],
+                                               right_joints=obs_dict['right'],
+                                               left_joints_target=action_dict['left'],
+                                               right_joints_target=action_dict['right'],
+                                               cams=cams)
+
 
             sleep_start = time.perf_counter()
             await asyncio.sleep(0.001)
