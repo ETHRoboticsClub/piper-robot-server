@@ -8,6 +8,8 @@ import datetime
 import logging
 import multiprocessing as mp
 
+import torch
+
 from piper_teleop.config import TelegripConfig, config
 from piper_teleop.robot_server.camera import CameraStreamer, SharedCameraData
 from piper_teleop.robot_server.camera.camera_config import CameraMode
@@ -53,11 +55,13 @@ async def _run_control_process(config: TelegripConfig, shared_data: SharedCamera
 
 
 async def main():
+    torch.multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser(description="Robot Server - Tactile Robotics Teleoperation System")
 
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
+    parser.add_argument("--keyboard", action="store_true", help="Enable keyboard control")
     parser.add_argument("--record", action="store_true", help="Enable recording")
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
@@ -78,6 +82,7 @@ async def main():
     config.record = args.record
     config.resume = args.resume
     config.repo_id = args.repo_id
+    use_keyboard = args.keyboard
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
     if config.record:

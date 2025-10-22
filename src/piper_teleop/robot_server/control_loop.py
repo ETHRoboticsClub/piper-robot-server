@@ -10,9 +10,9 @@ from lerobot.utils.robot_utils import busy_wait
 from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.config import TelegripConfig
-from piper_teleop.robot_server.camera import (
-    SharedCameraData,
-)
+from piper_teleop.robot_server.camera import SharedCameraData
+from piper_teleop.robot_server.keyboard_controller import KeyboardController
+
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
@@ -42,6 +42,9 @@ class ControlLoop:
         self.config = config
         self.robot_interface = RobotInterface(config)
         self.robot_enabled = config.enable_robot
+        self.use_keyboard = config.enable_keyboard
+        if self.use_keyboard:
+            self.keyboard_controller = KeyboardController()
         self.visualize = config.enable_visualization
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
 
@@ -84,11 +87,7 @@ class ControlLoop:
 
             arm_state.target_transform = arm_state.origin_transform @ relative_transform
 
-        if arm_goal.gripper_closed is False:
-            arm_state.gripper_closed = False
-        else:
-            arm_state.gripper_closed = True
-
+        arm_state.gripper_closed = arm_goal.gripper_closed
         return arm_state
 
     def update_robot(self, left_arm: ArmState, right_arm: ArmState):
@@ -97,23 +96,20 @@ class ControlLoop:
         # Measure all IK time together
         start_time_ik = time.perf_counter()
 
-        # Left arm IK
-        if left_arm.target_transform is not None:
-            ik_solution, is_collision = self.robot_interface.solve_ik(
-                "left", left_arm.target_transform, visualize=self.visualize
-            )
-            current_gripper = 0.0 if left_arm.gripper_closed else 0.07
-            if not is_collision:
-                self.robot_interface.update_arm_angles("left", np.concatenate([ik_solution, [current_gripper]]))
+        ik_solution, is_collision = self.robot_interface.solve_ik(
+            left_arm.target_transform, right_arm.target_transform, visualize=self.visualize
+        )
 
-        # Right arm IK
-        if right_arm.target_transform is not None:
-            ik_solution, is_collision = self.robot_interface.solve_ik(
-                "right", right_arm.target_transform, visualize=self.visualize
+        current_gripper_1 = 0.0 if left_arm.gripper_closed else 0.07
+        current_gripper_2 = 0.0 if right_arm.gripper_closed else 0.07
+
+        if not is_collision:
+            self.robot_interface.update_arm_angles(
+                np.concatenate([ik_solution, [current_gripper_1, current_gripper_2]])
             )
-            current_gripper = 0.0 if right_arm.gripper_closed else 0.07
-            if not is_collision:
-                self.robot_interface.update_arm_angles("right", np.concatenate([ik_solution, [current_gripper]]))
+        else:
+            print("IK solution results in collision, not updating robot commands.")
+            return
 
         ik_time = time.perf_counter() - start_time_ik
 
@@ -136,6 +132,10 @@ class ControlLoop:
         """Control loop for the teleoperation system."""
         left_arm = ArmState(arm_name="left")
         right_arm = ArmState(arm_name="right")
+
+        right_arm.initial_transform = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
+        right_arm.origin_transform = right_arm.initial_transform
+
         self.robot_interface.setup_kinematics()
         await self.api.connect_vr_controller()
         if self.robot_enabled:
@@ -151,20 +151,27 @@ class ControlLoop:
         if self.robot_enabled:
             self.robot_interface.return_to_initial_position()
 
+        left_arm.target_transform = left_arm.initial_transform
+        right_arm.target_transform = right_arm.initial_transform
+
         while True:
             iteration_start = time.perf_counter()
             commands_start = time.perf_counter()
 
             commands_time = time.perf_counter() - commands_start
 
-            left_arm_goal = await self.api.get_controller_goal("left")
-            right_arm_goal = await self.api.get_controller_goal("right")
+            if self.use_keyboard:
+                left_arm_goal = self.keyboard_controller.get_goal("left", left_arm.target_transform)
+                right_arm_goal = self.keyboard_controller.get_goal("right", right_arm.target_transform)
+            else:
+                left_arm_goal = await self.api.get_controller_goal("left")
+                right_arm_goal = await self.api.get_controller_goal("right")
+
             left_arm = self.update_arm_state(left_arm_goal, left_arm)
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
             if self.config.record:
-                left_joints = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
-                right_joints = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
+                left_joints, right_joints = arm_angles_to_action_dict(self.robot_interface.arm_angles)
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
@@ -172,14 +179,13 @@ class ControlLoop:
             robot_time = time.perf_counter() - robot_start
 
             if self.config.record:
-                left_joints_target = arm_angles_to_action_dict(self.robot_interface.left_arm_angles)
-                right_joints_target = arm_angles_to_action_dict(self.robot_interface.right_arm_angles)
+                left_joints_target, right_joints_target = arm_angles_to_action_dict(self.robot_interface.arm_angles)
                 self.recorder.add_observation(
                     left_joints=left_joints,
                     right_joints=right_joints,
                     left_joints_target=left_joints_target,
                     right_joints_target=right_joints_target,
-                    data=self.shared_data,
+                    data=self.shared_data.get_camera_dict(),
                 )
                 self.recorder.handle_keyboard_event()
 
@@ -206,6 +212,8 @@ class ControlLoop:
 
     async def stop(self):
         """Stop the control loop."""
+        if self.use_keyboard:
+            self.keyboard_controller.stop()
         await self.api.disconnect_vr_controller()
         if self.robot_enabled:
             self.robot_interface.disconnect()

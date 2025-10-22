@@ -19,10 +19,7 @@ load_dotenv()
 class SharedCameraData:
     """A shared memory object which is used to store the frames of the individual cameras."""
 
-    data: dict[str, torch.Tensor]
-
     def __init__(self, configs: list[CameraConfig]):
-        torch.multiprocessing.set_start_method("spawn")
 
         self.data = {}
         for config in configs:
@@ -41,17 +38,13 @@ class SharedCameraData:
             raise ValueError(f"camera {name} is not in recording mode")
         return self.data[name]
 
+    def get_camera_dict(self) -> dict[str, np.ndarray]:
+        return {name: self.data[name].numpy() for name in self.data}
+
 
 class CameraStreamer:
-    logger: logging.Logger
-    api: TactileAPI
 
-    cameras: list[Camera]
-    tasks: list[asyncio.Task]
-    shared_data: SharedCameraData
-    is_running: bool
-
-    def __init__(self, configs: list[CameraConfig], shared_data: SharedCameraData):
+    def __init__(self, configs: list[CameraConfig], shared_data: SharedCameraData = None):
         self.logger = logging.getLogger(__name__)
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
         self.cameras = []

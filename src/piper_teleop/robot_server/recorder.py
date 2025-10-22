@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import pyarrow.parquet as pq
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.datasets.utils import DEFAULT_VIDEO_PATH, write_info
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
 
@@ -17,17 +19,61 @@ logger = logging.getLogger(__name__)
 from enum import Enum, auto
 
 
+def convert_image_dataset_to_video(dataset: LeRobotDataset):
+    """Convert a dataset recorded with image frames into the canonical video layout."""
+    if dataset.num_episodes == 0:
+        return
+    logger.info("converting images to video")
+    import shutil
+
+    image_keys = list(dataset.meta.image_keys)
+    if not image_keys:
+        return
+
+    # Step 1: Update metadata to video format
+    for key in image_keys:
+        dataset.meta.info["features"][key]["dtype"] = "video"
+    dataset.meta.info["video_path"] = DEFAULT_VIDEO_PATH
+    write_info(dataset.meta.info, dataset.meta.root)
+    dataset.meta.load_metadata()
+
+    # Step 2: Encode videos for each episode
+    for episode_index in range(dataset.num_episodes):
+        dataset.encode_episode_videos(episode_index)
+
+    # Step 3: Regenerate parquet files without image columns
+    # (Video datasets don't store image data in parquet)
+    for episode_index in range(dataset.num_episodes):
+        parquet_path = dataset.root / dataset.meta.get_data_file_path(episode_index)
+
+        # Load existing parquet data
+        table = pq.read_table(parquet_path)
+
+        # Remove image columns (they're now in videos)
+        columns_to_keep = [col for col in table.schema.names if not col.startswith("observation.images.")]
+        table_without_images = table.select(columns_to_keep)
+
+        # Save back to parquet
+        pq.write_table(table_without_images, parquet_path)
+
+    dataset.meta.info["total_videos"] = dataset.num_episodes * len(dataset.meta.video_keys)
+    write_info(dataset.meta.info, dataset.meta.root)
+    dataset.meta.load_metadata()
+
+    # Step 4: Clean up images directory
+    images_dir = dataset.root / "images"
+    if images_dir.exists():
+        shutil.rmtree(images_dir)
+
+
 class RecState(Enum):
     INIT = auto()
     RESET_ENV = auto()
     RECORDING = auto()
+    FINISHED = auto()
 
 
 class Recorder:
-
-    repo_id: str
-    task: str
-    resume: bool
 
     def __init__(
         self,
@@ -45,6 +91,11 @@ class Recorder:
         image_writer_processes=4,
         image_writer_threads=16,
     ):
+        if use_video is False:
+            logger.info("Init recorder in fast mode. Images will be converted to video at the end of recording")
+            self.convert_images_to_video = True
+        else:
+            self.convert_images_to_video = False
         # Features
         self.single_arm = single_arm
         if self.single_arm:
@@ -88,8 +139,10 @@ class Recorder:
 
     def exit(self):
         if self.dataset is not None:
-            self.dataset.stop_image_writer()
             logger.info("Cleaning up recorder resources")
+            self.dataset.stop_image_writer()
+            logger.info("Ending up recorder resources")
+            self._end_recording()
 
     @property
     def features(self):
@@ -136,13 +189,9 @@ class Recorder:
         right_joints,
         left_joints_target,
         right_joints_target,
-        data: SharedCameraData,
+        cams: dict[str, np.ndarray],
     ) -> None:
         if self.state == RecState.RECORDING:
-
-            cams = dict()
-            for name in data.data.keys():
-                cams[f"observation.images.{name}"] = data.data[name].numpy()
 
             state = np.array(
                 [left_joints[f"joint_{i}.pos"] for i in range(self.dof)]
@@ -155,7 +204,7 @@ class Recorder:
                 dtype=np.float32,
             )
             frame = {"observation.state": state, "action": target, **cams}
-            self.dataset.add_frame(frame, self.task)
+            self.dataset.add_frame(frame, self.task)  # type: ignore
 
     def _transition(self, next_state, message=None, action=None, message_post=None):
         if message and self.play_sound:
@@ -163,10 +212,18 @@ class Recorder:
             say(message)
         if action:
             action()
-        if message_post:
+        if message_post and self.play_sound:
             logger.info(message_post)
             say(message_post)
         self.state = next_state
+
+    def _end_recording(self):
+        self._delete_episodes()
+        if self.convert_images_to_video:
+            convert_image_dataset_to_video(self.dataset)
+            # avoid twice conversion
+            self.convert_images_to_video = False
+        self.events["stop_recording"] = False
 
     def _save_episodes(self):
         start_save = time.perf_counter()
@@ -202,3 +259,6 @@ class Recorder:
             elif self.state == RecState.RECORDING:
                 self._transition(RecState.RESET_ENV, None, self._save_episodes, "Episode saved")
             self.events["exit_early"] = False
+
+        if self.events["stop_recording"]:
+            self._transition(RecState.FINISHED, "Stop Recording", self._end_recording, None)

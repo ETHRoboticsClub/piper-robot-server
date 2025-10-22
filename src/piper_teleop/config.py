@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
         "vr": {"enabled": True},
         "pybullet": {"enabled": True},
     },
-    "paths": {"urdf_path": "URDF/Piper/piper_description.urdf"},
+    "paths": {"urdf_path": "URDF/Piper/dual_piper.urdf"},
     "gripper": {"open_angle": 0.0, "closed_angle": 45.0},
     "ik": {
         "use_reference_poses": False,
@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         "stereo": {
             "type": "stereo",
             "mode": "hybrid",
-            "fps": "30",
+            "fps": "60",
             "frame_width": "640",
             "frame_height": "480",
             "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
