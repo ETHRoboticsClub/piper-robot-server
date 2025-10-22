@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
             "frame_width": "640",
             "frame_height": "480",
             "capture_api": cv2.CAP_V4L2,
-            "cam_index": "4",
+            "cam_index": "8",
         },
         "wrist2": {
             "type": "monocular",
@@ -70,7 +70,7 @@ DEFAULT_CONFIG = {
             "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
             "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
             "capture_api": cv2.CAP_V4L2,
-            "cam_index": "8",
+            "cam_index": "4",
         },
     },
 }
@@ -228,7 +228,7 @@ class TelegripConfig:
     robot_type: str = "piper"
     task: str = "pick and place"
     use_video = False
-    display_data = True
+    display_data = False
 
     # Control flags
     enable_pybullet: bool = True

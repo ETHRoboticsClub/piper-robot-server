@@ -16,11 +16,8 @@ class StereoCamera(Camera):
         super().__init__(config)
         self.capture: cv2.VideoCapture | None = None
 
-    def get_single_width(self) -> int:
-        return self.frame_width // 2
-
     def get_cropped_width(self) -> int:
-        return self.get_single_width() - self.edge_crop
+        return self.frame_width - self.edge_crop
 
     def is_connected(self) -> bool:
         """Returns True if the stereo camera is connected and False otherwise."""
@@ -30,11 +27,13 @@ class StereoCamera(Camera):
         """Initialises the stereo camera."""
         if self.capture is not None:  # already initialised
             return
-        self.capture = cv2.VideoCapture(index=self.cam_index, apiPreference=self.capture_api)
+        self.capture = cv2.VideoCapture(index=self.cam_index)
         if self.capture is None or not self.capture.isOpened():  # failed to open camera
             raise RuntimeError(f"failed to open camera {self.name} at index {self.cam_index}")
 
         # set camera properties
+
+        self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.capture_frame_width)
         self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.capture_frame_height)
         self.capture.set(cv2.CAP_PROP_FPS, self.fps)
@@ -66,7 +65,7 @@ class StereoCamera(Camera):
             frame_rgb_right = cv2.resize(frame_rgb_right, (self.frame_width, self.frame_height))
 
         # crop the outer edges to remove monocular zones
-        cropped_left, cropped_right = frame_left[:, self.edge_crop :], frame_right[:, : self.edge_crop]
+        cropped_left, cropped_right = frame_rgb_left[:, self.edge_crop :], frame_rgb_right[:, -self.edge_crop :]
         return frame_rgb_left, frame_rgb_right, cropped_left, cropped_right
 
     def stop_camera(self) -> None:
