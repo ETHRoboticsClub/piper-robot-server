@@ -171,7 +171,8 @@ class ControlLoop:
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
             if self.config.record:
-                left_joints, right_joints = arm_angles_to_action_dict(self.robot_interface.arm_angles)
+                obs_dict = self.robot_interface.get_observation()
+                cams = self.shared_data.get_camera_dict()
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
@@ -179,13 +180,13 @@ class ControlLoop:
             robot_time = time.perf_counter() - robot_start
 
             if self.config.record:
-                left_joints_target, right_joints_target = arm_angles_to_action_dict(self.robot_interface.arm_angles)
+                action_dict = arm_angles_to_action_dict(self.robot_interface.arm_angles)
                 self.recorder.add_observation(
-                    left_joints=left_joints,
-                    right_joints=right_joints,
-                    left_joints_target=left_joints_target,
-                    right_joints_target=right_joints_target,
-                    cams=self.shared_data.get_camera_dict(),
+                    left_joints=obs_dict['left'],
+                    right_joints=obs_dict['right'],
+                    left_joints_target=action_dict['left'],
+                    right_joints_target=action_dict['right'],
+                    cams=cams,
                 )
                 self.recorder.handle_keyboard_event()
 
