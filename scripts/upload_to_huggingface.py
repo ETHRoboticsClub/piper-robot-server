@@ -167,6 +167,53 @@ def create_repo_if_not_exists(api: HfApi, repo_id: str, private: bool = False) -
         return False
 
 
+def create_version_tag(api: HfApi, dataset_path: Path, repo_id: str) -> None:
+    """
+    Create the required version tag for LeRobot datasets.
+
+    Args:
+        api: Hugging Face API instance
+        dataset_path: Path to the dataset directory
+        repo_id: Repository ID on Hugging Face Hub
+    """
+    try:
+        # Load the dataset info to get the codebase_version
+        info = load_info(dataset_path)
+        codebase_version = info.get("codebase_version")
+
+        if not codebase_version:
+            logger.warning("No codebase_version found in dataset info.json")
+            logger.warning("Creating generic _version_ tag")
+            api.create_tag(repo_id, tag="_version_", repo_type="dataset")
+            return
+
+        logger.info(f"Found codebase_version: {codebase_version}")
+
+        # Create tag with the codebase version
+        try:
+            api.create_tag(repo_id, tag=codebase_version, repo_type="dataset")
+            logger.info(f"Successfully created tag: {codebase_version}")
+        except Exception as e:
+            if "409" in str(e) and "Conflict" in str(e):
+                logger.info(f"Tag {codebase_version} already exists")
+            else:
+                raise e
+
+        # Also create the _version_ tag as a fallback
+        try:
+            api.create_tag(repo_id, tag="_version_", repo_type="dataset")
+            logger.info("Successfully created fallback tag: _version_")
+        except Exception as e:
+            if "409" in str(e) and "Conflict" in str(e):
+                logger.info("Fallback tag _version_ already exists")
+            else:
+                logger.warning(f"Failed to create fallback tag: {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to create version tag: {e}")
+        raise
+
+
 def upload_dataset(
     dataset_path: Path, repo_id: str, private: bool = False, commit_message: Optional[str] = None
 ) -> bool:
@@ -205,6 +252,15 @@ def upload_dataset(
         )
 
         logger.info(f"Successfully uploaded dataset to: https://huggingface.co/datasets/{repo_id}")
+
+        # Create the required version tag for LeRobot datasets
+        try:
+            logger.info("Creating version tag for LeRobot dataset...")
+            create_version_tag(api, dataset_path, repo_id)
+        except Exception as e:
+            logger.warning(f"Failed to create version tag: {e}")
+            logger.warning("You may need to create the tag manually for the dataset to load properly")
+
         return True
 
     except Exception as e:
@@ -215,13 +271,16 @@ def upload_dataset(
 def main():
     """Main function to handle command line arguments and run upload."""
     parser = argparse.ArgumentParser(
-        description="Upload LeRobot dataset to Hugging Face Hub",
+        description="Upload LeRobot dataset to Hugging Face Hub with automatic version tagging",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     python upload_to_huggingface.py /path/to/dataset my-username/my-dataset-name
     python upload_to_huggingface.py ./data/my_dataset my-org/piper-teleop-data --private
     python upload_to_huggingface.py ./data/my_dataset my-username/dataset --token hf_xxxxx
+
+Note: This script automatically creates the required version tags for LeRobot datasets
+based on the codebase_version in the dataset's info.json file.
         """,
     )
 
