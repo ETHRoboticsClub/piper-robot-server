@@ -204,6 +204,7 @@ class ControlLoop:
 
             if self.config.record:
                 dt_s = time.perf_counter() - iteration_start
+                print(f"\rFPS: {1/dt_s}", end='', flush=True)
                 busy_wait(1 / self.config.fps - dt_s)
 
             total_time = time.perf_counter() - iteration_start

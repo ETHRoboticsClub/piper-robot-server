@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import PIL.Image
 import pyarrow.parquet as pq
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import DEFAULT_VIDEO_PATH, write_info
@@ -18,6 +19,9 @@ from piper_teleop.robot_server.camera.camera_streamer import SharedCameraData
 logger = logging.getLogger(__name__)
 
 from enum import Enum, auto
+
+import lerobot.datasets.image_writer as image_writer_module
+from lerobot.datasets.image_writer import image_array_to_pil_image
 
 
 def convert_image_dataset_to_video(dataset: LeRobotDataset):
@@ -89,10 +93,15 @@ class Recorder:
         robot_type="piper",
         play_sound=True,
         use_video=False,
-        image_writer_processes=4,
-        image_writer_threads=16,
-        display_data=False
+        image_writer_processes=1,
+        image_writer_threads=8,
+        display_data=False,
+        compress_level=1
     ):
+        self.compress_level  = compress_level
+        if self.compress_level:
+            self._apply_compression_patch()
+
         if use_video is False:
             logger.info("Init recorder in fast mode. Images will be converted to video at the end of recording")
             self.convert_images_to_video = True
@@ -135,6 +144,23 @@ class Recorder:
         self.display_data = display_data
 
         atexit.register(self.exit)
+
+    def _apply_compression_patch(self):
+        def _patched_write_image(image: np.ndarray | PIL.Image.Image, fpath: Path):
+            """Patched version of write_image with low compression."""
+            try:
+                if isinstance(image, np.ndarray):
+                    img = image_array_to_pil_image(image)
+                elif isinstance(image, PIL.Image.Image):
+                    img = image
+                else:
+                    raise TypeError(f"Unsupported image type: {type(image)}")
+                img.save(fpath, compress_level=self.compress_level)
+            except Exception as e:
+                print(f"Error writing image {fpath}: {e}")
+
+        image_writer_module.write_image = _patched_write_image
+        logger.info(f"Applied low compression patch with compress_level={self.compress_level}")
 
     def __exit__(self, exc_type, exc, tb):
         self.exit()

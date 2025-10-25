@@ -357,3 +357,74 @@ def test_benchmark_lerobot(tmp_path):
 
     print(f"  Mean time per frame: {end_time*1000:.2f} ms")
     print(f"  Save episode time:   {save_time:.2f} s")
+
+def test_benchmark_lerobot_compression(tmp_path):
+    """Benchmark test for LeRobot dataset operations."""
+    root = tmp_path / "lerobot_1"
+    cameras = [CameraConfig(name="left", frame_width=640, frame_height=480),
+               CameraConfig(name="right", frame_width=640, frame_height=480),
+               CameraConfig(name="mid", frame_width=640, frame_height=480),
+               ]
+    rec_1 = Recorder(
+        repo_id="test",
+        root=root,
+        single_arm=False,
+        play_sound=False,
+        task="test",
+        image_writer_processes=8,
+        image_writer_threads=16,
+        cameras=cameras,
+        compress_level=0 # no compression
+    )
+    rec_1.state = RecState.RECORDING
+    rec_1.start_recording()
+    root = tmp_path / "lerobot_2"
+    rec_2 = Recorder(
+        repo_id="test",
+        root=root,
+        single_arm=False,
+        play_sound=False,
+        task="test",
+        image_writer_processes=8,
+        image_writer_threads=16,
+        cameras=cameras,
+        compress_level=1 # lowest compression
+    )
+    rec_2.state = RecState.RECORDING
+    rec_2.start_recording()
+
+    N = 50
+    data_s = []
+    for _ in range(N):
+        left = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
+        right = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
+        mid = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
+        left_joints = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        right_joints = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        left_joints_target = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        right_joints_target = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
+        data = dict(left_joints=left_joints,
+            right_joints=right_joints,
+            left_joints_target=left_joints_target,
+            right_joints_target=right_joints_target,
+            cams={"observation.images.left": left,
+                  "observation.images.right": right,
+                  "observation.images.mid": mid,
+
+                  })
+        data_s.append(data)
+
+    start_frame_1 = time.perf_counter()
+    for i in range(N):
+        rec_1.add_observation(**data_s[i])
+    rec_1.dataset.save_episode()
+    save_time_1 = time.perf_counter() - start_frame_1
+
+    start_frame_2 = time.perf_counter()
+    for i in range(N):
+        rec_2.add_observation(**data_s[i])
+    rec_2.dataset.save_episode()
+    save_time_2 = time.perf_counter() - start_frame_2
+
+    print(f'{save_time_1=} {save_time_2=}')
+    assert save_time_2 < save_time_1
