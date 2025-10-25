@@ -8,7 +8,6 @@ import datetime
 import logging
 import multiprocessing as mp
 
-import torch
 
 from piper_teleop.config import TelegripConfig, config
 from piper_teleop.robot_server.camera import CameraStreamer, SharedCameraData
@@ -54,8 +53,7 @@ async def _run_control_process(config: TelegripConfig, shared_data: SharedCamera
     await asyncio.gather(control_loop_task)
 
 
-async def main():
-    torch.multiprocessing.set_start_method("spawn")
+def main():
     parser = argparse.ArgumentParser(description="Robot Server - Tactile Robotics Teleoperation System")
 
     # Control flags
@@ -149,7 +147,7 @@ async def main():
 
 def main_cli():
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         logging.info("👋 tactile teleop stopped")
 

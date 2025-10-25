@@ -2,45 +2,17 @@ import asyncio
 import logging
 import os
 
-import numpy as np
-import torch
 from dotenv import load_dotenv
 from tactile_teleop_sdk import TactileAPI
 
 from piper_teleop.robot_server.camera.camera import Camera
 from piper_teleop.robot_server.camera.camera_config import CameraConfig, CameraMode, CameraType
+from piper_teleop.robot_server.camera.camera_shared_data import SharedCameraData
 from piper_teleop.robot_server.camera.monocular_camera import MonocularCamera
 from piper_teleop.robot_server.camera.stereo_camera import StereoCamera
 
 # Load environment variables from the project root
 load_dotenv()
-
-
-class SharedCameraData:
-    """A shared memory object which is used to store the frames of the individual cameras."""
-
-    def __init__(self, configs: list[CameraConfig]):
-
-        self.data = {}
-        for config in configs:
-            if config.mode == CameraMode.RECORDING or config.mode == CameraMode.HYBRID:
-                width = config.frame_width
-                height = config.frame_height
-                self.data[config.name] = torch.empty((height, width, 3), dtype=torch.uint8).share_memory_()
-
-    def copy(self, name: str, new_data: torch.Tensor) -> None:
-        if name not in self.data:
-            raise ValueError(f"camera {name} is not in recording mode")
-        self.data[name].copy_(new_data)
-
-    def get(self, name: str) -> torch.Tensor:
-        if name not in self.data:
-            raise ValueError(f"camera {name} is not in recording mode")
-        return self.data[name]
-
-    def get_camera_dict(self) -> dict[str, np.ndarray]:
-        return {f'observation.images.{name}': self.data[name].numpy() for name in self.data}
-
 
 class CameraStreamer:
 
@@ -76,7 +48,7 @@ class CameraStreamer:
                     if camera.mode == CameraMode.STREAMING or camera.mode == CameraMode.HYBRID:
                         await self.api.send_stereo_frame(cropped_left, cropped_right)
                     if camera.mode == CameraMode.RECORDING or camera.mode == CameraMode.HYBRID:
-                        self.shared_data.copy(camera.name, torch.from_numpy(left_frame))
+                        self.shared_data.copy(camera.name, left_frame)
 
                 elif isinstance(camera, MonocularCamera):
                     frame = await camera.capture_frame()
@@ -85,7 +57,7 @@ class CameraStreamer:
                     if camera.mode == CameraMode.STREAMING or camera.mode == CameraMode.HYBRID:
                         await self.api.send_single_frame(frame)
                     if camera.mode == CameraMode.RECORDING or camera.mode == CameraMode.HYBRID:
-                        self.shared_data.copy(camera.name, torch.from_numpy(frame))
+                        self.shared_data.copy(camera.name, frame)
 
             except Exception as e:
                 self.logger.error(f'error streaming camera "{camera.name}": {e}')

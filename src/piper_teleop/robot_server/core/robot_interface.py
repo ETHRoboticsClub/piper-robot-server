@@ -30,7 +30,7 @@ def arm_angles_to_action_dict(arm_angles):
         "joint_3.pos": float(arm_angles[9]),
         "joint_4.pos": float(arm_angles[10]),
         "joint_5.pos": float(arm_angles[11]),
-        "joint_6.pos": float(arm_angles[13]),
+        "joint_6.pos": float(arm_angles[12]),
     }
     right_action_dict = {
         "joint_0.pos": float(arm_angles[0]),
@@ -39,7 +39,7 @@ def arm_angles_to_action_dict(arm_angles):
         "joint_3.pos": float(arm_angles[3]),
         "joint_4.pos": float(arm_angles[4]),
         "joint_5.pos": float(arm_angles[5]),
-        "joint_6.pos": float(arm_angles[12]),
+        "joint_6.pos": float(arm_angles[13]),
     }
     return {"left": left_action_dict, "right": right_action_dict}
 
