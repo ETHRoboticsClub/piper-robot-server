@@ -29,12 +29,12 @@ DEFAULT_CONFIG = {
         "ground_height": -0.02,
     },
     "simulation": {
-        "sim_name": "pybullet",
+        "sim_name": "",
     },
     "control": {
         "keyboard": {"enabled": True, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
         "vr": {"enabled": False},
-        "pybullet": {"enabled": True},
+        "pybullet": {"enabled": False},
     },
     "paths": {"urdf_path": "URDF/Piper/dual_piper.urdf"},
     "gripper": {"open_angle": 0.0, "closed_angle": 45.0},
@@ -193,7 +193,7 @@ URDF_TO_INTERNAL_NAME_MAP = {
 }
 
 # --- Simulation Configuration ---
-SIM_NAME = _config_data["simulation"].get("sim_name", "pybullet")
+SIM_NAME = _config_data["simulation"].get("sim_name", "")
 
 # --- PyBullet Configuration ---
 END_EFFECTOR_LINK_NAME = "ee_link"
@@ -237,12 +237,12 @@ class TelegripConfig:
     display_data = False
 
     # Control flags
-    enable_pybullet: bool = True
-    enable_pybullet_gui: bool = True
+    enable_pybullet: bool = False
+    enable_pybullet_gui: bool = False
     enable_robot: bool = True
     enable_vr: bool = False
     enable_keyboard: bool = True
-    enable_visualization: bool = True
+    enable_visualization: bool = False
     autoconnect: bool = False
     log_level: str = "warning"
 
@@ -266,7 +266,7 @@ class TelegripConfig:
     gripper_step: float = GRIPPER_STEP
 
     # Simulation Settings
-    sim_name: str = "pybullet"
+    sim_name: str = SIM_NAME
 
     # LiveKit configuration
     livekit_room: str = "robot-vr-teleop-room"

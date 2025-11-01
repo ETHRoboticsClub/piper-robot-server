@@ -85,6 +85,7 @@ class RobotInterface:
         self.left_robot = None
         self.right_robot = None
         # Enable robot control when hardware enabled OR when running simulation
+        print(config.sim_name)
         self.is_enabled = config.enable_robot or config.sim_name in ["pybullet", "newton"]
         self.is_connected = False
 
@@ -120,7 +121,7 @@ class RobotInterface:
         """Create robot configurations for both arms."""
         # Determine if we're using simulation
         use_sim = self.config.sim_name in ["pybullet", "newton"] or not self.is_enabled
-        sim_type = "pybullet"
+        sim_type = self.config.sim_name
         # If URDF contains multiple arms (e.g., "dual_piper.urdf"), prefer a single shared simulator instance
         urdf_basename = os.path.basename(self.config.urdf_path or "").lower()
         sim_shared = False
@@ -128,20 +129,20 @@ class RobotInterface:
             sim_shared = True
 
         left_config = PiperConfig(
-            port="left_piper", 
+            port="left_piper",
             id="left_follower",
             use_sim=use_sim,
             sim_type=sim_type,
             sim_gui=self.config.enable_visualization,
-            urdf_path=self.config.get_absolute_urdf_path()
+            urdf_path=self.config.get_absolute_urdf_path(),
         )
         right_config = PiperConfig(
-            port="right_piper", 
+            port="right_piper",
             id="right_follower",
             use_sim=use_sim,
             sim_type=sim_type,
             sim_gui=False,  # Only show GUI for one arm to avoid clutter
-            urdf_path=self.config.get_absolute_urdf_path()
+            urdf_path=self.config.get_absolute_urdf_path(),
         )
 
         # Mark configs as sharing a single simulator instance when appropriate
@@ -162,10 +163,10 @@ class RobotInterface:
 
         try:
             left_config, right_config = self.setup_robot_configs()
-            
+
             # Check if using simulation
             use_sim = left_config.use_sim
-            
+
             if use_sim:
                 logger.info(f"Connecting to {left_config.sim_type} simulation...")
             else:
@@ -244,7 +245,9 @@ class RobotInterface:
         ground_height = self.config.ground_height
         # Only enable meshcat visualization if explicitly requested
         # Simulation mode uses its own visualizer (PyBullet GUI)
-        enable_viz = self.config.enable_visualization and not self.config.sim_name in ["pybullet", "newton"] and self.is_enabled
+        enable_viz = (
+            self.config.enable_visualization and not self.config.sim_name in ["pybullet", "newton"] and self.is_enabled
+        )
         self.ik_solver = Arm_IK(self.config.urdf_path, ground_height, enable_visualization=enable_viz)
         logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 

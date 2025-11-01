@@ -88,6 +88,7 @@ class PiperSDKInterface:
         roll = pose.end_pose.RX_axis * 1e-3 * DEG_TO_RAD
         pitch = pose.end_pose.RY_axis * 1e-3 * DEG_TO_RAD
         yaw = pose.end_pose.RZ_axis * 1e-3 * DEG_TO_RAD
+        print(f"End effector pose: {x}, {y}, {z}, {roll}, {pitch}, {yaw}")
         return {"x": x, "y": y, "z": z, "roll": roll, "pitch": pitch, "yaw": yaw}
 
     def get_connection_status(self):
