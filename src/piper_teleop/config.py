@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
         "ground_height": -0.02,
     },
     "simulation": {
-        "run_in_newton": True,
+        "sim_name": "pybullet",
     },
     "control": {
         "keyboard": {"enabled": True, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -193,7 +193,7 @@ URDF_TO_INTERNAL_NAME_MAP = {
 }
 
 # --- Simulation Configuration ---
-USE_NEWTON_SIMULATION = _config_data["simulation"].get("run_in_newton", False)
+SIM_NAME = _config_data["simulation"].get("sim_name", "pybullet")
 
 # --- PyBullet Configuration ---
 END_EFFECTOR_LINK_NAME = "ee_link"
@@ -266,7 +266,7 @@ class TelegripConfig:
     gripper_step: float = GRIPPER_STEP
 
     # Simulation Settings
-    run_in_newton: bool = USE_NEWTON_SIMULATION
+    sim_name: str = "pybullet"
 
     # LiveKit configuration
     livekit_room: str = "robot-vr-teleop-room"

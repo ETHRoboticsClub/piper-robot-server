@@ -13,10 +13,10 @@ def test_simulation():
     
     # Create config for simulation
     config.enable_robot = False
-    config.run_in_newton = True  # Use PyBullet
+    config.sim_name = "pybullet"  # Use PyBullet
     config.enable_visualization = True
-    
-    print(f"Config: enable_robot={config.enable_robot}, run_in_newton={config.run_in_newton}")
+
+    print(f"Config: enable_robot={config.enable_robot}, sim_name={config.sim_name}")
     print(f"URDF path: {config.get_absolute_urdf_path()}")
     
     # Create robot interface

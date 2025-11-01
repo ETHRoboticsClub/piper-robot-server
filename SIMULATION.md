@@ -141,7 +141,7 @@ This will:
 ## Accessing Simulation Data
 
 ### From Python (Same Repo)
-
+Currently only pybullet implemented. Next => Newton.
 ```python
 from piper_teleop.config import TelegripConfig
 from piper_teleop.robot_server.core.robot_interface import RobotInterface
@@ -149,7 +149,7 @@ from piper_teleop.robot_server.core.robot_interface import RobotInterface
 # Create config for simulation
 config = TelegripConfig()
 config.enable_robot = False
-config.run_in_newton = False  # Use PyBullet
+config.sim_name = "pybullet"  # Use PyBullet
 
 # Create robot interface
 robot_interface = RobotInterface(config)
@@ -179,7 +179,7 @@ from piper_teleop.config import TelegripConfig
 
 # Use the interface directly
 config = TelegripConfig()
-config.run_in_newton = False
+config.sim_name = "pybullet"
 robot = RobotInterface(config)
 ```
 

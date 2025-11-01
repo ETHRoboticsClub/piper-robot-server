@@ -85,7 +85,7 @@ class RobotInterface:
         self.left_robot = None
         self.right_robot = None
         # Enable robot control when hardware enabled OR when running simulation
-        self.is_enabled = config.enable_robot or config.run_in_newton
+        self.is_enabled = config.enable_robot or config.sim_name in ["pybullet", "newton"]
         self.is_connected = False
 
         # Individual arm connection status
@@ -119,7 +119,7 @@ class RobotInterface:
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
         # Determine if we're using simulation
-        use_sim = self.config.run_in_newton or not self.is_enabled
+        use_sim = self.config.sim_name in ["pybullet", "newton"] or not self.is_enabled
         sim_type = "pybullet"
         # If URDF contains multiple arms (e.g., "dual_piper.urdf"), prefer a single shared simulator instance
         urdf_basename = os.path.basename(self.config.urdf_path or "").lower()
@@ -244,7 +244,7 @@ class RobotInterface:
         ground_height = self.config.ground_height
         # Only enable meshcat visualization if explicitly requested
         # Simulation mode uses its own visualizer (PyBullet GUI)
-        enable_viz = self.config.enable_visualization and not self.config.run_in_newton and self.is_enabled
+        enable_viz = self.config.enable_visualization and not self.config.sim_name in ["pybullet", "newton"] and self.is_enabled
         self.ik_solver = Arm_IK(self.config.urdf_path, ground_height, enable_visualization=enable_viz)
         logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 

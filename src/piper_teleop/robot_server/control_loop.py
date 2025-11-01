@@ -41,7 +41,7 @@ class ControlLoop:
     ):
         self.config = config
         self.robot_interface = RobotInterface(config)
-        self.robot_enabled = config.enable_robot or config.run_in_newton
+        self.robot_enabled = config.enable_robot or config.sim_name in ["pybullet", "newton"]
         self.use_keyboard = config.enable_keyboard
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()

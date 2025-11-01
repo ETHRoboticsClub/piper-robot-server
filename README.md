@@ -10,6 +10,16 @@
 4. **VR Setup** (optional): Meta Quest or other headset with WebXR support (no app installation needed!)
 
 ### Package Installation
+Run either:
+```bash
+chmod +x setup_environment.sh
+./setup_environment.sh
+```
+This will handle the installation of your conda environement. If you cannot build the wheel for pybullet (happens so far on mac), install it via:
+```bash
+conda activate piper
+conda install -c conda-forge pybullet
+```
 
 Install tactile-teleop with conda environment setup:
 
