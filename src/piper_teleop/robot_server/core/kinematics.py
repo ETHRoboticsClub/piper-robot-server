@@ -9,13 +9,29 @@ import os
 import tempfile
 
 import casadi
-import meshcat.geometry as mg
 import numpy as np
 import pinocchio as pin
 from pinocchio import casadi as cpin
-from pinocchio.visualize import MeshcatVisualizer
+
+# Lazy import for meshcat to avoid IPython environment conflicts
+mg = None
+MeshcatVisualizer = None
 
 logger = logging.getLogger(__name__)
+
+
+def _import_meshcat():
+    """Lazy import meshcat only when visualization is needed."""
+    global mg, MeshcatVisualizer
+    if mg is None:
+        try:
+            import meshcat.geometry as _mg
+            from pinocchio.visualize import MeshcatVisualizer as _MeshcatVisualizer
+            mg = _mg
+            MeshcatVisualizer = _MeshcatVisualizer
+        except ImportError as e:
+            logger.warning(f"Failed to import meshcat: {e}. Visualization will be disabled.")
+            raise
 
 
 def matrix_to_xyzrpy(matrix):
@@ -104,8 +120,11 @@ def _make_mesh_paths_absolute(urdf_path: str) -> str:
 
 
 class Arm_IK:
-    def __init__(self, urdf_path: str, ground_height: float = 0.0):
+    def __init__(self, urdf_path: str, ground_height: float = 0.0, enable_visualization: bool = True):
         np.set_printoptions(precision=5, suppress=True, linewidth=200)
+        
+        self.enable_visualization = enable_visualization
+        self.vis = None
 
         # Create temporary URDF with absolute mesh paths
         temp_urdf_path = _make_mesh_paths_absolute(urdf_path)
@@ -175,38 +194,9 @@ class Arm_IK:
         self.init_data = np.zeros(self.reduced_robot.model.nq)
         self.history_data = np.zeros(self.reduced_robot.model.nq)
 
-        # Initialize the Meshcat visualizer for visualization
-        self.vis = MeshcatVisualizer(
-            self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model
-        )
-        self.vis.initViewer(open=True)
-        self.vis.loadViewerModel("pinocchio")
-        self.vis.displayFrames(True, frame_ids=[113, 114], axis_length=0.15, axis_width=5)
-        self.vis.display(pin.neutral(self.reduced_robot.model))
-
-        # Enable display of end effector target frames with short axis lengths
-        frame_viz_names = ["ee_target_1", "ee_target_2"]
-        FRAME_AXIS_POSITIONS = (
-            np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]]).astype(np.float32).T
-        )
-        FRAME_AXIS_COLORS = (
-            np.array([[1, 0, 0], [1, 0.6, 0], [0, 1, 0], [0.6, 1, 0], [0, 0, 1], [0, 0.6, 1]]).astype(np.float32).T
-        )
-        axis_length = 0.1
-        axis_width = 10
-        for frame_viz_name in frame_viz_names:
-            self.vis.viewer[frame_viz_name].set_object(
-                mg.LineSegments(
-                    mg.PointsGeometry(
-                        position=axis_length * FRAME_AXIS_POSITIONS,
-                        color=FRAME_AXIS_COLORS,
-                    ),
-                    mg.LineBasicMaterial(
-                        linewidth=axis_width,
-                        vertexColors=True,
-                    ),
-                )
-            )
+        # Initialize the Meshcat visualizer only if visualization is enabled
+        if self.enable_visualization:
+            self._init_visualizer()
 
         # Creating Casadi models and data for symbolic computing
         self.cmodel = cpin.Model(self.reduced_robot.model)
@@ -218,6 +208,49 @@ class Arm_IK:
 
         # Create a unified solver for both arms
         self.solver = self._create_dual_ik_solver(cq)
+    
+    def _init_visualizer(self):
+        """Initialize meshcat visualizer. Only called if visualization is enabled."""
+        try:
+            _import_meshcat()
+            
+            # Initialize the Meshcat visualizer for visualization
+            self.vis = MeshcatVisualizer(
+                self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model
+            )
+            self.vis.initViewer(open=True)
+            self.vis.loadViewerModel("pinocchio")
+            self.vis.displayFrames(True, frame_ids=[113, 114], axis_length=0.15, axis_width=5)
+            self.vis.display(pin.neutral(self.reduced_robot.model))
+
+            # Enable display of end effector target frames with short axis lengths
+            frame_viz_names = ["ee_target_1", "ee_target_2"]
+            FRAME_AXIS_POSITIONS = (
+                np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]]).astype(np.float32).T
+            )
+            FRAME_AXIS_COLORS = (
+                np.array([[1, 0, 0], [1, 0.6, 0], [0, 1, 0], [0.6, 1, 0], [0, 0, 1], [0, 0.6, 1]]).astype(np.float32).T
+            )
+            axis_length = 0.1
+            axis_width = 10
+            for frame_viz_name in frame_viz_names:
+                self.vis.viewer[frame_viz_name].set_object(
+                    mg.LineSegments(
+                        mg.PointsGeometry(
+                            position=axis_length * FRAME_AXIS_POSITIONS,
+                            color=FRAME_AXIS_COLORS,
+                        ),
+                        mg.LineBasicMaterial(
+                            linewidth=axis_width,
+                            vertexColors=True,
+                        ),
+                    )
+                )
+            logger.info("Meshcat visualizer initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize meshcat visualizer: {e}. Continuing without visualization.")
+            self.vis = None
+            self.enable_visualization = False
 
     def _create_dual_ik_solver(self, cq):
         """Creates and configures a unified IK solver for both end-effectors."""
@@ -337,7 +370,8 @@ class Arm_IK:
             self.init_data = motorstate
         opti.set_initial(var_q, self.init_data)
 
-        if visualize:
+        # Only visualize if enabled and visualizer is available
+        if visualize and self.enable_visualization and self.vis is not None:
             self.vis.viewer["ee_target_1"].set_transform(target_pose_1)
             self.vis.viewer["ee_target_2"].set_transform(target_pose_2)
 
@@ -357,7 +391,8 @@ class Arm_IK:
                 self.init_data = sol_q
             self.history_data = sol_q
 
-            if visualize:
+            # Only visualize if enabled and visualizer is available
+            if visualize and self.enable_visualization and self.vis is not None:
                 # print("sol_q:", sol_q)
                 self.vis.display(sol_q)
 

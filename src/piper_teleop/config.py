@@ -28,9 +28,12 @@ DEFAULT_CONFIG = {
         "send_interval": 0.05,
         "ground_height": -0.02,
     },
+    "simulation": {
+        "run_in_newton": True,
+    },
     "control": {
-        "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
-        "vr": {"enabled": True},
+        "keyboard": {"enabled": True, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
+        "vr": {"enabled": False},
         "pybullet": {"enabled": True},
     },
     "paths": {"urdf_path": "URDF/Piper/dual_piper.urdf"},
@@ -189,6 +192,9 @@ URDF_TO_INTERNAL_NAME_MAP = {
     "6": "gripper",
 }
 
+# --- Simulation Configuration ---
+USE_NEWTON_SIMULATION = _config_data["simulation"].get("run_in_newton", False)
+
 # --- PyBullet Configuration ---
 END_EFFECTOR_LINK_NAME = "ee_link"
 
@@ -234,8 +240,8 @@ class TelegripConfig:
     enable_pybullet: bool = True
     enable_pybullet_gui: bool = True
     enable_robot: bool = True
-    enable_vr: bool = True
-    enable_keyboard: bool = False
+    enable_vr: bool = False
+    enable_keyboard: bool = True
     enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"
@@ -258,6 +264,9 @@ class TelegripConfig:
     pos_step: float = POS_STEP
     angle_step: float = ANGLE_STEP
     gripper_step: float = GRIPPER_STEP
+
+    # Simulation Settings
+    run_in_newton: bool = USE_NEWTON_SIMULATION
 
     # LiveKit configuration
     livekit_room: str = "robot-vr-teleop-room"

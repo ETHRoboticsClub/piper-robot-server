@@ -41,7 +41,7 @@ class ControlLoop:
     ):
         self.config = config
         self.robot_interface = RobotInterface(config)
-        self.robot_enabled = config.enable_robot
+        self.robot_enabled = config.enable_robot or config.run_in_newton
         self.use_keyboard = config.enable_keyboard
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
@@ -138,7 +138,8 @@ class ControlLoop:
         right_arm.origin_transform = right_arm.initial_transform
 
         self.robot_interface.setup_kinematics()
-        await self.api.connect_vr_controller()
+        if self.config.enable_vr:
+            await self.api.connect_vr_controller()
         if self.robot_enabled:
             try:
                 self.robot_interface.connect()

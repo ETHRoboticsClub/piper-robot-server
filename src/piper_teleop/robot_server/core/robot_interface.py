@@ -18,6 +18,7 @@ from piper_teleop.config import NUM_JOINTS, TelegripConfig
 from .geometry import transform2pose, xyzrpy2transform
 from .kinematics import Arm_IK
 from .piper import Piper, PiperConfig
+from .sim_interface import PyBulletSimInterface
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,8 @@ class RobotInterface:
         self.config = config
         self.left_robot = None
         self.right_robot = None
-        self.is_enabled = config.enable_robot
+        # Enable robot control when hardware enabled OR when running simulation
+        self.is_enabled = config.enable_robot or config.run_in_newton
         self.is_connected = False
 
         # Individual arm connection status
@@ -116,44 +118,106 @@ class RobotInterface:
 
     def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
         """Create robot configurations for both arms."""
+        # Determine if we're using simulation
+        use_sim = self.config.run_in_newton or not self.is_enabled
+        sim_type = "pybullet"
+        # If URDF contains multiple arms (e.g., "dual_piper.urdf"), prefer a single shared simulator instance
+        urdf_basename = os.path.basename(self.config.urdf_path or "").lower()
+        sim_shared = False
+        if "dual" in urdf_basename or "dual_piper" in urdf_basename:
+            sim_shared = True
 
-        left_config = PiperConfig(port="left_piper", id="left_follower")
-        right_config = PiperConfig(port="right_piper", id="right_follower")
+        left_config = PiperConfig(
+            port="left_piper", 
+            id="left_follower",
+            use_sim=use_sim,
+            sim_type=sim_type,
+            sim_gui=self.config.enable_visualization,
+            urdf_path=self.config.get_absolute_urdf_path()
+        )
+        right_config = PiperConfig(
+            port="right_piper", 
+            id="right_follower",
+            use_sim=use_sim,
+            sim_type=sim_type,
+            sim_gui=False,  # Only show GUI for one arm to avoid clutter
+            urdf_path=self.config.get_absolute_urdf_path()
+        )
+
+        # Mark configs as sharing a single simulator instance when appropriate
+        left_config.sim_shared = sim_shared
+        right_config.sim_shared = sim_shared
+
+        # Ensure arm side identifiers are set correctly so per-arm sim calls work
+        left_config.arm_side = "left"
+        right_config.arm_side = "right"
 
         return left_config, right_config
 
     def connect(self) -> bool:
-        """Connect to robot hardware."""
+        """Connect to robot hardware or simulation."""
         if self.is_connected:
             logger.info("Robot interface already connected")
             return True
 
-        if not self.is_enabled:
-            logger.info("Robot control is not enabled")
-            return False
-
         try:
             left_config, right_config = self.setup_robot_configs()
-            logger.info("Connecting to robot...")
+            
+            # Check if using simulation
+            use_sim = left_config.use_sim
+            
+            if use_sim:
+                logger.info(f"Connecting to {left_config.sim_type} simulation...")
+            else:
+                logger.info("Connecting to robot hardware...")
 
-            # Connect left arm - always suppress low-level CAN debug output
+            # Connect left arm
             try:
-                with suppress_stdout_stderr():
+                if use_sim and left_config.sim_shared:
+                    # Create a single shared simulator instance and inject into both Piper wrappers
+                    try:
+                        sim = PyBulletSimInterface(
+                            urdf_path=left_config.urdf_path,
+                            use_gui=left_config.sim_gui,
+                            robot_base_position=None,
+                        )
+                        sim.connect()
+                        self.left_robot = Piper(left_config, sdk_instance=sim)
+                        logger.info("✅ Left arm (simulation) connected (shared simulator)")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to initialize shared simulation: {e}")
+                        raise
+                elif use_sim:
                     self.left_robot = Piper(left_config)
                     self.left_robot.connect()
+                    logger.info("✅ Left arm (simulation) connected successfully")
+                else:
+                    with suppress_stdout_stderr():
+                        self.left_robot = Piper(left_config)
+                        self.left_robot.connect()
+                    logger.info("✅ Left arm (hardware) connected successfully")
                 self.left_arm_connected = True
-                logger.info("✅ Left arm connected successfully")
             except Exception as e:
                 logger.error(f"❌ Left arm connection failed: {e}")
                 self.left_arm_connected = False
 
-            # Connect right arm - always suppress low-level CAN debug output
+            # Connect right arm
             try:
-                with suppress_stdout_stderr():
+                if use_sim and left_config.sim_shared:
+                    # Shared simulator: create a second Piper wrapper that uses the same sim instance
+                    sim_instance = self.left_robot.sdk
+                    self.right_robot = Piper(right_config, sdk_instance=sim_instance)
+                    logger.info("ℹ️ Right arm connected to shared simulation instance")
+                elif use_sim:
                     self.right_robot = Piper(right_config)
                     self.right_robot.connect()
+                    logger.info("✅ Right arm (simulation) connected successfully")
+                else:
+                    with suppress_stdout_stderr():
+                        self.right_robot = Piper(right_config)
+                        self.right_robot.connect()
+                    logger.info("✅ Right arm (hardware) connected successfully")
                 self.right_arm_connected = True
-                logger.info("✅ Right arm connected successfully")
             except Exception as e:
                 logger.error(f"❌ Right arm connection failed: {e}")
                 self.right_arm_connected = False
@@ -163,6 +227,9 @@ class RobotInterface:
 
             if not self.is_connected:
                 logger.error("❌ Failed to connect any robot arms")
+            else:
+                mode = "simulation" if use_sim else "hardware"
+                logger.info(f"🎉 Robot interface connected in {mode} mode")
 
             return self.is_connected
 
@@ -175,7 +242,10 @@ class RobotInterface:
         """Setup kinematics solvers using PyBullet components for both arms."""
         # Setup solvers for both arms
         ground_height = self.config.ground_height
-        self.ik_solver = Arm_IK(self.config.urdf_path, ground_height)
+        # Only enable meshcat visualization if explicitly requested
+        # Simulation mode uses its own visualizer (PyBullet GUI)
+        enable_viz = self.config.enable_visualization and not self.config.run_in_newton and self.is_enabled
+        self.ik_solver = Arm_IK(self.config.urdf_path, ground_height, enable_visualization=enable_viz)
         logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 
     def get_end_effector_transform(self, arm: str) -> np.ndarray:
@@ -298,7 +368,6 @@ class RobotInterface:
             # Send commands for a few iterations to ensure movement
             for i in range(10):
                 self.send_command()
-                time.sleep(0.1)
 
             logger.info("✅ Robot returned to initial position")
         except Exception as e:
