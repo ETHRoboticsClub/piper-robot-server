@@ -15,6 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("--repo-id", type=str, help="The repo ID of the dataset")
     parser.add_argument("--episode-id", type=int, help="The episode ID to replay")
     parser.add_argument("--root", type=str, help="The root directory for the dataset")
+    parser.add_argument("--no-robot", action="store_true", help="Do not use the robot interface but instead visualise it")
 
     args = parser.parse_args()
 
@@ -23,9 +24,11 @@ if __name__ == "__main__":
     episode_frames = dataset.hf_dataset.filter(lambda x: x["episode_index"] == args.episode_id)
     actions = episode_frames.select_columns('action')
     logger.info(f"Replaying episode {args.episode_id} with {len(actions)} frames")
-    robot = RobotInterface(config, )
-    robot.setup_kinematics()
-    robot.connect()
+    robot = RobotInterface(config)
+    if args.no_robot:
+        robot.setup_kinematics()
+    else:
+        robot.connect()
     for idx in range(dataset.num_frames):
         start_episode_t = time.perf_counter()
 
@@ -41,10 +44,13 @@ if __name__ == "__main__":
             else:
                 raise Exception('wrong name')
 
-        robot.left_robot.send_action(dict_left)
-        robot.right_robot.send_action(dict_right)
-        q_1 = [dict_left[k] for k in sorted(dict_left)[:6]]
-        q_2 = [dict_right[k] for k in sorted(dict_right)[:6]]
-        robot.ik_solver.vis.display(np.array(q_1 + q_2))
+        if args.no_robot:
+            q_1 = [dict_left[k] for k in sorted(dict_left)[:6]]
+            q_2 = [dict_right[k] for k in sorted(dict_right)[:6]]
+            robot.ik_solver.vis.display(np.array(q_1 + q_2))
+        else:
+            robot.left_robot.send_action(dict_left)
+            robot.right_robot.send_action(dict_right)
+
         dt_s = time.perf_counter() - start_episode_t
         busy_wait(1 / dataset.fps - dt_s)
