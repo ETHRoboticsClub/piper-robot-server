@@ -143,31 +143,54 @@ class PyBulletSimInterface(SimulationInterface):
         if len(movable_indices) >= 6:
             # Support dual-arm URDFs: if >=12 movable joints, split into left and right
             if len(movable_indices) >= 12:
-                self.left_joint_indices = movable_indices[:6]
-                self.right_joint_indices = movable_indices[6:12]
-                # Heuristic for grippers: search movable names for 'grip' or 'gripper' per side
-                left_grip = None
-                right_grip = None
+                # Classify joints by name pattern: left=joint{N}, right=arm2_joint{N}
+                left_arm_joints = []
+                right_arm_joints = []
+                left_gripper = None
+                right_gripper = None
+                
                 for idx, name in movable:
                     lname = name.lower()
-                    if 'left' in lname and ('grip' in lname or 'gripper' in lname):
-                        left_grip = idx
-                    if 'right' in lname and ('grip' in lname or 'gripper' in lname):
-                        right_grip = idx
-                # Fallback: pick next movable after each 6-joint block
-                if left_grip is None and len(movable_indices) > 6:
-                    left_grip = movable_indices[6] if len(movable_indices) > 6 else movable_indices[-1]
-                if right_grip is None and len(movable_indices) > 12:
-                    right_grip = movable_indices[12] if len(movable_indices) > 12 else movable_indices[-1]
-                # If still None, default to last movable
-                if left_grip is None:
-                    left_grip = movable_indices[-1]
-                if right_grip is None:
-                    right_grip = movable_indices[-1]
+                    # Detect right arm joints (arm2_joint pattern)
+                    if 'arm2' in lname:
+                        if 'grip' in lname or 'gripper' in lname:
+                            right_gripper = idx
+                        else:
+                            right_arm_joints.append((idx, name))
+                    # Detect left arm joints (joint pattern without arm2)
+                    elif 'joint' in lname:
+                        if 'grip' in lname or 'gripper' in lname:
+                            if left_gripper is None:  # First gripper without arm2 is left
+                                left_gripper = idx
+                        else:
+                            left_arm_joints.append((idx, name))
+                
+                # Sort by index to preserve order, then extract just indices
+                left_arm_joints.sort(key=lambda x: x[0])
+                right_arm_joints.sort(key=lambda x: x[0])
+                self.left_joint_indices = [idx for idx, _ in left_arm_joints[:6]]
+                self.right_joint_indices = [idx for idx, _ in right_arm_joints[:6]]
+                
+                logger.info(f"Detected left arm joints: {[name for _, name in left_arm_joints[:6]]}")
+                logger.info(f"Detected right arm joints: {[name for _, name in right_arm_joints[:6]]}")
+                
+                # Fallback if detection failed
+                if len(self.left_joint_indices) < 6 or len(self.right_joint_indices) < 6:
+                    logger.warning("Name-based detection incomplete, falling back to index split")
+                    self.left_joint_indices = movable_indices[:6]
+                    self.right_joint_indices = movable_indices[6:12]
+                
+                # Set grippers with fallback
+                if left_gripper is None:
+                    left_gripper = self.left_joint_indices[-1] if self.left_joint_indices else movable_indices[5]
+                if right_gripper is None:
+                    right_gripper = self.right_joint_indices[-1] if self.right_joint_indices else movable_indices[11]
+                
                 self.joint_indices = self.left_joint_indices
-                self.gripper_index = left_grip
-                # store right gripper separately
-                self.right_gripper_index = right_grip
+                self.gripper_index = left_gripper
+                self.right_gripper_index = right_gripper
+                
+                logger.info(f"Left gripper index: {left_gripper}, Right gripper index: {right_gripper}")
             else:
                 self.joint_indices = movable_indices[:6]
                 # Try to find gripper by name
