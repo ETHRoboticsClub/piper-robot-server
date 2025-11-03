@@ -225,6 +225,7 @@ class ControlLoop:
         """Stop the control loop."""
         if self.use_keyboard:
             self.keyboard_controller.stop()
-        await self.api.disconnect_vr_controller()
+        if self.config.enable_vr:
+            await self.api.disconnect_vr_controller()
         if self.robot_enabled:
             self.robot_interface.disconnect()

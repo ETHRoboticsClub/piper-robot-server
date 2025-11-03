@@ -85,7 +85,6 @@ class RobotInterface:
         self.left_robot = None
         self.right_robot = None
         # Enable robot control when hardware enabled OR when running simulation
-        print(config.sim_name)
         self.is_enabled = config.enable_robot or config.sim_name in ["pybullet", "newton"]
         self.is_connected = False
 
