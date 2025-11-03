@@ -29,7 +29,8 @@ DEFAULT_CONFIG = {
         "ground_height": -0.02,
     },
     "simulation": {
-        "sim_name": "",
+        "enable_simulation": False,
+        "sim_name": "pybullet",
     },
     "control": {
         "keyboard": {"enabled": True, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -193,7 +194,8 @@ URDF_TO_INTERNAL_NAME_MAP = {
 }
 
 # --- Simulation Configuration ---
-SIM_NAME = _config_data["simulation"].get("sim_name", "")
+SIM_NAME = _config_data["simulation"].get("sim_name", "pybullet")
+ENABLE_SIMULATION = _config_data["simulation"].get("enable_simulation", False)
 
 # --- PyBullet Configuration ---
 END_EFFECTOR_LINK_NAME = "ee_link"
@@ -237,9 +239,11 @@ class TelegripConfig:
     display_data = False
 
     # Control flags
-    enable_pybullet: bool = False
-    enable_pybullet_gui: bool = False
-    enable_robot: bool = True
+    # Note: enable_robot and enable_simulation are mutually exclusive
+    # When enable_simulation=True, enable_robot should be False
+    # When enable_simulation=False, enable_robot should be True (for hardware)
+    enable_robot: bool = True  # Enable hardware robot control
+    enable_simulation: bool = False  # Enable simulation mode (PyBullet or Newton)
     enable_vr: bool = False
     enable_keyboard: bool = True
     enable_visualization: bool = False

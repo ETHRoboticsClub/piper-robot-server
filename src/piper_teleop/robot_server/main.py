@@ -65,7 +65,7 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
     parser.add_argument("--sim", action="store_true", help="Run in simulation mode (PyBullet)")
-    parser.add_argument("--sim-name", type=str, default="", help="Run simulation with Newton (instead of PyBullet)")
+    parser.add_argument("--sim-name", type=str, default="pybullet", help="Run simulation with Newton (instead of PyBullet)")
     parser.add_argument(
         "--log-level",
         default="info",
@@ -79,10 +79,15 @@ def main():
     )
 
     # Configure simulation mode
-    if args.sim or args.sim_name in ["pybullet", "newton"]:
+    if args.sim:
         config.enable_robot = False  # Disable hardware when using simulation
+        config.enable_simulation = True
         config.sim_name = args.sim_name
         logger.info(f"🎮 Running in {'Newton' if args.sim_name == 'newton' else 'PyBullet'} simulation mode")
+    else:
+        # Running on hardware
+        config.enable_robot = True
+        config.enable_simulation = False
 
     config.enable_visualization = args.vis or args.sim
     config.record = args.record
