@@ -146,28 +146,31 @@ class PyBulletSimInterface(SimulationInterface):
                 # Classify joints by name pattern: left=joint{N}, right=arm2_joint{N}
                 left_arm_joints = []
                 right_arm_joints = []
-                left_gripper = None
-                right_gripper = None
+                left_grippers = []
+                right_grippers = []
                 
                 for idx, name in movable:
                     lname = name.lower()
                     # Detect right arm joints (arm2_joint pattern)
                     if 'arm2' in lname:
                         if 'grip' in lname or 'gripper' in lname:
-                            right_gripper = idx
+                            right_grippers.append((idx, name))
                         else:
                             right_arm_joints.append((idx, name))
                     # Detect left arm joints (joint pattern without arm2)
                     elif 'joint' in lname:
                         if 'grip' in lname or 'gripper' in lname:
-                            if left_gripper is None:  # First gripper without arm2 is left
-                                left_gripper = idx
+                            left_grippers.append((idx, name))
                         else:
                             left_arm_joints.append((idx, name))
                 
                 # Sort by index to preserve order, then extract just indices
                 left_arm_joints.sort(key=lambda x: x[0])
                 right_arm_joints.sort(key=lambda x: x[0])
+                left_grippers.sort(key=lambda x: x[0])
+                right_grippers.sort(key=lambda x: x[0])
+                
+                # First 6 are the main arm joints, remaining are gripper joints
                 self.left_joint_indices = [idx for idx, _ in left_arm_joints[:6]]
                 self.right_joint_indices = [idx for idx, _ in right_arm_joints[:6]]
                 
@@ -180,7 +183,35 @@ class PyBulletSimInterface(SimulationInterface):
                     self.left_joint_indices = movable_indices[:6]
                     self.right_joint_indices = movable_indices[6:12]
                 
-                # Set grippers with fallback
+                # Set grippers: use joint7 (index 6 in left_arm_joints list means 7th joint)
+                # The gripper is typically the 7th joint after the 6 arm joints
+                left_gripper = None
+                right_gripper = None
+                
+                # Look for explicit gripper joints or use joints after the first 6
+                if left_grippers:
+                    left_gripper = left_grippers[0][0]
+                else:
+                    # Find joint7 for left arm (first joint after the 6 arm joints)
+                    for idx, name in left_arm_joints[6:]:
+                        if 'joint7' in name.lower():
+                            left_gripper = idx
+                            break
+                    if left_gripper is None and len(left_arm_joints) > 6:
+                        left_gripper = left_arm_joints[6][0]
+                
+                if right_grippers:
+                    right_gripper = right_grippers[0][0]
+                else:
+                    # Find arm2_joint7 for right arm
+                    for idx, name in right_arm_joints[6:]:
+                        if 'joint7' in name.lower():
+                            right_gripper = idx
+                            break
+                    if right_gripper is None and len(right_arm_joints) > 6:
+                        right_gripper = right_arm_joints[6][0]
+                
+                # Final fallback
                 if left_gripper is None:
                     left_gripper = self.left_joint_indices[-1] if self.left_joint_indices else movable_indices[5]
                 if right_gripper is None:
@@ -190,7 +221,10 @@ class PyBulletSimInterface(SimulationInterface):
                 self.gripper_index = left_gripper
                 self.right_gripper_index = right_gripper
                 
-                logger.info(f"Left gripper index: {left_gripper}, Right gripper index: {right_gripper}")
+                # Log gripper info with joint names for debugging
+                left_gripper_name = next((name for idx, name in movable if idx == left_gripper), "unknown")
+                right_gripper_name = next((name for idx, name in movable if idx == right_gripper), "unknown")
+                logger.info(f"Left gripper: index {left_gripper} ({left_gripper_name}), Right gripper: index {right_gripper} ({right_gripper_name})")
             else:
                 self.joint_indices = movable_indices[:6]
                 # Try to find gripper by name
@@ -274,16 +308,33 @@ class PyBulletSimInterface(SimulationInterface):
                 physicsClientId=self.client_id,
             )
             
-        # Set gripper position
+        # Set gripper positions: split the desired width between joint7 and joint8
+        # Each gripper joint moves by half of the desired gripper width
+        half_gripper_pos = clipped_positions[6] / 2.0
+        
+        # Set joint7 (primary gripper joint)
         p.setJointMotorControl2(
             self.robot_id,
             self.gripper_index,
             p.POSITION_CONTROL,
-            targetPosition=clipped_positions[6],
+            targetPosition=half_gripper_pos,
             force=10.0,
             maxVelocity=0.5,
             physicsClientId=self.client_id,
         )
+        
+        # Set joint8 (secondary gripper joint) if it exists
+        gripper_joint8 = self.gripper_index + 1
+        if gripper_joint8 < self.num_joints:
+            p.setJointMotorControl2(
+                self.robot_id,
+                gripper_joint8,
+                p.POSITION_CONTROL,
+                targetPosition=-half_gripper_pos,
+                force=10.0,
+                maxVelocity=0.5,
+                physicsClientId=self.client_id,
+            )
         # Step simulation for this client
         try:
             p.stepSimulation(physicsClientId=self.client_id)
@@ -334,15 +385,33 @@ class PyBulletSimInterface(SimulationInterface):
                 physicsClientId=self.client_id,
             )
 
+        # Set gripper positions: split the desired width between joint7 and joint8
+        # Each gripper joint moves by half of the desired gripper width
+        half_gripper_pos = clipped_positions[6] / 2.0
+        
+        # Set joint7 (primary gripper joint)
         p.setJointMotorControl2(
             self.robot_id,
             gripper_idx,
             p.POSITION_CONTROL,
-            targetPosition=clipped_positions[6],
+            targetPosition=half_gripper_pos,
             force=10.0,
             maxVelocity=0.5,
             physicsClientId=self.client_id,
         )
+        
+        # Set joint8 (secondary gripper joint) if it exists
+        gripper_joint8 = gripper_idx + 1
+        if gripper_joint8 < self.num_joints:
+            p.setJointMotorControl2(
+                self.robot_id,
+                gripper_joint8,
+                p.POSITION_CONTROL,
+                targetPosition=-half_gripper_pos,
+                force=10.0,
+                maxVelocity=0.5,
+                physicsClientId=self.client_id,
+            )
 
         try:
             p.stepSimulation(physicsClientId=self.client_id)
