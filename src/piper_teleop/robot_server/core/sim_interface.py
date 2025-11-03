@@ -83,6 +83,22 @@ class PyBulletSimInterface(SimulationInterface):
         if self.use_gui:
             self.client_id = p.connect(p.GUI)
             p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1, physicsClientId=self.client_id)
+            
+            # Set up third-person camera view pointing at the robot
+            # Camera parameters: distance, yaw, pitch, target position
+            camera_distance = 1.5  # meters from target
+            camera_yaw = 45  # degrees (side angle)
+            camera_pitch = -30  # degrees (looking down)
+            camera_target = [0.0, 0.0, 0.3]  # Point at robot workspace height
+            
+            p.resetDebugVisualizerCamera(
+                cameraDistance=camera_distance,
+                cameraYaw=camera_yaw,
+                cameraPitch=camera_pitch,
+                cameraTargetPosition=camera_target,
+                physicsClientId=self.client_id
+            )
+            logger.info(f"Set third-person camera view: distance={camera_distance}m, yaw={camera_yaw}°, pitch={camera_pitch}°")
         else:
             self.client_id = p.connect(p.DIRECT)
 
@@ -267,6 +283,100 @@ class PyBulletSimInterface(SimulationInterface):
         self.is_connected_flag = True
         logger.info("PyBullet simulation connected successfully")
         
+    def get_camera_image(self, camera_type: str = "third_person", arm_id: str = "left", 
+                         width: int = 640, height: int = 480) -> Dict[str, np.ndarray]:
+        """Capture camera images from simulation.
+        
+        Args:
+            camera_type: "third_person", "gripper", or "wrist"
+            arm_id: "left" or "right" (for gripper/wrist cameras)
+            width: image width in pixels
+            height: image height in pixels
+            
+        Returns:
+            Dictionary with 'rgb', 'depth', and 'segmentation' numpy arrays
+        """
+        if not self.is_connected_flag:
+            logger.warning("Cannot get camera image: simulation not connected")
+            return {}
+        
+        if camera_type == "third_person":
+            # Third-person view camera pointing at robot workspace
+            camera_target = [0.0, -0.3, 0.3]
+            camera_distance = 1.5
+            camera_yaw = -90
+            camera_pitch = -30
+            
+            view_matrix = p.computeViewMatrixFromYawPitchRoll(
+                cameraTargetPosition=camera_target,
+                distance=camera_distance,
+                yaw=camera_yaw,
+                pitch=camera_pitch,
+                roll=0,
+                upAxisIndex=2,
+                physicsClientId=self.client_id
+            )
+        else:
+            # Gripper or wrist camera - attach to end effector link
+            if 'right' in arm_id.lower() and hasattr(self, 'right_joint_indices'):
+                ee_link = self.right_joint_indices[-1]
+            else:
+                ee_link = self.left_joint_indices[-1] if hasattr(self, 'left_joint_indices') else self.joint_indices[-1]
+            
+            # Get end effector link state
+            link_state = p.getLinkState(self.robot_id, ee_link, physicsClientId=self.client_id)
+            ee_position = link_state[0]
+            ee_orientation = link_state[1]
+            
+            # Compute rotation matrix from quaternion
+            rot_matrix = p.getMatrixFromQuaternion(ee_orientation)
+            rot_matrix = np.array(rot_matrix).reshape(3, 3)
+            
+            # Camera positioned at gripper, looking forward along the gripper opening axis
+            # The gripper typically opens along the Z axis in the link frame
+            # Wrist camera looks from above the wrist down along the gripper
+            camera_offset = np.array([-0.06, 0.0, 0.05])  # 5cm along arm
+            target_offset = np.array([0.0, 0.0, 0.2])  # Look down gripper axis
+            up_vector = rot_matrix @ np.array([0, 0, 1])
+            
+            # Transform offsets to world coordinates
+            camera_position = np.array(ee_position) + rot_matrix @ camera_offset
+            camera_target = np.array(ee_position) + rot_matrix @ target_offset
+            
+            view_matrix = p.computeViewMatrix(
+                cameraEyePosition=camera_position.tolist(),
+                cameraTargetPosition=camera_target.tolist(),
+                cameraUpVector=up_vector.tolist(),
+                physicsClientId=self.client_id
+            )
+        
+        # Projection matrix
+        fov = 60
+        aspect = width / height
+        near = 0.01
+        far = 5.0
+        projection_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
+        
+        # Render image
+        _, _, rgb, depth, seg = p.getCameraImage(
+            width, height,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix,
+            physicsClientId=self.client_id,
+            renderer=p.ER_BULLET_HARDWARE_OPENGL if self.use_gui else p.ER_TINY_RENDERER
+        )
+        
+        # Convert to numpy arrays and proper format
+        rgb_array = np.array(rgb).reshape(height, width, 4)[:, :, :3]  # Remove alpha channel
+        depth_array = np.array(depth).reshape(height, width)
+        seg_array = np.array(seg).reshape(height, width)
+        
+        return {
+            'rgb': rgb_array,
+            'depth': depth_array,
+            'segmentation': seg_array
+        }
+    
     def disconnect(self):
         """Disconnect from PyBullet."""
         if self.client_id is not None:
