@@ -16,6 +16,7 @@ from piper_teleop.robot_server.keyboard_controller import KeyboardController
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
+from .robot_leader import PiperLeader
 
 dotenv.load_dotenv()
 
@@ -43,6 +44,7 @@ class ControlLoop:
         self.robot_interface = RobotInterface(config)
         self.robot_enabled = config.enable_robot
         self.use_keyboard = config.enable_keyboard
+        self.use_leader = config.use_leader
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
         self.visualize = config.enable_visualization
@@ -64,6 +66,8 @@ class ControlLoop:
                 display_data=config.display_data
             )
             self.recorder.start_recording()
+        if self.use_leader:
+            self.robot_leader = PiperLeader()
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
         if arm_goal.reset_to_init:
@@ -90,6 +94,21 @@ class ControlLoop:
 
         arm_state.gripper_closed = arm_goal.gripper_closed
         return arm_state
+
+    def update_robot_from_leader(self, obs_dict_leader: dict):
+        dict_left = obs_dict_leader['left']
+        dict_right = obs_dict_leader['right']
+        q_1 = [dict_left[k] for k in sorted(dict_left)]
+        q_2 = [dict_right[k] for k in sorted(dict_right)]
+        joints_wo_gripper = np.array(q_1[:-1] + q_2[:-1])
+        joint_gripper_s = [q_1[-1], q_2[-1]]
+        if self.visualize:
+            self.robot_interface.ik_solver.vis.display(joints_wo_gripper)
+        self.robot_interface.update_arm_angles(
+            np.concatenate([joints_wo_gripper, joint_gripper_s])
+        )
+        if self.robot_enabled:
+            self.robot_interface.send_command()
 
     def update_robot(self, left_arm: ArmState, right_arm: ArmState):
         """Update robot with current control goals."""
@@ -151,6 +170,8 @@ class ControlLoop:
                 )
         if self.robot_enabled:
             self.robot_interface.return_to_initial_position()
+        if self.use_leader:
+            self.robot_leader.connect()
 
         left_arm.target_transform = left_arm.initial_transform
         right_arm.target_transform = right_arm.initial_transform
@@ -177,7 +198,11 @@ class ControlLoop:
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
-            self.update_robot(left_arm, right_arm)
+            if self.use_leader:
+                obs_dict_leader = self.robot_leader.get_observations()
+                self.update_robot_from_leader(obs_dict_leader)
+            else:
+                self.update_robot(left_arm, right_arm)
             robot_time = time.perf_counter() - robot_start
 
             if self.config.record:
