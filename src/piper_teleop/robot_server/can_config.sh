@@ -110,6 +110,9 @@ if [ "$EXPECTED_CAN_COUNT" -ne 1 ]; then
     declare -A USB_PORTS 
     USB_PORTS["3-2.3:1.0"]="left_piper:1000000"
     USB_PORTS["3-2.1:1.0"]="right_piper:1000000"
+#    Uncomment for leader setup
+#    USB_PORTS["3-1:1.0"]="leader_left_piper:1000000"
+#    USB_PORTS["3-6:1.0"]="leader_right_piper:1000000"
 fi
 
 # Get the current number of CAN modules in the system
