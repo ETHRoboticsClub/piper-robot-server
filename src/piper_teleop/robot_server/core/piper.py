@@ -56,9 +56,14 @@ class Piper:
     def configure(self) -> None:
         pass
 
+    def print_fw_version(self) -> None:
+        fw_version = self.sdk.get_fw_version()
+        print("Piper Firmware Version:", fw_version)
+
     def get_observation(self) -> dict[str, Any]:
         obs_dict = self.sdk.get_status()
         return obs_dict
+        
 
     def get_end_effector_transform(self) -> np.ndarray:
 
@@ -70,8 +75,10 @@ class Piper:
         gripper_transform = raw_transform @ link6_to_gripper_transform
         return gripper_transform
 
-    def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], action_torques = None) -> dict[str, Any]:
         # map the action from the leader to joints for the follower
+
+        print("Sending action to Piper robot:", action_torques)
         positions = [
             action.get("joint_0.pos"),
             action.get("joint_1.pos"),
@@ -81,6 +88,12 @@ class Piper:
             action.get("joint_5.pos"),
             action.get("joint_6.pos"),
         ]
+        
+        if action_torques is None:
+            print("Sending action without feedforward torques")
+            self.sdk.set_joint_positions(positions)
+        else:
+            print("Sending action with feedforward torques")
+            self.sdk.set_joint_positions_and_ff(positions, action_torques)
 
-        self.sdk.set_joint_positions(positions)
         return action

@@ -59,6 +59,7 @@ def main():
     # Control flags
     parser.add_argument("--no-robot", action="store_true", help="Disable robot connection (visualization only)")
     parser.add_argument("--vis", action="store_true", help="Enable visualization")
+    parser.add_argument("--sim", action="store_true", help="Enable visualization")
     parser.add_argument(
         "--keyboard", action="store_true", default=False, help="Enable keyboard control (defaults to False)"
     )
@@ -79,6 +80,7 @@ def main():
 
     config.enable_robot = not args.no_robot
     config.enable_visualization = args.vis
+    config.enable_simulation = args.sim
     config.record = args.record
     config.resume = args.resume
     config.repo_id = args.repo_id

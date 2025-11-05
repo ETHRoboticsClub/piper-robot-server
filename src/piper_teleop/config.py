@@ -237,6 +237,7 @@ class TelegripConfig:
     enable_vr: bool = True
     enable_keyboard: bool = False
     enable_visualization: bool = True
+    enable_simulation: bool = False
     autoconnect: bool = False
     log_level: str = "warning"
 

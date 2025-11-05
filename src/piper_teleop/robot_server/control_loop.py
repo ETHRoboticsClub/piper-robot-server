@@ -17,6 +17,9 @@ from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
 
+import websockets
+import json
+
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -46,6 +49,7 @@ class ControlLoop:
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
         self.visualize = config.enable_visualization
+        self.simulate = config.enable_simulation
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
 
         self.shared_data = shared_data
@@ -101,6 +105,12 @@ class ControlLoop:
             left_arm.target_transform, right_arm.target_transform, visualize=self.visualize
         )
 
+        id_solution_1, id_solution_2 = self.robot_interface.solve_id(ik_solution)
+
+        #print("Id solution left:", id_solution_1)
+        #print(f"IK Solution: {ik_solution}")
+
+
         current_gripper_1 = 0.0 if left_arm.gripper_closed else 0.07
         current_gripper_2 = 0.0 if right_arm.gripper_closed else 0.07
 
@@ -108,16 +118,37 @@ class ControlLoop:
             self.robot_interface.update_arm_angles(
                 np.concatenate([ik_solution, [current_gripper_1, current_gripper_2]])
             )
+
+            self.robot_interface.update_arm_torques(
+                np.concatenate([id_solution_1, id_solution_2])
+            )
         else:
             print("IK solution results in collision, not updating robot commands.")
             return
 
         ik_time = time.perf_counter() - start_time_ik
 
+        if self.simulate:
+            #print("Simulating sending commands to robot...")
+            for joint_id in range(1, 7):
+
+                self.ws_send_command(joint_id=joint_id,
+                                     pos=ik_solution[joint_id - 1],
+                                     kp=10.0,
+                                     kd=0.2,
+                                     ff=id_solution_1[joint_id - 1])
+            
+            for joint_id in range(7, 13):
+                self.ws_send_command(joint_id=joint_id,
+                                    pos=ik_solution[joint_id - 1],
+                                    kp=10.0,
+                                    kd=0.2,
+                                    ff=id_solution_2[joint_id - 7])
+        
         # Send commands
         start_time_send = time.perf_counter()
         if self.robot_enabled:
-            self.robot_interface.send_command()
+            self.robot_interface.send_command(ff_torque_mode=True)
         send_time = time.perf_counter() - start_time_send
 
         total_time = time.perf_counter() - start_time_total
@@ -128,6 +159,39 @@ class ControlLoop:
             f"IK: {ik_time*1000:.1f}ms, CAN: {send_time*1000:.1f}ms, "
             f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
         )
+
+    async def connect_to_ws(self):
+        uri = "ws://127.0.0.1:8765"
+        global websocket_conn
+        try:
+            # Use the global connection variable
+            websocket_conn = await websockets.connect(uri)
+            print("✅ Connected to server persistently.")
+        except Exception as e:
+            print(f"❌ Failed to connect: {e}")
+            websocket_conn = None
+
+    async def ws_send_command(self, joint_id, pos, kp, kd, ff):
+        global websocket_conn
+        if websocket_conn is not None:
+            try:
+                command = {
+                    "joint_id": joint_id,
+                    "pos": pos,
+                    "kp": kp,
+                    "kd": kd,
+                    "ff": ff
+                }
+                await websocket_conn.send(json.dumps(command))
+                # print(f"Sent command: {command}") # Optional: only print on change/error for high frequency
+            except websockets.ConnectionClosedOK:
+                print("⚠️ Connection closed unexpectedly. Reconnecting...")
+                await self.connect_to_ws()
+            except Exception as e:
+                print(f"❌ Error sending command: {e}")
+        else:
+            print("⚠️ No active connection. Attempting to connect...")
+            await self.connect_to_ws()
 
     async def run(self):
         """Control loop for the teleoperation system."""

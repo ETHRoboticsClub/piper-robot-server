@@ -143,15 +143,16 @@ class RobotInterface:
                     self.left_robot.connect()
                 self.left_arm_connected = True
                 logger.info("✅ Left arm connected successfully")
+                
             except Exception as e:
                 logger.error(f"❌ Left arm connection failed: {e}")
                 self.left_arm_connected = False
 
             # Connect right arm - always suppress low-level CAN debug output
             try:
-                with suppress_stdout_stderr():
-                    self.right_robot = Piper(right_config)
-                    self.right_robot.connect()
+                #with suppress_stdout_stderr():
+                    #self.right_robot = Piper(right_config)
+                    #self.right_robot.connect()
                 self.right_arm_connected = True
                 logger.info("✅ Right arm connected successfully")
             except Exception as e:
@@ -163,6 +164,10 @@ class RobotInterface:
 
             if not self.is_connected:
                 logger.error("❌ Failed to connect any robot arms")
+
+            print("Firmware Versions")
+            self.left_robot.print_fw_version()
+            print("FW Check done")
 
             return self.is_connected
 
@@ -199,7 +204,7 @@ class RobotInterface:
         else:
             raise ValueError(f"Invalid arm: {arm}")
 
-    def solve_ik(self, target_pose_1: np.ndarray, target_pose_2: np.ndarray, visualize: bool) -> np.ndarray:
+    def solve_ik(self, target_pose_1: np.ndarray, target_pose_2: np.ndarray, visualize: bool) -> tuple[np.ndarray, bool]:
         """Solve inverse kinematics for both arms."""
         position_1, quaternion_1 = transform2pose(target_pose_1)
         position_2, quaternion_2 = transform2pose(target_pose_2)
@@ -214,16 +219,35 @@ class RobotInterface:
         )
         sol_q, is_collision = self.ik_solver.ik_fun(target_1.homogeneous, target_2.homogeneous, visualize=visualize)
         return sol_q, is_collision
+    
+    def solve_id(self, joint_angles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Solve inverse dynamics for both arms."""
+        #print( "joint angles in id:", joint_angles )
+        tau_1, tau_2 = self.ik_solver.id_fun(joint_angles[:6], joint_angles[6:])
+        return tau_1, tau_2
 
     def update_arm_angles(self, joint_angles: np.ndarray):
         """Update joint angles for specified arm."""
         self.arm_angles = joint_angles
 
-    def send_command(self) -> bool:
+    def update_arm_torques(self, joint_torques: np.ndarray):
+        """Update joint angles for specified arm."""
+        self.arm_torques = joint_torques
+
+    def send_command(self, ff_torque_mode=False) -> bool:
         """Send current joint angles to robot using dictionary format."""
         if not self.is_connected or not self.is_enabled:
             return False
-
+        
+        # print("Errors")
+        # print(self.left_robot.get_observation()["joint_0.pos"] - self.arm_angles[6])
+        # print(self.left_robot.get_observation()["joint_1.pos"] - self.arm_angles[7])
+        # print(self.left_robot.get_observation()["joint_2.pos"] - self.arm_angles[8])
+        # print(self.left_robot.get_observation()["joint_3.pos"] - self.arm_angles[9])
+        # print(self.left_robot.get_observation()["joint_4.pos"] - self.arm_angles[10])
+        # print(self.left_robot.get_observation()["joint_5.pos"] - self.arm_angles[11])
+        # print()
+        
         current_time = time.time()
         if current_time - self.last_send_time < self.config.send_interval:
             return True  # Don't send too frequently
@@ -236,8 +260,9 @@ class RobotInterface:
             if self.left_robot and self.left_arm_connected:
                 try:
                     action_dict = arm_angles_to_action_dict(self.arm_angles)
+                    #print("Torque:", self.arm_torques[4] if ff_torque_mode is True else None)
                     with suppress_stdout_stderr():
-                        self.left_robot.send_action(action_dict["left"])
+                        self.left_robot.send_action(action_dict["left"], self.arm_torques[:6] if ff_torque_mode is True else None)
                 except Exception as e:
                     logger.error(f"Error sending left arm command: {e}")
                     self.left_arm_errors += 1
@@ -251,7 +276,7 @@ class RobotInterface:
                 try:
                     action_dict = arm_angles_to_action_dict(self.arm_angles)
                     with suppress_stdout_stderr():
-                        self.right_robot.send_action(action_dict["right"])
+                        self.right_robot.send_action(action_dict["right"], self.arm_torques[6:] if ff_torque_mode is True else None)
                 except Exception as e:
                     logger.error(f"Error sending right arm command: {e}")
                     self.right_arm_errors += 1
@@ -357,6 +382,7 @@ class RobotInterface:
 
     def get_observation(self) -> dict[str, Any]:
         """Get observation from robot."""
+
         if self.left_robot is None or self.right_robot is None:
             action_dict = arm_angles_to_action_dict(self.arm_angles)
         return {

@@ -52,6 +52,51 @@ class PiperSDKInterface:
         self.piper.JointCtrl(*joint_angles)
         self.piper.GripperCtrl(gripper_position_int, 1000, 0x01, 0)
 
+    def set_joint_positions_and_ff(self, positions, ff_torques):
+        velocities = [0.0] * 6
+        kps = [10.0] * 6
+        kds = [0.8] * 6
+
+        kps[2] = 2.5
+        kds[2] = 0.2
+
+        kps[4] = 15.0
+        kds[4] = 1.2
+
+        ff_torques[0] = 0.0
+        ff_torques[3] = 0.0
+        ff_torques[5] = 0.0
+
+        ff_torques[1] = 0.0
+        #ff_torques[2] = 0.0
+        ff_torques[2] = ff_torques[2]
+        ff_torques[4] = 0.0
+
+        # ctrl_mode=0x01 (CAN control), move_mode=0x04 (MOVE M), is_mit_mode=0xAD (Enable MIT)
+        self.piper.MotionCtrl_2(ctrl_mode=0x01, move_mode=0x04, is_mit_mode=0xAD)
+
+
+        for i in range(6):
+            min_rad, max_rad = JOINT_LIMITS_RAD["min"][i], JOINT_LIMITS_RAD["max"][i]
+            clipped_pos = min(max(positions[i], min_rad), max_rad)
+
+            self.piper.JointMitCtrl(
+                motor_num=i + 1,      # Motor numbers are 1-based
+                pos_ref=clipped_pos,
+                vel_ref=velocities[i],
+                kp=kps[i],
+                kd=kds[i],
+                t_ref=ff_torques[i]
+            )
+
+        gripper_position = min(max(positions[6], 0.0), GRIPPER_ANGLE_MAX)
+        gripper_position_int = round(gripper_position * 1e6)
+
+        self.piper.GripperCtrl(gripper_position_int, 1000, 0x01, 0)
+
+    def get_fw_version(self):
+        print(self.piper.GetPiperFirmwareVersion())
+
     def get_status(self) -> Dict[str, Any]:
         joint_status = self.piper.GetArmJointMsgs()
         gripper = self.piper.GetArmGripperMsgs()

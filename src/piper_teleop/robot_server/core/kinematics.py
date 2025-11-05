@@ -367,6 +367,21 @@ class Arm_IK:
         except Exception as e:
             print(f"ERROR in convergence, plotting debug info.{e}")
             return None, False
+        
+    def id_fun(self, joint_angles_1, joint_angles_2, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
+        """Solve inverse dynamics for both arms."""
+        q = np.concatenate([joint_angles_1, joint_angles_2], axis=0)
+        # forward kinematics should already be updated in data from the call to check_collision and since we need q as argument we can assume it will always be updated
+        pin.forwardKinematics(self.reduced_robot.model, self.reduced_robot.data, q)
+        pin.updateFramePlacements(self.reduced_robot.model, self.reduced_robot.data)
+        tau = pin.rnea(self.reduced_robot.model, self.reduced_robot.data, q, np.zeros(self.reduced_robot.model.nv), np.zeros(self.reduced_robot.model.nv))
+        
+        tau_1 = tau[:6]
+        tau_2 = tau[6:]
+
+        #print("Right arm torques:", tau_1)
+        #print("left arm torques:", tau_2)
+        return tau_1, tau_2
 
     def check_collision(self, q, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
         """Check for collisions including self-collision and ground plane collision."""
