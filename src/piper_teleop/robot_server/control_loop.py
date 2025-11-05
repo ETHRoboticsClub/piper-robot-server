@@ -100,8 +100,8 @@ class ControlLoop:
         dict_right = obs_dict_leader['right']
         q_1 = [dict_left[k] for k in sorted(dict_left)]
         q_2 = [dict_right[k] for k in sorted(dict_right)]
-        joints_wo_gripper = np.array(q_1[:-1] + q_2[:-1])
-        joint_gripper_s = [q_1[-1], q_2[-1]]
+        joints_wo_gripper = np.array(q_2[:-1] + q_1[:-1])
+        joint_gripper_s = [q_2[-1], q_1[-1]]
         if self.visualize:
             self.robot_interface.ik_solver.vis.display(joints_wo_gripper)
         self.robot_interface.update_arm_angles(
