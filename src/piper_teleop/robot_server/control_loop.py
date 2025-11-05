@@ -252,3 +252,5 @@ class ControlLoop:
         await self.api.disconnect_vr_controller()
         if self.robot_enabled:
             self.robot_interface.disconnect()
+        if self.use_leader:
+            self.robot_leader.disconnect()

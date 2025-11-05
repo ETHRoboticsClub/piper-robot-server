@@ -52,3 +52,16 @@ class PiperLeader:
         left_obs = self.robot_left.get_observation() if self.robot_left else self.get_zero_observation()
         right_obs = self.robot_right.get_observation() if self.robot_right else self.get_zero_observation()
         return {'left': left_obs, 'right': right_obs}
+
+    def disconnect(self):
+        logger.info("Disconnecting from leader...")
+        if self.robot_left:
+            try:
+                self.robot_left.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting left arm: {e}")
+        if self.robot_right:
+            try:
+                self.robot_right.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting right arm: {e}")
