@@ -228,8 +228,10 @@ class TelegripConfig:
     robot_type: str = "piper"
     task: str = "pick and place"
     use_video = False
+    convert_images_to_video = False  # Post-processing option when use_video=False. If True, converts the PNG frames to video format after recording completes.
     display_data = False
-
+    image_writer_processes = 0
+    image_writer_threads = 12
     # Control flags
     enable_pybullet: bool = True
     enable_pybullet_gui: bool = True

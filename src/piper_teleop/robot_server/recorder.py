@@ -1,71 +1,169 @@
 import atexit
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import PIL.Image
+import pandas as pd
+import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+import tqdm
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import DEFAULT_VIDEO_PATH, write_info
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
-from lerobot.utils.visualization_utils import log_rerun_data, _init_rerun
+from lerobot.utils.visualization_utils import log_rerun_data, init_rerun
+from lerobot.datasets.video_utils import VideoEncodingManager
 
 from piper_teleop.robot_server.camera.camera_config import CameraConfig
-from piper_teleop.robot_server.camera.camera_streamer import SharedCameraData
 
 logger = logging.getLogger(__name__)
 
 from enum import Enum, auto
 
-import lerobot.datasets.image_writer as image_writer_module
-from lerobot.datasets.image_writer import image_array_to_pil_image
-
 
 def convert_image_dataset_to_video(dataset: LeRobotDataset):
-    """Convert a dataset recorded with image frames into the canonical video layout."""
+    """Convert a Lerobot v3 dataset recorded with PNGs embedded in parquet to canonical video layout."""
+    logger.info('Converting images to video')
     if dataset.num_episodes == 0:
+        logger.info('No episodes detected')
         return
-    logger.info("converting images to video")
-    import shutil
 
-    image_keys = list(dataset.meta.image_keys)
+    # Snapshot image keys before mutating metadata
+    image_keys = [key for key, ft in dataset.meta.info["features"].items() if ft["dtype"] == "image"]
     if not image_keys:
+        logger.info('No images keys detected')
         return
 
-    # Step 1: Update metadata to video format
+    logger.info("Converting dataset at %s from image -> video for keys %s", dataset.root, image_keys)
+
+    # Ensure metadata declares video storage going forward
     for key in image_keys:
-        dataset.meta.info["features"][key]["dtype"] = "video"
-    dataset.meta.info["video_path"] = DEFAULT_VIDEO_PATH
+        feature = dataset.meta.info["features"][key]
+        feature["dtype"] = "video"
+        feature.pop("info", None)  # will be regenerated from encoded videos
+    dataset.meta.info["video_path"] = dataset.meta.info.get("video_path") or DEFAULT_VIDEO_PATH
     write_info(dataset.meta.info, dataset.meta.root)
-    dataset.meta.load_metadata()
 
-    # Step 2: Encode videos for each episode
-    for episode_index in range(dataset.num_episodes):
-        dataset.encode_episode_videos(episode_index)
+    episodes_root = dataset.meta.root / "meta" / "episodes"
+    episode_files = sorted(episodes_root.glob("chunk-*/*.parquet"))
+    if not episode_files:
+        logger.warning("No episode metadata files found under %s; aborting conversion.", episodes_root)
+        return
 
-    # Step 3: Regenerate parquet files without image columns
-    # (Video datasets don't store image data in parquet)
-    for episode_index in range(dataset.num_episodes):
-        parquet_path = dataset.root / dataset.meta.get_data_file_path(episode_index)
+    # Reset latest episode pointer so chunking logic appends deterministically
+    dataset.meta.latest_episode = None
+    dataset.meta.episodes = None
 
-        # Load existing parquet data
-        table = pq.read_table(parquet_path)
+    # Track which parquet files need their visual columns dropped afterwards
+    touched_data_files: set[Path] = set()
+    dataset_cache: dict[Path, ds.Dataset] = {}
 
-        # Remove image columns (they're now in videos)
-        columns_to_keep = [col for col in table.schema.names if not col.startswith("observation.images.")]
-        table_without_images = table.select(columns_to_keep)
+    def _get_dataset(path: Path) -> ds.Dataset:
+        ds_obj = dataset_cache.get(path)
+        if ds_obj is None:
+            ds_obj = ds.dataset(path, format="parquet")
+            dataset_cache[path] = ds_obj
+        return ds_obj
 
-        # Save back to parquet
-        pq.write_table(table_without_images, parquet_path)
+    def _load_episode_frames(
+        chunk_idx: int, file_idx: int, start_idx: int, end_idx: int
+    ) -> dict[str, list[dict]]:
+        data_path = dataset.meta.root / dataset.meta.data_path.format(
+            chunk_index=chunk_idx, file_index=file_idx
+        )
+        if not data_path.exists():
+            raise FileNotFoundError(f"Missing data parquet file needed for conversion: {data_path}")
 
-    dataset.meta.info["total_videos"] = dataset.num_episodes * len(dataset.meta.video_keys)
+        touched_data_files.add(data_path)
+        ds_obj = _get_dataset(data_path)
+        requested_cols = list(dict.fromkeys([*image_keys, "index"]))
+        filter_expr = (ds.field("index") >= start_idx) & (ds.field("index") < end_idx)
+        table = ds_obj.to_table(columns=requested_cols, filter=filter_expr, use_threads=True).combine_chunks()
+
+        expected_rows = end_idx - start_idx
+        if table.num_rows != expected_rows:
+            raise ValueError(
+                f"Expected {expected_rows} frames between indices {start_idx}:{end_idx} "
+                f"but loaded {table.num_rows} rows from {data_path}"
+            )
+
+        frames_by_key = {}
+        for key in image_keys:
+            if key not in table.column_names:
+                raise KeyError(f"Column {key} missing from data parquet during conversion.")
+            frames_by_key[key] = table[key].to_pylist()
+        return frames_by_key
+
+    for ep_file in tqdm.tqdm(episode_files):
+        ep_df = pd.read_parquet(ep_file)
+        if ep_df.empty:
+            continue
+
+        # Pre-create columns for video metadata to keep schema consistent
+        for key in image_keys:
+            base = f"videos/{key}/"
+            if base + "chunk_index" not in ep_df.columns:
+                ep_df[base + "chunk_index"] = pd.Series([pd.NA] * len(ep_df), dtype="Int64")
+            if base + "file_index" not in ep_df.columns:
+                ep_df[base + "file_index"] = pd.Series([pd.NA] * len(ep_df), dtype="Int64")
+            if base + "from_timestamp" not in ep_df.columns:
+                ep_df[base + "from_timestamp"] = pd.Series([np.nan] * len(ep_df), dtype="float64")
+            if base + "to_timestamp" not in ep_df.columns:
+                ep_df[base + "to_timestamp"] = pd.Series([np.nan] * len(ep_df), dtype="float64")
+
+        for row_idx, row in ep_df.iterrows():
+            episode_index = int(row["episode_index"])
+            data_chunk = int(row["data/chunk_index"])
+            data_file = int(row["data/file_index"])
+            start_idx = int(row["dataset_from_index"])
+            end_idx = int(row["dataset_to_index"])
+            frames_by_key = _load_episode_frames(data_chunk, data_file, start_idx, end_idx)
+
+            latest_entry = {"episode_index": [episode_index]}
+            for key in image_keys:
+                frames = frames_by_key[key]
+                if len(frames) == 0:
+                    raise ValueError(f"Episode {episode_index} has no frames for key {key}")
+
+                img_dir = dataset._get_image_file_dir(episode_index, key)
+                img_dir.mkdir(parents=True, exist_ok=True)
+                for local_idx, frame in enumerate(frames):
+                    if not isinstance(frame, dict) or "bytes" not in frame:
+                        raise ValueError(f"Unexpected frame format for {key}: {frame}")
+                    fpath = dataset._get_image_file_path(episode_index, key, local_idx)
+                    with open(fpath, "wb") as handle:
+                        handle.write(frame["bytes"])
+
+                metadata = dataset._save_episode_video(key, episode_index)
+                base = f"videos/{key}/"
+                ep_df.at[row_idx, base + "chunk_index"] = metadata[base + "chunk_index"]
+                ep_df.at[row_idx, base + "file_index"] = metadata[base + "file_index"]
+                ep_df.at[row_idx, base + "from_timestamp"] = metadata[base + "from_timestamp"]
+                ep_df.at[row_idx, base + "to_timestamp"] = metadata[base + "to_timestamp"]
+
+                # Update latest episode pointer so subsequent encodes append correctly
+                for suffix in ("chunk_index", "file_index", "from_timestamp", "to_timestamp"):
+                    latest_entry[f"{base}{suffix}"] = [metadata[f"{base}{suffix}"]]
+
+            dataset.meta.latest_episode = latest_entry
+
+        ep_df.to_parquet(ep_file, index=False)
+
+    # Drop embedded image columns from parquet data now that videos are encoded
+    for data_path in touched_data_files:
+        schema = pq.read_schema(data_path)
+        keep_cols = [name for name in schema.names if name not in image_keys]
+        if len(keep_cols) == len(schema.names):
+            continue
+        table = pq.read_table(data_path, columns=keep_cols)
+        pq.write_table(table, data_path)
+
     write_info(dataset.meta.info, dataset.meta.root)
-    dataset.meta.load_metadata()
+    dataset.meta.episodes = None  # mark cached metadata as stale
 
-    # Step 4: Clean up images directory
     images_dir = dataset.root / "images"
     if images_dir.exists():
         shutil.rmtree(images_dir)
@@ -93,18 +191,14 @@ class Recorder:
         robot_type="piper",
         play_sound=True,
         use_video=False,
-        image_writer_processes=1,
-        image_writer_threads=8,
+        image_writer_processes=0,
+        image_writer_threads=12,
         display_data=False,
-        compress_level=1
+        convert_images_to_video=False
     ):
-        self.compress_level  = compress_level
-        if self.compress_level:
-            self._apply_compression_patch()
-
         if use_video is False:
             logger.info("Init recorder in fast mode. Images will be converted to video at the end of recording")
-            self.convert_images_to_video = True
+            self.convert_images_to_video = convert_images_to_video
         else:
             self.convert_images_to_video = False
         # Features
@@ -133,6 +227,7 @@ class Recorder:
         self.fps = fps
         self.robot_type = robot_type
         self.dataset: Optional[LeRobotDataset] = None
+        self.dataset_manager: Optional[VideoEncodingManager] = None
         self.image_writer_processes = image_writer_processes
         self.image_writer_threads = image_writer_threads
         self.use_video = use_video
@@ -144,23 +239,6 @@ class Recorder:
         self.display_data = display_data
 
         atexit.register(self.exit)
-
-    def _apply_compression_patch(self):
-        def _patched_write_image(image: np.ndarray | PIL.Image.Image, fpath: Path):
-            """Patched version of write_image with low compression."""
-            try:
-                if isinstance(image, np.ndarray):
-                    img = image_array_to_pil_image(image)
-                elif isinstance(image, PIL.Image.Image):
-                    img = image
-                else:
-                    raise TypeError(f"Unsupported image type: {type(image)}")
-                img.save(fpath, compress_level=self.compress_level)
-            except Exception as e:
-                print(f"Error writing image {fpath}: {e}")
-
-        image_writer_module.write_image = _patched_write_image
-        logger.info(f"Applied low compression patch with compress_level={self.compress_level}")
 
     def __exit__(self, exc_type, exc, tb):
         self.exit()
@@ -207,9 +285,10 @@ class Recorder:
             image_writer_threads=self.image_writer_threads,
         )
         if self.display_data:
-            _init_rerun(session_name="recording")
+            init_rerun(session_name="recording")
 
         self.dataset = dataset
+        self.dataset_manager = VideoEncodingManager(dataset)
 
     def start_recording(self):
         logger.info("start recording")
@@ -235,8 +314,11 @@ class Recorder:
                 + [right_joints_target[f"joint_{i}.pos"] for i in range(self.dof)],
                 dtype=np.float32,
             )
-            frame = {"observation.state": state, "action": target, **cams}
-            self.dataset.add_frame(frame, self.task)  # type: ignore
+            frame = {"observation.state": state,
+                     "action": target,
+                     "task": self.task,
+                     **cams}
+            self.dataset.add_frame(frame)  # type: ignore
 
     def show_data(self,
                      left_joints,
@@ -266,6 +348,7 @@ class Recorder:
 
     def _end_recording(self):
         self._delete_episodes()
+        self.dataset_manager.__exit__('cleanup', None, None)
         if self.convert_images_to_video:
             convert_image_dataset_to_video(self.dataset)
             # avoid twice conversion
@@ -294,7 +377,7 @@ class Recorder:
         """
         if self.events["rerecord_episode"]:
             # From anywhere, go reset env to rerecord
-            self._transition(RecState.RESET_ENV, "rerecording, reset environment", self._delete_episodes)
+            self._transition(RecState.RESET_ENV, "Deleted episode", self._delete_episodes)
             self.events["rerecord_episode"] = False
             self.events["exit_early"] = False
 

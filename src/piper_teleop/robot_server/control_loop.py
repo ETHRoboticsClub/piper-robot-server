@@ -61,7 +61,10 @@ class ControlLoop:
                 fps=config.fps,
                 robot_type=config.robot_type,
                 use_video=config.use_video,
-                display_data=config.display_data
+                display_data=config.display_data,
+                convert_images_to_video=config.convert_images_to_video,
+                image_writer_processes=config.image_writer_processes,
+                image_writer_threads=config.image_writer_threads
             )
             self.recorder.start_recording()
 

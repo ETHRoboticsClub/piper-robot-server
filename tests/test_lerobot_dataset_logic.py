@@ -1,13 +1,20 @@
 import hashlib
+import os
+import subprocess
+import sys
 import time
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
+import pandas as pd
 import pyarrow.parquet as pq
 import pytest
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.datasets.utils import load_info
+
+from pandas.testing import assert_frame_equal
 
 from piper_teleop.robot_server.camera.camera_config import CameraConfig
 from piper_teleop.robot_server.recorder import Recorder, RecState, convert_image_dataset_to_video
@@ -104,10 +111,11 @@ def test_create_temp_dataset_and_read(tmp_path):
     )
     frame = {
         "action": np.random.random(7).astype(np.float32),
+        "task": "test",
     }
-    dataset.add_frame(frame, task="pick and place")
+    dataset.add_frame(frame)
     dataset.save_episode()
-    # Reading
+    dataset.finalize()
     ds_meta = LeRobotDatasetMetadata(repo_id=repo_id, root=root)
     delta_timestamps = {"action": [t / ds_meta.fps for t in range(5)]}
 
@@ -117,7 +125,7 @@ def test_create_temp_dataset_and_read(tmp_path):
 
 
 def test_init_recorder():
-    rec = Recorder(repo_id="test", task="test", use_video=True, play_sound=False)
+    rec = Recorder(repo_id="test", task="test", use_video=True, play_sound=False, image_writer_processes=0)
     assert rec.joints == [f"L.joint_{i}" for i in range(7)] + [f"R.joint_{i}" for i in range(7)]
     expected_dict = {
         "dtype": "float32",
@@ -128,7 +136,7 @@ def test_init_recorder():
     assert rec.features["action"] == expected_dict
     assert rec.features["observation.state"] == expected_dict
 
-    rec = Recorder(repo_id="test", single_arm=True, task="test", play_sound=False)
+    rec = Recorder(repo_id="test", single_arm=True, task="test", play_sound=False, image_writer_processes=0)
     expected_dict = {
         "dtype": "float32",
         "shape": (7,),
@@ -155,8 +163,9 @@ def test_create_dataset(tmp_path):
     frame = {
         "action": np.random.random(7).astype(np.float32),
         "observation.state": np.random.random(7).astype(np.float32),
+        "task": "pick and place",
     }
-    rec.dataset.add_frame(frame, task="pick and place")
+    rec.dataset.add_frame(frame)
     assert root.exists() == True
 
 
@@ -194,6 +203,7 @@ def test_recorder_state(tmp_path):
     root = tmp_path / "lerobot"
     rec = Recorder(repo_id="test", root=root, single_arm=True, play_sound=False, task="test")
     rec.dataset = MagicMock()
+    rec.dataset_manager = MagicMock()
     assert rec.events == {"exit_early": False, "rerecord_episode": False, "stop_recording": False}
 
     assert rec.state == RecState.INIT
@@ -224,7 +234,8 @@ def test_recorder_state(tmp_path):
     assert rec.state == RecState.FINISHED
 
 
-def test_converting_to_video(tmp_path):
+@pytest.mark.parametrize("use_cli_converter", [False, True])
+def test_converting_to_video(tmp_path, use_cli_converter):
     root = tmp_path / "lerobot"
     cameras = [CameraConfig(name="left", frame_width=640, frame_height=480)]
     rec = Recorder(repo_id="test", root=root, single_arm=False, play_sound=False, task="test", cameras=cameras)
@@ -273,16 +284,39 @@ def test_converting_to_video(tmp_path):
         rec_vid.events["exit_early"] = True
         rec_vid.handle_keyboard_event()
 
+    rec.dataset.finalize()
+    rec_vid.dataset.finalize()
+
     # Verify initial state
-    assert len(list((root / "images" / "observation.images.left" / "episode_000000").iterdir())) == NUM_FRAMES
-    assert len(list((root / "images" / "observation.images.left").iterdir())) == NUM_EP
-    # Video dataset may have images directory but no PNG files
-    assert len(list(root_2.rglob("*.png"))) == 0
+    image_parquet = next(root.glob("data/chunk-*/*.parquet"))
+    video_parquet = next(root_2.glob("data/chunk-*/*.parquet"))
+    image_table = pq.read_table(image_parquet)
+    video_table = pq.read_table(video_parquet)
+
+    assert "observation.images.left" in image_table.schema.names
+    first_image_value = image_table.column("observation.images.left")[0].as_py()
+    assert isinstance(first_image_value, dict)
+    assert "bytes" in first_image_value
+
+    assert "observation.images.left" not in video_table.schema.names
+    assert rec.dataset.meta.image_keys == ["observation.images.left"]
+    assert rec_vid.dataset.meta.video_keys == ["observation.images.left"]
     assert rec.dataset.num_episodes == NUM_EP
     assert rec_vid.dataset.num_episodes == NUM_EP
 
-    convert_image_dataset_to_video(rec.dataset)
+    rec.convert_images_to_video = False  # prevent atexit double conversion during test teardown
 
+    if use_cli_converter:
+        script_path = Path(__file__).resolve().parents[1] / "scripts" / "convert_images_to_video.py"
+        rec_dataset_path = root.resolve()
+        rec.dataset = None
+        env = {**os.environ, "HF_HOME": str(tmp_path / "hf_cache")}
+        subprocess.run([sys.executable, str(script_path), str(rec_dataset_path)], check=True, env=env)
+    else:
+        convert_image_dataset_to_video(rec.dataset)
+
+    converted_info = load_info(root)
+    converted_video_keys = [key for key, ft in converted_info["features"].items() if ft["dtype"] == "video"]
     # Both should have videos, data, and meta directories
     # images directory may or may not exist (if it exists, it should be empty)
     assert {f.name for f in root.iterdir() if f.name != "images"} == {
@@ -290,11 +324,8 @@ def test_converting_to_video(tmp_path):
     }
     assert len(list(root.rglob("*.png"))) == 0
     assert len(list(root.rglob("*.mp4"))) == len(list(root_2.rglob("*.mp4")))
-    assert rec.dataset.meta.video_keys == rec_vid.dataset.meta.video_keys
-    assert rec.dataset.meta.video_path == rec_vid.dataset.meta.video_path
-    assert rec.dataset.meta.info["total_videos"] == rec_vid.dataset.meta.info["total_videos"]
-
-    converted_info = load_info(root)
+    assert converted_video_keys == rec_vid.dataset.meta.video_keys
+    assert converted_info["video_path"] == rec_vid.dataset.meta.video_path
     reference_info = load_info(root_2)
     assert converted_info == reference_info
 
@@ -316,6 +347,25 @@ def test_converting_to_video(tmp_path):
         assert pf_rec_vid.exists(), f"Missing parquet file: {rel_path}"
         assert compare_parquet_files(pf_rec, pf_rec_vid), f"Parquet data mismatch in {rel_path}"
 
+    episodes_rec = sorted((root / "meta" / "episodes").rglob("*.parquet"))
+    episodes_rec_vid = sorted((root_2 / "meta" / "episodes").rglob("*.parquet"))
+    assert len(episodes_rec) == len(
+        episodes_rec_vid
+    ), f"Different number of episode metadata files: {len(episodes_rec)} vs {len(episodes_rec_vid)}"
+
+    for ep_rec in episodes_rec:
+        rel_path = ep_rec.relative_to(root)
+        ep_rec_vid = root_2 / rel_path
+        assert ep_rec_vid.exists(), f"Missing episode metadata file: {rel_path}"
+        assert compare_parquet_files(ep_rec, ep_rec_vid), f"Episode metadata mismatch in {rel_path}"
+
+    tasks_rec = root / "meta" / "tasks.parquet"
+    tasks_rec_vid = root_2 / "meta" / "tasks.parquet"
+    assert tasks_rec.exists() and tasks_rec_vid.exists(), "tasks.parquet missing in one of the datasets"
+    df_tasks_rec = pd.read_parquet(tasks_rec).sort_index()
+    df_tasks_vid = pd.read_parquet(tasks_rec_vid).sort_index()
+    assert_frame_equal(df_tasks_rec, df_tasks_vid)
+
 
 @pytest.mark.skip  # manual test
 def test_benchmark_lerobot(tmp_path):
@@ -328,8 +378,8 @@ def test_benchmark_lerobot(tmp_path):
         single_arm=False,
         play_sound=False,
         task="test",
-        image_writer_processes=8,
-        image_writer_threads=16,
+        image_writer_processes=0,
+        image_writer_threads=12,
         cameras=cameras,
     )
     rec.state = RecState.RECORDING
@@ -357,74 +407,3 @@ def test_benchmark_lerobot(tmp_path):
 
     print(f"  Mean time per frame: {end_time*1000:.2f} ms")
     print(f"  Save episode time:   {save_time:.2f} s")
-
-def test_benchmark_lerobot_compression(tmp_path):
-    """Benchmark test for LeRobot dataset operations."""
-    root = tmp_path / "lerobot_1"
-    cameras = [CameraConfig(name="left", frame_width=640, frame_height=480),
-               CameraConfig(name="right", frame_width=640, frame_height=480),
-               CameraConfig(name="mid", frame_width=640, frame_height=480),
-               ]
-    rec_1 = Recorder(
-        repo_id="test",
-        root=root,
-        single_arm=False,
-        play_sound=False,
-        task="test",
-        image_writer_processes=8,
-        image_writer_threads=16,
-        cameras=cameras,
-        compress_level=0 # no compression
-    )
-    rec_1.state = RecState.RECORDING
-    rec_1.start_recording()
-    root = tmp_path / "lerobot_2"
-    rec_2 = Recorder(
-        repo_id="test",
-        root=root,
-        single_arm=False,
-        play_sound=False,
-        task="test",
-        image_writer_processes=8,
-        image_writer_threads=16,
-        cameras=cameras,
-        compress_level=1 # lowest compression
-    )
-    rec_2.state = RecState.RECORDING
-    rec_2.start_recording()
-
-    N = 50
-    data_s = []
-    for _ in range(N):
-        left = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
-        right = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
-        mid = np.random.randint(0, 256, size=(480, 640, 3), dtype=np.uint8)
-        left_joints = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
-        right_joints = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
-        left_joints_target = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
-        right_joints_target = {f"joint_{j}.pos": np.random.uniform(-np.pi, np.pi) for j in range(7)}
-        data = dict(left_joints=left_joints,
-            right_joints=right_joints,
-            left_joints_target=left_joints_target,
-            right_joints_target=right_joints_target,
-            cams={"observation.images.left": left,
-                  "observation.images.right": right,
-                  "observation.images.mid": mid,
-
-                  })
-        data_s.append(data)
-
-    start_frame_1 = time.perf_counter()
-    for i in range(N):
-        rec_1.add_observation(**data_s[i])
-    rec_1.dataset.save_episode()
-    save_time_1 = time.perf_counter() - start_frame_1
-
-    start_frame_2 = time.perf_counter()
-    for i in range(N):
-        rec_2.add_observation(**data_s[i])
-    rec_2.dataset.save_episode()
-    save_time_2 = time.perf_counter() - start_frame_2
-
-    print(f'{save_time_1=} {save_time_2=}')
-    assert save_time_2 < save_time_1
