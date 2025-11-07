@@ -7,7 +7,8 @@ import asyncio
 import datetime
 import logging
 import multiprocessing as mp
-
+from packaging.version import Version
+from importlib.metadata import version
 
 from piper_teleop.config import TelegripConfig, config
 from piper_teleop.robot_server.camera import CameraStreamer, SharedCameraData
@@ -91,6 +92,7 @@ def main():
             if cam_config.mode == CameraMode.RECORDING or cam_config.mode == CameraMode.HYBRID:
                 num_recording_cams += 1
         assert num_recording_cams > 0, "There must be at least one camera in recording or hybrid mode"
+        assert Version(version("lerobot")) >= Version("0.4.0"), f"lerobot >= 0.4.0 required"
 
     shared_data = SharedCameraData(configs=config.camera_configs)
 
