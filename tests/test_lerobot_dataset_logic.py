@@ -238,20 +238,12 @@ def test_recorder_state(tmp_path):
 def test_converting_to_video(tmp_path, use_cli_converter):
     root = tmp_path / "lerobot"
     cameras = [CameraConfig(name="left", frame_width=640, frame_height=480)]
-    rec = Recorder(repo_id="test", root=root, single_arm=False, play_sound=False, task="test", cameras=cameras)
+    rec = Recorder(repo_id="test", root=root, task="test",  play_sound=False, cameras=cameras, use_video=False)
     root_2 = tmp_path / "lerobot_2"
-    rec_vid = Recorder(
-        repo_id="test",
-        root=root_2,
-        single_arm=False,
-        play_sound=False,
-        task="test",
-        cameras=cameras,
-        use_video=True,
-    )
+    rec_vid = Recorder(repo_id="test", root=root_2, play_sound=False,task="test", cameras=cameras,use_video=True, convert_images_to_video=True)
     rec.start_recording()
     rec_vid.start_recording()
-    NUM_EP = 2
+    NUM_EP = 3
     NUM_FRAMES = 5
 
     np.random.seed(42)
@@ -287,6 +279,7 @@ def test_converting_to_video(tmp_path, use_cli_converter):
     rec.dataset.finalize()
     rec_vid.dataset.finalize()
 
+
     # Verify initial state
     image_parquet = next(root.glob("data/chunk-*/*.parquet"))
     video_parquet = next(root_2.glob("data/chunk-*/*.parquet"))
@@ -313,7 +306,10 @@ def test_converting_to_video(tmp_path, use_cli_converter):
         env = {**os.environ, "HF_HOME": str(tmp_path / "hf_cache")}
         subprocess.run([sys.executable, str(script_path), str(rec_dataset_path)], check=True, env=env)
     else:
-        convert_image_dataset_to_video(rec.dataset)
+            convert_image_dataset_to_video(rec.dataset.root)
+
+    root = root.with_name(root.name + '_video')
+    rec.dataset = LeRobotDataset(root=root, repo_id=rec.repo_id)
 
     converted_info = load_info(root)
     converted_video_keys = [key for key, ft in converted_info["features"].items() if ft["dtype"] == "video"]
@@ -330,9 +326,20 @@ def test_converting_to_video(tmp_path, use_cli_converter):
     assert converted_info == reference_info
 
     # Compare non-parquet files with checksums (they should be byte-identical)
-    files_rec = snapshot_files(root, exclude_patterns=[".parquet"])
-    files_rec_vid = snapshot_files(root_2, exclude_patterns=[".parquet"])
+    files_rec = snapshot_files(root, exclude_patterns=[".parquet", "stats.json"])
+    files_rec_vid = snapshot_files(root_2, exclude_patterns=[".parquet", "stats.json"])
     assert files_rec == files_rec_vid, "Non-parquet files don't match!"
+
+    # Compare stats.json as JSON (dict key order can differ)
+    import json
+    stats_rec = json.load(open(root / "meta" / "stats.json"))
+    stats_rec_vid = json.load(open(root_2 / "meta" / "stats.json"))
+    for key in stats_rec:
+        assert key in stats_rec_vid, f"Missing key in converted stats: {key}"
+        for stat in stats_rec[key]:
+            assert stat in stats_rec_vid[key], f"Missing stat {key}.{stat}"
+            v1, v2 = np.array(stats_rec[key][stat]), np.array(stats_rec_vid[key][stat])
+            assert np.allclose(v1, v2, rtol=1e-6, atol=1e-9), f"Stats differ: {key}.{stat}"
 
     # Compare parquet files by data content (checksums may differ due to metadata)
     parquet_rec = sorted(root.rglob("*.parquet"))
