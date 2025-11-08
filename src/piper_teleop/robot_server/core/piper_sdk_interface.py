@@ -10,8 +10,8 @@ except ImportError:
     C_PiperInterface_V2: Any = None  # For type checking and docs
 
 JOINT_LIMITS_RAD = {
-    "min": [-2.6179, 0.0, -2.967, -1.745, -1.22, -2.09439],
-    "max": [2.6179, 3.14, 0.0, 1.745, 1.22, 2.09439],
+    "min": [-2.6179, 0.0, -2.967, -1.745, -1.22, -1.5],
+    "max": [2.6179, 3.14, 0.0, 1.745, 1.22, 1.5],
 }
 DEG_TO_RAD = 0.017444
 RAD_TO_DEG = 1 / DEG_TO_RAD

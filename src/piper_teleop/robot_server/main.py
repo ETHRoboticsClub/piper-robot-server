@@ -66,6 +66,7 @@ def main():
     parser.add_argument("--record", action="store_true", help="Enable recording")
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
+    parser.add_argument("--leader", action="store_true", help="Enable Leader-Follower setup")
     parser.add_argument(
         "--log-level",
         default="info",
@@ -84,6 +85,7 @@ def main():
     config.resume = args.resume
     config.repo_id = args.repo_id
     config.enable_keyboard = args.keyboard
+    config.use_leader = args.leader
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
     if config.record:
