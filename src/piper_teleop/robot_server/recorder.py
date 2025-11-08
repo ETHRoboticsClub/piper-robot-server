@@ -1,75 +1,21 @@
 import atexit
 import logging
 import time
+from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import PIL.Image
-import pyarrow.parquet as pq
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.utils import DEFAULT_VIDEO_PATH, write_info
+from lerobot.datasets.video_utils import VideoEncodingManager
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
-from lerobot.utils.visualization_utils import log_rerun_data, _init_rerun
+from lerobot.utils.visualization_utils import log_rerun_data, init_rerun
 
 from piper_teleop.robot_server.camera.camera_config import CameraConfig
-from piper_teleop.robot_server.camera.camera_streamer import SharedCameraData
+from piper_teleop.robot_server.recorder_utils import convert_image_dataset_to_video
 
 logger = logging.getLogger(__name__)
-
-from enum import Enum, auto
-
-import lerobot.datasets.image_writer as image_writer_module
-from lerobot.datasets.image_writer import image_array_to_pil_image
-
-
-def convert_image_dataset_to_video(dataset: LeRobotDataset):
-    """Convert a dataset recorded with image frames into the canonical video layout."""
-    if dataset.num_episodes == 0:
-        return
-    logger.info("converting images to video")
-    import shutil
-
-    image_keys = list(dataset.meta.image_keys)
-    if not image_keys:
-        return
-
-    # Step 1: Update metadata to video format
-    for key in image_keys:
-        dataset.meta.info["features"][key]["dtype"] = "video"
-    dataset.meta.info["video_path"] = DEFAULT_VIDEO_PATH
-    write_info(dataset.meta.info, dataset.meta.root)
-    dataset.meta.load_metadata()
-
-    # Step 2: Encode videos for each episode
-    for episode_index in range(dataset.num_episodes):
-        dataset.encode_episode_videos(episode_index)
-
-    # Step 3: Regenerate parquet files without image columns
-    # (Video datasets don't store image data in parquet)
-    for episode_index in range(dataset.num_episodes):
-        parquet_path = dataset.root / dataset.meta.get_data_file_path(episode_index)
-
-        # Load existing parquet data
-        table = pq.read_table(parquet_path)
-
-        # Remove image columns (they're now in videos)
-        columns_to_keep = [col for col in table.schema.names if not col.startswith("observation.images.")]
-        table_without_images = table.select(columns_to_keep)
-
-        # Save back to parquet
-        pq.write_table(table_without_images, parquet_path)
-
-    dataset.meta.info["total_videos"] = dataset.num_episodes * len(dataset.meta.video_keys)
-    write_info(dataset.meta.info, dataset.meta.root)
-    dataset.meta.load_metadata()
-
-    # Step 4: Clean up images directory
-    images_dir = dataset.root / "images"
-    if images_dir.exists():
-        shutil.rmtree(images_dir)
-
 
 class RecState(Enum):
     INIT = auto()
@@ -93,18 +39,14 @@ class Recorder:
         robot_type="piper",
         play_sound=True,
         use_video=False,
-        image_writer_processes=1,
-        image_writer_threads=8,
+        image_writer_processes=0,
+        image_writer_threads=12,
         display_data=False,
-        compress_level=1
+        convert_images_to_video=False
     ):
-        self.compress_level  = compress_level
-        if self.compress_level:
-            self._apply_compression_patch()
-
         if use_video is False:
             logger.info("Init recorder in fast mode. Images will be converted to video at the end of recording")
-            self.convert_images_to_video = True
+            self.convert_images_to_video = convert_images_to_video
         else:
             self.convert_images_to_video = False
         # Features
@@ -133,6 +75,7 @@ class Recorder:
         self.fps = fps
         self.robot_type = robot_type
         self.dataset: Optional[LeRobotDataset] = None
+        self.dataset_manager: Optional[VideoEncodingManager] = None
         self.image_writer_processes = image_writer_processes
         self.image_writer_threads = image_writer_threads
         self.use_video = use_video
@@ -144,23 +87,6 @@ class Recorder:
         self.display_data = display_data
 
         atexit.register(self.exit)
-
-    def _apply_compression_patch(self):
-        def _patched_write_image(image: np.ndarray | PIL.Image.Image, fpath: Path):
-            """Patched version of write_image with low compression."""
-            try:
-                if isinstance(image, np.ndarray):
-                    img = image_array_to_pil_image(image)
-                elif isinstance(image, PIL.Image.Image):
-                    img = image
-                else:
-                    raise TypeError(f"Unsupported image type: {type(image)}")
-                img.save(fpath, compress_level=self.compress_level)
-            except Exception as e:
-                print(f"Error writing image {fpath}: {e}")
-
-        image_writer_module.write_image = _patched_write_image
-        logger.info(f"Applied low compression patch with compress_level={self.compress_level}")
 
     def __exit__(self, exc_type, exc, tb):
         self.exit()
@@ -207,9 +133,10 @@ class Recorder:
             image_writer_threads=self.image_writer_threads,
         )
         if self.display_data:
-            _init_rerun(session_name="recording")
+            init_rerun(session_name="recording")
 
         self.dataset = dataset
+        self.dataset_manager = VideoEncodingManager(dataset)
 
     def start_recording(self):
         logger.info("start recording")
@@ -235,8 +162,11 @@ class Recorder:
                 + [right_joints_target[f"joint_{i}.pos"] for i in range(self.dof)],
                 dtype=np.float32,
             )
-            frame = {"observation.state": state, "action": target, **cams}
-            self.dataset.add_frame(frame, self.task)  # type: ignore
+            frame = {"observation.state": state,
+                     "action": target,
+                     "task": self.task,
+                     **cams}
+            self.dataset.add_frame(frame)  # type: ignore
 
     def show_data(self,
                      left_joints,
@@ -266,8 +196,9 @@ class Recorder:
 
     def _end_recording(self):
         self._delete_episodes()
+        self.dataset_manager.__exit__('cleanup', None, None)
         if self.convert_images_to_video:
-            convert_image_dataset_to_video(self.dataset)
+            convert_image_dataset_to_video(self.dataset.root)
             # avoid twice conversion
             self.convert_images_to_video = False
         self.events["stop_recording"] = False
@@ -294,7 +225,7 @@ class Recorder:
         """
         if self.events["rerecord_episode"]:
             # From anywhere, go reset env to rerecord
-            self._transition(RecState.RESET_ENV, "rerecording, reset environment", self._delete_episodes)
+            self._transition(RecState.RESET_ENV, "Deleted episode", self._delete_episodes)
             self.events["rerecord_episode"] = False
             self.events["exit_early"] = False
 
