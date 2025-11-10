@@ -7,8 +7,9 @@ import asyncio
 import datetime
 import logging
 import multiprocessing as mp
-from packaging.version import Version
 from importlib.metadata import version
+
+from packaging.version import Version
 
 from piper_teleop.config import TelegripConfig, config
 from piper_teleop.robot_server.camera import CameraStreamer, SharedCameraData
@@ -67,6 +68,7 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
     parser.add_argument("--leader", action="store_true", help="Enable Leader-Follower setup")
+    parser.add_argument("--policy", action="store_true", help="Enable policy control")
     parser.add_argument(
         "--log-level",
         default="info",
@@ -86,6 +88,7 @@ def main():
     config.repo_id = args.repo_id
     config.enable_keyboard = args.keyboard
     config.use_leader = args.leader
+    config.use_policy = args.policy
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
     if config.record:

@@ -1,14 +1,15 @@
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 
 from piper_teleop.robot_server.lerobot_policy import LerobotPolicy
 
-@pytest.mark.skip()
+
+# @pytest.mark.skip()
 def test_predict_action():
-    policy_path = Path(__file__).parent.parent /'policy_checkpoint'/'checkpoints'/'last'/'pretrained_model'
-    repo_id = 'ETHRC/pick_and_place'
+    policy_path = Path(__file__).parent.parent / "policy_checkpoint" / "checkpoints" / "last" / "pretrained_model"
+    repo_id = "ETHRC/pick_and_place"
 
     policy = LerobotPolicy(policy_path, repo_id)
 

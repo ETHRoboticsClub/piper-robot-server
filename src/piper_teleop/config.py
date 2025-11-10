@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         "right_arm": {"name": "Right Arm", "enabled": True},
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
-        "ground_height": -0.02,
+        "ground_height": -0.05,
     },
     "control": {
         "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -43,16 +43,7 @@ DEFAULT_CONFIG = {
         "movement_penalty_weight": 0.01,
     },
     "cameras": {
-        "wrist1": {
-            "type": "monocular",
-            "mode": "recording",
-            "fps": "30",
-            "frame_width": "640",
-            "frame_height": "480",
-            "capture_api": cv2.CAP_V4L2,
-            "cam_index": "8",
-        },
-        "wrist2": {
+        "wrist1": {  # Right wrist camera
             "type": "monocular",
             "mode": "recording",
             "fps": "30",
@@ -61,7 +52,16 @@ DEFAULT_CONFIG = {
             "capture_api": cv2.CAP_V4L2,
             "cam_index": "6",
         },
-        "stereo": {
+        "wrist2": {  # Left wrist camera
+            "type": "monocular",
+            "mode": "recording",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "4",
+        },
+        "stereo": {  # Stereo camera
             "type": "stereo",
             "mode": "hybrid",
             "fps": "60",
@@ -70,7 +70,7 @@ DEFAULT_CONFIG = {
             "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
             "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
             "capture_api": cv2.CAP_V4L2,
-            "cam_index": "4",
+            "cam_index": "8",
         },
     },
 }
@@ -239,6 +239,8 @@ class TelegripConfig:
     enable_vr: bool = True
     enable_keyboard: bool = False
     use_leader: bool = False
+    use_policy: bool = False
+    policy_path: str = "/home/alex/ethrc/piper-robot-server/policy_checkpoint/checkpoint_4b/last/pretrained_model"
     enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"

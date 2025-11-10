@@ -7,8 +7,8 @@ from piper_teleop.robot_server.recorder_utils import convert_image_dataset_to_vi
 # Force logging configuration after imports
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    force=True  # Python 3.8+ - forces reconfiguration
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True,  # Python 3.8+ - forces reconfiguration
 )
 
 
@@ -36,10 +36,9 @@ Examples:
         print("DRY RUN MODE - No changes will be made")
         print(f"Would convert dataset at: {dataset_path}")
         return
-    convert_image_dataset_to_video(dataset_path)
-
+    convert_image_dataset_to_video(dataset_path, image_writer_processes=2, image_writer_threads=12)
 
 
 if __name__ == "__main__":
-    logging.getLogger('piper_teleop.robot_server.recorder').setLevel(logging.INFO)
+    logging.getLogger("piper_teleop.robot_server.recorder").setLevel(logging.INFO)
     main()
