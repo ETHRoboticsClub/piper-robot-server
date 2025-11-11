@@ -240,7 +240,10 @@ class TelegripConfig:
     enable_keyboard: bool = False
     use_leader: bool = False
     use_policy: bool = False
-    policy_path: str = "/home/alex/ethrc/piper-robot-server/policy_checkpoint/checkpoint_4b/last/pretrained_model"
+    policy_path: str = (
+        "/home/alex/ethrc/piper-robot-server/policy_checkpoint/checkpoint_new_data/checkpoints/last/pretrained_model"
+    )
+    policy_repo_id: str = "ETHRC/pick_and_place_v2"
     enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"

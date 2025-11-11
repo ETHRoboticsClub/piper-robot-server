@@ -55,7 +55,7 @@ class ControlLoop:
 
         if self.use_policy:
             policy_path = config.policy_path
-            repo_id = "ETHRC/pick_and_place"
+            repo_id = config.policy_repo_id
             self.policy = LerobotPolicy(policy_path, repo_id)
 
         self.shared_data = shared_data
@@ -246,10 +246,9 @@ class ControlLoop:
             await asyncio.sleep(0.001)
             sleep_time = time.perf_counter() - sleep_start
 
-            if self.config.record:
-                dt_s = time.perf_counter() - iteration_start
-                print(f"\rFPS: {1/dt_s}", end="", flush=True)
-                busy_wait(1 / self.config.fps - dt_s)
+            dt_s = time.perf_counter() - iteration_start
+            print(f"\rFPS: {1/dt_s}", end="", flush=True)
+            busy_wait(1 / self.config.fps - dt_s)
 
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time

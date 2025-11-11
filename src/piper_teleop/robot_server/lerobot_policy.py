@@ -8,7 +8,7 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetad
 from lerobot.policies.factory import make_policy, make_pre_post_processors
 from lerobot.policies.utils import make_robot_action
 from lerobot.processor import make_default_processors
-from lerobot.scripts.lerobot_record import predict_action, rename_stats
+from lerobot.scripts.lerobot_record import OBS_STR, build_dataset_frame, predict_action, rename_stats
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,10 @@ class LerobotPolicy:
         self.repo_id = repo_id
         self.device = torch.device(device)
 
-        self.dataset = LeRobotDataset(repo_id)
+        self.dataset = LeRobotDataset(repo_id, batch_encoding_size=1)
         self.dataset_meta = self.dataset.meta
         policy_config = PreTrainedConfig.from_pretrained(self.policy_path)
+        policy_config.pretrained_path = self.policy_path
 
         # Override device in config to match desired device
         policy_config.device = str(self.device)
@@ -48,15 +49,14 @@ class LerobotPolicy:
             make_default_processors()
         )
 
-    def convert_actions_to_dict(self, actions: np.ndarray) -> tuple[dict, dict]:
+    def convert_actions_to_dict(self, actions: dict) -> tuple[dict, dict]:
         dict_left = dict()
         dict_right = dict()
-        for i, name in enumerate(self.dataset_meta.features["action"]["names"]):
-            action = float(actions[i])
-            if name[:2] == "L.":
-                dict_left[name.replace("L.", "") + ".pos"] = action
-            elif name[:2] == "R.":
-                dict_right[name.replace("R.", "") + ".pos"] = action
+        for k, v in actions.items():
+            if k.startswith("L."):
+                dict_left[k.replace("L.", "") + ".pos"] = v
+            elif k.startswith("R."):
+                dict_right[k.replace("R.", "") + ".pos"] = v
             else:
                 raise Exception("wrong name")
         return dict_left, dict_right
@@ -68,17 +68,19 @@ class LerobotPolicy:
         cams: dict[str, np.ndarray],
         dof: int = 7,
     ) -> np.ndarray:
-        state = np.array(
-            [left_joints[f"joint_{i}.pos"] for i in range(dof)] + [right_joints[f"joint_{i}.pos"] for i in range(dof)],
-            dtype=np.float32,
-        )
-        batch = {
-            "observation.state": state,
-            **cams,
-        }
+        obs = {k.replace("observation.images.", ""): v for k, v in cams.items()}
+
+        for left_joint in left_joints:
+            obs["L." + left_joint.replace(".pos", "")] = left_joints[left_joint]
+        for right_joint in right_joints:
+            obs["R." + right_joint.replace(".pos", "")] = right_joints[right_joint]
+
+        batch = self.robot_observation_processor(obs)
+
+        observation_frame = build_dataset_frame(self.dataset.features, batch, prefix=OBS_STR)
 
         action_values = predict_action(
-            observation=batch,
+            observation=observation_frame,
             policy=self.policy,
             device=self.device,
             preprocessor=self.preprocessor,
@@ -88,9 +90,7 @@ class LerobotPolicy:
             robot_type=self.dataset_meta.robot_type,
         )
 
-        # act_processed = make_robot_action(action_values, self.dataset_meta.features)
-        # act_processed = self.robot_action_processor((act_processed, batch))
+        act_processed = make_robot_action(action_values, self.dataset_meta.features)
+        act_processed = self.robot_action_processor((act_processed, obs))
 
-        action_values = action_values.cpu().numpy().squeeze(0)
-
-        return self.convert_actions_to_dict(action_values)
+        return self.convert_actions_to_dict(act_processed)
