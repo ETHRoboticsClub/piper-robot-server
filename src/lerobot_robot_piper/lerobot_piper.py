@@ -1,28 +1,33 @@
+import cv2
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 from lerobot.cameras import CameraConfig, make_cameras_from_configs
-from lerobot.cameras.opencv import OpenCVCameraConfig
+from lerobot.cameras.opencv import OpenCVCameraConfig, OpenCVCamera
 from lerobot.robots import Robot, RobotConfig
 
 from piper_teleop.config import TelegripConfig
+from piper_teleop.robot_server.camera import CameraType
+from piper_teleop.robot_server.camera.stereo_camera import crop_stereo_image
 from piper_teleop.robot_server.core import RobotInterface
+
+import piper_teleop.robot_server.camera as  piper_camera
 
 config_global = TelegripConfig()
 
 
 def _default_cameras():
-    return {
+    cameras = {
         c.name: OpenCVCameraConfig(
             index_or_path=c.cam_index,
             fps=30,
-            width=c.frame_width,
-            height=c.frame_height,
+            width=c.frame_width if not c.type == CameraType.STEREO else c.capture_frame_width,
+            height=c.frame_height if not c.type == CameraType.STEREO else c.capture_frame_height,
         )
         for c in config_global.camera_configs
     }
-
+    return cameras
 
 @RobotConfig.register_subclass("piper")
 @dataclass
@@ -39,10 +44,19 @@ class LerobotPiper(Robot):
     def __init__(self, config: LerobotPiperConfig, dof_arm=7):
         super().__init__(config)
         self.config = config
+        self.stereo_config: Optional[piper_camera.CameraConfig] = self._get_stereo_cam_settings()
         self.robot = RobotInterface(config_global)
         self.cameras = make_cameras_from_configs(config.cameras)
         self.joints = [f"L.joint_{i}" for i in range(dof_arm)] + [f"R.joint_{i}" for i in range(dof_arm)]
         self.dof_arm = dof_arm
+
+    def _get_stereo_cam_settings(self):
+        stereo_cams = [c for c in config_global.camera_configs if c.type == CameraType.STEREO]
+        assert len(stereo_cams) <= 1
+        if len(stereo_cams) == 1:
+            return stereo_cams[0]
+        else:
+            return None
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
@@ -64,8 +78,12 @@ class LerobotPiper(Robot):
 
     def connect(self, calibrate: bool = True) -> None:
         if not self.config.no_robot:
-            for cam in self.cameras.values():
+            for name, cam in self.cameras.items():
                 cam.connect()
+                if 'stereo' in name:
+                    cam: OpenCVCamera = cam
+                    cam.videocapture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                cam.videocapture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             self.robot.connect()
         else:
             self.robot.setup_kinematics()
@@ -103,8 +121,16 @@ class LerobotPiper(Robot):
         # Only read cameras if not in no_robot mode
         if not self.config.no_robot:
             for cam_key, cam in self.cameras.items():
-                obs_dict[cam_key] = cam.async_read()
-
+                frame_raw = cam.async_read()
+                if 'stereo' in cam_key:
+                    # Edge Case cropping
+                    frame, frame_rgb_right, cropped_left, cropped_right = crop_stereo_image(frame=frame_raw,
+                                      frame_width=self.stereo_config.frame_width,
+                                      frame_height=self.stereo_config.frame_height,
+                                      edge_crop=self.stereo_config.edge_crop)
+                else:
+                    frame = frame_raw
+                obs_dict[cam_key] = frame
         return obs_dict
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
@@ -125,5 +151,4 @@ class LerobotPiper(Robot):
         else:
             self.robot.left_robot.send_action({key: float(value) for key, value in dict_left.items()})
             self.robot.right_robot.send_action({key: float(value) for key, value in dict_right.items()})
-
         return action

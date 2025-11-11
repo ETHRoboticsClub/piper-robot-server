@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 import cv2
 import yaml
-
 from piper_teleop.robot_server.camera import CameraConfig, CameraMode, CameraType, from_config
 from piper_teleop.utils import get_absolute_path
 
@@ -61,17 +60,17 @@ DEFAULT_CONFIG = {
             "capture_api": cv2.CAP_V4L2,
             "cam_index": "6",
         },
-        # "stereo": {
-        #     "type": "stereo",
-        #     "mode": "hybrid",
-        #     "fps": "60",
-        #     "frame_width": "640",
-        #     "frame_height": "480",
-        #     "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
-        #     "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
-        #     "capture_api": cv2.CAP_V4L2,
-        #     "cam_index": "8",
-        # },
+        "stereo": {
+            "type": "stereo",
+            "mode": "hybrid",
+            "fps": "60",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+            "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "8",
+        },
     },
 }
 
