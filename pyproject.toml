@@ -32,6 +32,7 @@ robotserver = "piper_teleop.robot_server.main:main_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["lerobot_robot_piper*"]
 
 [tool.setuptools.package-data]
 "piper_teleop.web_server" = ["web-ui/**/*"]

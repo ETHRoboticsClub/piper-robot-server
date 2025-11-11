@@ -80,6 +80,9 @@ class CameraConfig:
     def __str__(self):
         return f"CameraConfig(name={self.name}, type={self.type.value}, mode={self.mode.value}, frame_width={self.frame_width}, frame_height={self.frame_height}, capture_api={self.capture_api}), cam_indices={self.cam_index}"
 
+    def __repr__(self):
+        return self.__str__()
+
     def to_dict(self) -> dict:
         return {
             "name": self.name,
