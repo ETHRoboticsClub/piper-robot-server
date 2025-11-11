@@ -90,3 +90,4 @@ camera_streaming/calibration
 data/
 # generated files
 src/piper_teleop/web_server/nginx/nginx-tactile-teleop.conf
+policy_checkpoint
