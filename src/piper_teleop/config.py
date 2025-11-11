@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         "right_arm": {"name": "Right Arm", "enabled": True},
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
-        "ground_height": -0.02,
+        "ground_height": -0.05,
     },
     "control": {
         "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
             "frame_width": "640",
             "frame_height": "480",
             "capture_api": cv2.CAP_V4L2,
-            "cam_index": "8",
+            "cam_index": "4",
         },
         "wrist2": {
             "type": "monocular",
@@ -61,17 +61,17 @@ DEFAULT_CONFIG = {
             "capture_api": cv2.CAP_V4L2,
             "cam_index": "6",
         },
-        "stereo": {
-            "type": "stereo",
-            "mode": "hybrid",
-            "fps": "60",
-            "frame_width": "640",
-            "frame_height": "480",
-            "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
-            "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
-            "capture_api": cv2.CAP_V4L2,
-            "cam_index": "4",
-        },
+        # "stereo": {
+        #     "type": "stereo",
+        #     "mode": "hybrid",
+        #     "fps": "60",
+        #     "frame_width": "640",
+        #     "frame_height": "480",
+        #     "capture_frame_width": "3200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+        #     "capture_frame_height": "1200",  # NOTE: This is hardcoded to the highest resolution as otherwise images are very low quality
+        #     "capture_api": cv2.CAP_V4L2,
+        #     "cam_index": "8",
+        # },
     },
 }
 

@@ -2,16 +2,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from lerobot.robots import Robot
-
 from lerobot.cameras import CameraConfig, make_cameras_from_configs
 from lerobot.cameras.opencv import OpenCVCameraConfig
-from lerobot.robots import RobotConfig
+from lerobot.robots import Robot, RobotConfig
 
 from piper_teleop.config import TelegripConfig
 from piper_teleop.robot_server.core import RobotInterface
 
 config_global = TelegripConfig()
+
 
 def _default_cameras():
     return {
@@ -23,6 +22,7 @@ def _default_cameras():
         )
         for c in config_global.camera_configs
     }
+
 
 @RobotConfig.register_subclass("piper")
 @dataclass
@@ -46,12 +46,10 @@ class LerobotPiper(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        return {
-            cam: (self.cameras[cam].height, self.cameras[cam].width, 3) for cam in self.cameras
-        }
+        return {cam: (self.cameras[cam].height, self.cameras[cam].width, 3) for cam in self.cameras}
 
     def action_features(self) -> dict:
-        return {j + '.pos': float for j in self.joints}
+        return {j + ".pos": float for j in self.joints}
 
     def observation_features(self) -> dict:
         action_features = self.action_features()
@@ -77,6 +75,7 @@ class LerobotPiper(Robot):
             self.robot.disconnect()
             for cam in self.cameras.values():
                 cam.disconnect()
+
     @property
     def is_calibrated(self) -> bool:
         return True
@@ -95,8 +94,8 @@ class LerobotPiper(Robot):
         # Read arm position
         robot_obs = self.robot.get_observation()
         state = np.array(
-            [robot_obs['left'][f"joint_{i}.pos"] for i in range(self.dof_arm)]
-            + [robot_obs['right'][f"joint_{i}.pos"] for i in range(self.dof_arm)],
+            [robot_obs["left"][f"joint_{i}.pos"] for i in range(self.dof_arm)]
+            + [robot_obs["right"][f"joint_{i}.pos"] for i in range(self.dof_arm)],
             dtype=np.float32,
         )
         obs_dict = dict(zip(self.joints, state))
@@ -112,19 +111,19 @@ class LerobotPiper(Robot):
         dict_left = dict()
         dict_right = dict()
         for name in action:
-            if name[:2] == 'L.':
-                dict_left[name.replace('L.', '') + '.pos'] = action[name]
-            elif name[:2] == 'R.':
-                dict_right[name.replace('R.', '') + '.pos'] = action[name]
+            if name[:2] == "L.":
+                dict_left[name.replace("L.", "") + ".pos"] = action[name]
+            elif name[:2] == "R.":
+                dict_right[name.replace("R.", "") + ".pos"] = action[name]
             else:
-                raise Exception(f'wrong name: {name}')
+                raise Exception(f"wrong name: {name}")
 
         if self.config.no_robot:
             q_1 = [dict_left[k] for k in sorted(dict_left)[:6]]
             q_2 = [dict_right[k] for k in sorted(dict_right)[:6]]
             self.robot.ik_solver.vis.display(np.array(q_1 + q_2))
         else:
-            self.robot.left_robot.send_action(dict_left)
-            self.robot.right_robot.send_action(dict_right)
+            self.robot.left_robot.send_action({key: float(value) for key, value in dict_left.items()})
+            self.robot.right_robot.send_action({key: float(value) for key, value in dict_right.items()})
 
         return action
