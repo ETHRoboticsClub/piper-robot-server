@@ -1,18 +1,17 @@
-import cv2
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import cv2
 import numpy as np
 from lerobot.cameras import CameraConfig, make_cameras_from_configs
-from lerobot.cameras.opencv import OpenCVCameraConfig, OpenCVCamera
+from lerobot.cameras.opencv import OpenCVCamera, OpenCVCameraConfig
 from lerobot.robots import Robot, RobotConfig
 
+import piper_teleop.robot_server.camera as piper_camera
 from piper_teleop.config import TelegripConfig
 from piper_teleop.robot_server.camera import CameraType
 from piper_teleop.robot_server.camera.stereo_camera import crop_stereo_image
 from piper_teleop.robot_server.core import RobotInterface
-
-import piper_teleop.robot_server.camera as  piper_camera
 
 config_global = TelegripConfig()
 
@@ -24,10 +23,12 @@ def _default_cameras():
             fps=30,
             width=c.frame_width if not c.type == CameraType.STEREO else c.capture_frame_width,
             height=c.frame_height if not c.type == CameraType.STEREO else c.capture_frame_height,
+            fourcc="MJPG" if c.type == CameraType.STEREO else None,
         )
         for c in config_global.camera_configs
     }
     return cameras
+
 
 @RobotConfig.register_subclass("piper")
 @dataclass
@@ -60,13 +61,18 @@ class LerobotPiper(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        return {cam: (self.cameras[cam].height, self.cameras[cam].width, 3) for cam in self.cameras}
+        return {
+            cam: (self.cameras[cam].height, self.cameras[cam].width, 3) if cam != "stereo" else (480, 640, 3)
+            for cam in self.cameras
+        }
 
+    @property
     def action_features(self) -> dict:
-        return {j + ".pos": float for j in self.joints}
+        return {j: float for j in self.joints}
 
+    @property
     def observation_features(self) -> dict:
-        action_features = self.action_features()
+        action_features = self.action_features
         return {**action_features, **self._cameras_ft}
 
     def is_connected(self) -> bool:
@@ -77,22 +83,18 @@ class LerobotPiper(Robot):
         return robot_connected and cameras_connected
 
     def connect(self, calibrate: bool = True) -> None:
+        for name, cam in self.cameras.items():
+            cam.connect()
         if not self.config.no_robot:
-            for name, cam in self.cameras.items():
-                cam.connect()
-                if 'stereo' in name:
-                    cam: OpenCVCamera = cam
-                    cam.videocapture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-                cam.videocapture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             self.robot.connect()
         else:
             self.robot.setup_kinematics()
 
     def disconnect(self) -> None:
+        for cam in self.cameras.values():
+            cam.disconnect()
         if not self.config.no_robot:
             self.robot.disconnect()
-            for cam in self.cameras.values():
-                cam.disconnect()
 
     @property
     def is_calibrated(self) -> bool:
@@ -117,20 +119,19 @@ class LerobotPiper(Robot):
             dtype=np.float32,
         )
         obs_dict = dict(zip(self.joints, state))
-
-        # Only read cameras if not in no_robot mode
-        if not self.config.no_robot:
-            for cam_key, cam in self.cameras.items():
-                frame_raw = cam.async_read()
-                if 'stereo' in cam_key:
-                    # Edge Case cropping
-                    frame, frame_rgb_right, cropped_left, cropped_right = crop_stereo_image(frame=frame_raw,
-                                      frame_width=self.stereo_config.frame_width,
-                                      frame_height=self.stereo_config.frame_height,
-                                      edge_crop=self.stereo_config.edge_crop)
-                else:
-                    frame = frame_raw
-                obs_dict[cam_key] = frame
+        for cam_key, cam in self.cameras.items():
+            frame_raw = cam.async_read()
+            if "stereo" in cam_key:
+                # Edge Case cropping
+                frame, frame_rgb_right, cropped_left, cropped_right = crop_stereo_image(
+                    frame=frame_raw,
+                    frame_width=self.stereo_config.frame_width,
+                    frame_height=self.stereo_config.frame_height,
+                    edge_crop=self.stereo_config.edge_crop,
+                )
+            else:
+                frame = frame_raw
+            obs_dict[cam_key] = frame
         return obs_dict
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:

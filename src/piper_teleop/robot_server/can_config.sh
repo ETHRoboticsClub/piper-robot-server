@@ -92,7 +92,7 @@
 #-------------------------------------------------------------------------------------------------#
 
 # Predefined number of CAN modules
-EXPECTED_CAN_COUNT=4
+EXPECTED_CAN_COUNT=2
 
 if [ "$EXPECTED_CAN_COUNT" -eq 1 ]; then
     # Default CAN name, can be set by user via command line parameters
@@ -111,8 +111,8 @@ if [ "$EXPECTED_CAN_COUNT" -ne 1 ]; then
     USB_PORTS["3-2.1:1.0"]="left_piper:1000000"
     USB_PORTS["3-2.3:1.0"]="right_piper:1000000"
     # Uncomment for leader setup
-    USB_PORTS["3-4.4:1.0"]="leader_left:1000000"
-    USB_PORTS["3-4.1:1.0"]="leader_right:1000000"
+    # USB_PORTS["3-4.4:1.0"]="leader_left:1000000"
+    # USB_PORTS["3-4.1:1.0"]="leader_right:1000000"
 fi
 
 # Get the current number of CAN modules in the system

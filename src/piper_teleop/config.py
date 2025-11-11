@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import cv2
 import yaml
+
 from piper_teleop.robot_server.camera import CameraConfig, CameraMode, CameraType, from_config
 from piper_teleop.utils import get_absolute_path
 
@@ -42,16 +43,7 @@ DEFAULT_CONFIG = {
         "movement_penalty_weight": 0.01,
     },
     "cameras": {
-        "wrist1": {
-            "type": "monocular",
-            "mode": "recording",
-            "fps": "30",
-            "frame_width": "640",
-            "frame_height": "480",
-            "capture_api": cv2.CAP_V4L2,
-            "cam_index": "4",
-        },
-        "wrist2": {
+        "wrist1": {  # Right Wrist Camera
             "type": "monocular",
             "mode": "recording",
             "fps": "30",
@@ -59,6 +51,15 @@ DEFAULT_CONFIG = {
             "frame_height": "480",
             "capture_api": cv2.CAP_V4L2,
             "cam_index": "6",
+        },
+        "wrist2": {  # Left Wrist Camera
+            "type": "monocular",
+            "mode": "recording",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "4",
         },
         "stereo": {
             "type": "stereo",
