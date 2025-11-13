@@ -10,12 +10,13 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.video_utils import VideoEncodingManager
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import say
-from lerobot.utils.visualization_utils import log_rerun_data, init_rerun
+from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 from piper_teleop.robot_server.camera.camera_config import CameraConfig
 from piper_teleop.robot_server.recorder_utils import convert_image_dataset_to_video
 
 logger = logging.getLogger(__name__)
+
 
 class RecState(Enum):
     INIT = auto()
@@ -42,7 +43,7 @@ class Recorder:
         image_writer_processes=0,
         image_writer_threads=12,
         display_data=False,
-        convert_images_to_video=False
+        convert_images_to_video=False,
     ):
         if use_video is False:
             logger.info("Init recorder in fast mode. Images will be converted to video at the end of recording")
@@ -162,24 +163,22 @@ class Recorder:
                 + [right_joints_target[f"joint_{i}.pos"] for i in range(self.dof)],
                 dtype=np.float32,
             )
-            frame = {"observation.state": state,
-                     "action": target,
-                     "task": self.task,
-                     **cams}
+            frame = {"observation.state": state, "action": target, "task": self.task, **cams}
             self.dataset.add_frame(frame)  # type: ignore
 
-    def show_data(self,
-                     left_joints,
-                     right_joints,
-                     left_joints_target,
-                     right_joints_target,
-                     cams: dict[str, np.ndarray],
-                     ):
-        left_joints = {"L" + k: v for k,v in left_joints.items()}
-        right_joints = {"R" + k: v for k,v in right_joints.items()}
+    def show_data(
+        self,
+        left_joints,
+        right_joints,
+        left_joints_target,
+        right_joints_target,
+        cams: dict[str, np.ndarray],
+    ):
+        left_joints = {"L" + k: v for k, v in left_joints.items()}
+        right_joints = {"R" + k: v for k, v in right_joints.items()}
         obs = {**left_joints, **right_joints, **cams}
-        left_joints_action = {"L" + k: v for k,v in left_joints_target.items()}
-        right_joints_action = {"R" + k: v for k,v in right_joints_target.items()}
+        left_joints_action = {"L" + k: v for k, v in left_joints_target.items()}
+        right_joints_action = {"R" + k: v for k, v in right_joints_target.items()}
         action = {**left_joints_action, **right_joints_action}
         log_rerun_data(observation=obs, action=action)
 
@@ -196,7 +195,7 @@ class Recorder:
 
     def _end_recording(self):
         self._delete_episodes()
-        self.dataset_manager.__exit__('cleanup', None, None)
+        self.dataset_manager.__exit__("cleanup", None, None)
         if self.convert_images_to_video:
             convert_image_dataset_to_video(self.dataset.root)
             # avoid twice conversion
@@ -240,3 +239,24 @@ class Recorder:
 
         if self.events["stop_recording"]:
             self._transition(RecState.FINISHED, "Stop Recording", self._end_recording, None)
+
+    def handle_vr_controller_event(self, event: str):
+        """
+        VR controller controls:
+            →  (B Button): Exit early / advance to next stage.
+                              In RECORDING: save current episode and reset.
+            ←  (A Button) : Re-record current episode (discard + reset env).
+            Esc             : Stop recording and return to INIT (from any state).
+
+        """
+        if event == "rerecord_episode":
+            # From anywhere, go reset env to rerecord
+            self._transition(RecState.RESET_ENV, "Deleted episode", self._delete_episodes)
+
+        if event == "start_stop_recording":
+            if self.state == RecState.INIT:
+                self._transition(RecState.RESET_ENV, "reset environment")
+            elif self.state == RecState.RESET_ENV:
+                self._transition(RecState.RECORDING, "starting recording")
+            elif self.state == RecState.RECORDING:
+                self._transition(RecState.RESET_ENV, None, self._save_episodes, "Episode saved")

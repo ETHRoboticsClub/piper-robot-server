@@ -232,7 +232,12 @@ class ControlLoop:
                     right_joints_target=action_dict["right"],
                     cams=cams,
                 )
-                self.recorder.handle_keyboard_event()
+
+                if right_arm_goal.start_stop_recording is True:
+                    self.recorder.handle_vr_controller_event("start_stop_recording")
+                elif left_arm_goal.discard_recording is True:
+                    self.recorder.handle_vr_controller_event("rerecord_episode")
+
                 if self.config.display_data:
                     self.recorder.show_data(
                         left_joints=obs_dict["left"],
