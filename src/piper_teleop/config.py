@@ -244,8 +244,7 @@ class TelegripConfig:
     # When enable_simulation=False, enable_robot should be True (for hardware)
     enable_robot: bool = True  # Enable hardware robot control
     enable_simulation: bool = False  # Enable simulation mode (PyBullet or Newton)
-    enable_vr: bool = False
-    enable_keyboard: bool = True
+    enable_keyboard: bool = False  # If False, VR control is used
     enable_visualization: bool = False
     autoconnect: bool = False
     log_level: str = "warning"

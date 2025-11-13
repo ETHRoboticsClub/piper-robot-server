@@ -43,10 +43,12 @@ class ControlLoop:
         self.robot_interface = RobotInterface(config)
         self.robot_enabled = config.enable_robot or config.enable_simulation
         self.use_keyboard = config.enable_keyboard
+        self.use_vr = not self.use_keyboard
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
+        if self.use_vr:
+            self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
         self.visualize = config.enable_visualization
-        self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
 
         self.shared_data = shared_data
         if self.config.record:
@@ -138,7 +140,7 @@ class ControlLoop:
         right_arm.origin_transform = right_arm.initial_transform
 
         self.robot_interface.setup_kinematics()
-        if self.config.enable_vr:
+        if self.use_vr:
             await self.api.connect_vr_controller()
         if self.robot_enabled:
             try:
@@ -225,7 +227,7 @@ class ControlLoop:
         """Stop the control loop."""
         if self.use_keyboard:
             self.keyboard_controller.stop()
-        if self.config.enable_vr:
+        if self.use_vr:
             await self.api.disconnect_vr_controller()
         if self.robot_enabled:
             self.robot_interface.disconnect()
