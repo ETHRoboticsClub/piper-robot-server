@@ -8,14 +8,22 @@ import math
 import os
 import tempfile
 
-import casadi
 import meshcat.geometry as mg
 import numpy as np
-import pinocchio as pin
-from pinocchio import casadi as cpin
-from pinocchio.visualize import MeshcatVisualizer
 
 logger = logging.getLogger(__name__)
+
+try:
+    import casadi
+except ImportError:
+    logger.warning("casadi is not installed. Some kinematics features will be unavailable.")
+
+try:
+    import pinocchio as pin
+    from pinocchio import casadi as cpin
+    from pinocchio.visualize import MeshcatVisualizer
+except ImportError:
+    logger.warning("pinocchio is not installed. Some kinematics features will be unavailable.")
 
 
 def matrix_to_xyzrpy(matrix):

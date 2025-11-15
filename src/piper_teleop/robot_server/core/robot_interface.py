@@ -11,7 +11,12 @@ import time
 from typing import Any, Tuple
 
 import numpy as np
-import pinocchio as pin
+
+try:
+    import pinocchio as pin
+except ImportError:
+    import logging
+    logging.getLogger(__name__).warning("pinocchio is not installed. Some features will be unavailable.")
 
 from piper_teleop.config import NUM_JOINTS, TelegripConfig
 
