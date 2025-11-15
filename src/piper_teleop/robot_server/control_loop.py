@@ -20,6 +20,8 @@ from .recorder import Recorder
 import websockets
 import json
 
+websocket_conn = None
+
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,8 @@ class ControlLoop:
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
 
         self.shared_data = shared_data
+        self._prev_sim_joint_positions: np.ndarray | None = None
+        self._prev_sim_time: float | None = None
         if self.config.record:
             self.recorder = Recorder(
                 repo_id=config.repo_id,
@@ -95,7 +99,7 @@ class ControlLoop:
         arm_state.gripper_closed = arm_goal.gripper_closed
         return arm_state
 
-    def update_robot(self, left_arm: ArmState, right_arm: ArmState):
+    async def update_robot(self, left_arm: ArmState, right_arm: ArmState):
         """Update robot with current control goals."""
         start_time_total = time.perf_counter()
         # Measure all IK time together
@@ -105,7 +109,59 @@ class ControlLoop:
             left_arm.target_transform, right_arm.target_transform, visualize=self.visualize
         )
 
-        id_solution_1, id_solution_2 = self.robot_interface.solve_id(ik_solution)
+        simToControl = {0: 0, 1: 6, 2: 1, 3: 7, 4: 2, 5: 8, 6: 3, 7: 9, 8: 4, 9: 10, 10: 5, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15}
+
+        # Default to desired joint state when no feedback is available
+        if ik_solution is None:
+            print("IK solution not found, skipping this cycle.")
+            return
+        
+        q_des = ik_solution.copy()
+        q_dot_des = np.zeros_like(q_des)
+
+        q = q_des.copy()
+        q_dot = q_dot_des.copy()
+
+        if self.simulate:
+            joint_state = await self.ws_request_joint_positions()
+
+            measured_positions, sim_time = joint_state
+            #print(sim_time)
+            feedback_count = min(12, len(measured_positions))
+            q = np.zeros_like(q_des)
+            for i in range(feedback_count):
+                idx = simToControl[i]
+                q[idx] = measured_positions[i]
+
+            if self._prev_sim_joint_positions is None or self._prev_sim_time is None:
+                q_dot = np.zeros_like(q)
+                print("Q dot failed computation due to lack of previous data.")
+                
+                if self._prev_sim_joint_positions is None:
+                    print("No previous joint positions available.")
+
+                if self._prev_sim_time is None:
+                    print("No previous simulation time available.")
+                
+            else:
+                if self._prev_sim_time is None:
+                    print(" Previous Simulation time is unexpectedly None.")
+                    q_dot = np.zeros_like(q)
+                elif sim_time is None:
+                    print("Simulation time is None; setting q_dot to zero.")
+                    q_dot = np.zeros_like(q)
+                elif sim_time <= self._prev_sim_time:
+                    print("Simulation time has not advanced; setting q_dot to zero.")
+                    return
+                else:
+                    dt = sim_time - self._prev_sim_time
+                    q_dot = (q - self._prev_sim_joint_positions) / dt
+
+            self._prev_sim_joint_positions = q.copy()
+            self._prev_sim_time = sim_time
+
+
+        id_solution_1, id_solution_2 = self.robot_interface.solve_id(ik_solution, q, q_dot)
 
         #print("Id solution left:", id_solution_1)
         #print(f"IK Solution: {ik_solution}")
@@ -132,18 +188,21 @@ class ControlLoop:
             #print("Simulating sending commands to robot...")
             for joint_id in range(1, 7):
 
-                self.ws_send_command(joint_id=joint_id,
+                await self.ws_send_command(joint_id=joint_id,
                                      pos=ik_solution[joint_id - 1],
                                      kp=10.0,
-                                     kd=0.2,
+                                     kd=2.0,
                                      ff=id_solution_1[joint_id - 1])
             
             for joint_id in range(7, 13):
-                self.ws_send_command(joint_id=joint_id,
+                await self.ws_send_command(joint_id=joint_id,
                                     pos=ik_solution[joint_id - 1],
                                     kp=10.0,
-                                    kd=0.2,
+                                    kd=2.0,
                                     ff=id_solution_2[joint_id - 7])
+                
+            #print(id_solution_1, id_solution_2)
+            #print()
         
         # Send commands
         start_time_send = time.perf_counter()
@@ -171,6 +230,8 @@ class ControlLoop:
             print(f"❌ Failed to connect: {e}")
             websocket_conn = None
 
+    
+
     async def ws_send_command(self, joint_id, pos, kp, kd, ff):
         global websocket_conn
         if websocket_conn is not None:
@@ -186,12 +247,54 @@ class ControlLoop:
                 # print(f"Sent command: {command}") # Optional: only print on change/error for high frequency
             except websockets.ConnectionClosedOK:
                 print("⚠️ Connection closed unexpectedly. Reconnecting...")
-                await self.connect_to_ws()
+                #self.connect_to_ws()
             except Exception as e:
                 print(f"❌ Error sending command: {e}")
         else:
             print("⚠️ No active connection. Attempting to connect...")
-            await self.connect_to_ws()
+            #self.connect_to_ws()
+
+    async def ws_request_joint_positions(self, timeout: float = 0.5) -> tuple[list[float], float | None] | None:
+        """Request the latest joint positions and simulation time from the websocket server."""
+        global websocket_conn
+        if websocket_conn is None:
+            logger.warning("Cannot request joint positions without an active websocket connection.")
+            return None
+
+        try:
+            await websocket_conn.send(json.dumps({"type": "get_joint_positions"}))
+            response_raw = await asyncio.wait_for(websocket_conn.recv(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning("Timed out waiting for joint positions response from websocket server.")
+            return None
+        except websockets.ConnectionClosed:
+            logger.warning("Websocket connection closed while requesting joint positions.")
+            websocket_conn = None
+            return None
+        except Exception as exc:
+            logger.error("Unexpected error requesting joint positions: %s", exc)
+            return None
+
+        try:
+            payload = json.loads(response_raw)
+        except json.JSONDecodeError:
+            logger.warning("Failed to decode joint positions payload: %s", response_raw)
+            return None
+
+        positions = payload.get("joint_positions") or payload.get("positions")
+        sim_time_raw = payload.get("sim_time") or payload.get("time") or payload.get("world_time")
+
+        if not isinstance(positions, list):
+            logger.warning("Joint positions response missing expected field: %s", payload)
+            return None
+
+        sim_time: float | None
+        if isinstance(sim_time_raw, (int, float)):
+            sim_time = float(sim_time_raw)
+        else:
+            sim_time = None
+
+        return positions, sim_time
 
     async def run(self):
         """Control loop for the teleoperation system."""
@@ -214,10 +317,13 @@ class ControlLoop:
                     self.robot_interface.left_arm_connected and self.robot_interface.right_arm_connected
                 )
         if self.robot_enabled:
-            self.robot_interface.return_to_initial_position()
+            self.robot_interface.return_to_initial_posxition()
 
         left_arm.target_transform = left_arm.initial_transform
         right_arm.target_transform = right_arm.initial_transform
+
+        if self.simulate:
+            await self.connect_to_ws()
 
         while True:
             iteration_start = time.perf_counter()
@@ -241,7 +347,7 @@ class ControlLoop:
 
             # Simulates blocking robot communication
             robot_start = time.perf_counter()
-            self.update_robot(left_arm, right_arm)
+            await self.update_robot(left_arm, right_arm)
             robot_time = time.perf_counter() - robot_start
 
             if self.config.record:
@@ -265,6 +371,10 @@ class ControlLoop:
             sleep_start = time.perf_counter()
             await asyncio.sleep(0.001)
             sleep_time = time.perf_counter() - sleep_start
+
+            dt_s = time.perf_counter() - iteration_start
+            print(f"\rFPS: {1/dt_s}", end='', flush=True)
+
 
             if self.config.record:
                 dt_s = time.perf_counter() - iteration_start

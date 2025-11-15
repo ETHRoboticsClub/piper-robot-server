@@ -150,9 +150,9 @@ class RobotInterface:
 
             # Connect right arm - always suppress low-level CAN debug output
             try:
-                #with suppress_stdout_stderr():
-                    #self.right_robot = Piper(right_config)
-                    #self.right_robot.connect()
+                with suppress_stdout_stderr():
+                    self.right_robot = Piper(right_config)
+                    self.right_robot.connect()
                 self.right_arm_connected = True
                 logger.info("✅ Right arm connected successfully")
             except Exception as e:
@@ -220,10 +220,10 @@ class RobotInterface:
         sol_q, is_collision = self.ik_solver.ik_fun(target_1.homogeneous, target_2.homogeneous, visualize=visualize)
         return sol_q, is_collision
     
-    def solve_id(self, joint_angles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def solve_id(self, joint_angles: np.ndarray, q: np.ndarray, q_dot: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Solve inverse dynamics for both arms."""
         #print( "joint angles in id:", joint_angles )
-        tau_1, tau_2 = self.ik_solver.id_fun(joint_angles[:6], joint_angles[6:])
+        tau_1, tau_2 = self.ik_solver.id_control(joint_angles[:6], joint_angles[6:], q, q_dot)
         return tau_1, tau_2
 
     def update_arm_angles(self, joint_angles: np.ndarray):

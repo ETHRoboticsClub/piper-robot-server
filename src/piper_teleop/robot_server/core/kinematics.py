@@ -368,13 +368,33 @@ class Arm_IK:
             print(f"ERROR in convergence, plotting debug info.{e}")
             return None, False
         
-    def id_fun(self, joint_angles_1, joint_angles_2, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
+
+    def id_control(self, q_des_1, q_des_2, q, q_dot, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
+
+        kp = 40.0
+        kd = 40.0
+
+        q_des = np.concatenate([q_des_1, q_des_2], axis=0)
+
+        q_dot_des = np.zeros_like(q_dot)
+
+
+        q_dot_dot_des = kp * (q_des - q) + kd * (q_dot_des - q_dot)
+        #q_dot_dot_des = np.clip(q_dot_dot_des, -abs(max_acc), abs(max_acc))
+
+
+        # print("Q--errors:", q_des - q)
+        # print("Qdot--errors:", q_dot_des - q_dot)
+        # print()
+
+        return self.id_fun(q, q_dot, q_dot_dot_des)
+        
+    def id_fun(self, q, q_dot, q_dot_dot_des):
         """Solve inverse dynamics for both arms."""
-        q = np.concatenate([joint_angles_1, joint_angles_2], axis=0)
         # forward kinematics should already be updated in data from the call to check_collision and since we need q as argument we can assume it will always be updated
         pin.forwardKinematics(self.reduced_robot.model, self.reduced_robot.data, q)
         pin.updateFramePlacements(self.reduced_robot.model, self.reduced_robot.data)
-        tau = pin.rnea(self.reduced_robot.model, self.reduced_robot.data, q, np.zeros(self.reduced_robot.model.nv), np.zeros(self.reduced_robot.model.nv))
+        tau = pin.rnea(self.reduced_robot.model, self.reduced_robot.data, q, q_dot, q_dot_dot_des)
         
         tau_1 = tau[:6]
         tau_2 = tau[6:]
