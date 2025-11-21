@@ -176,9 +176,6 @@ robotserver --policy
 ### Common Data Recording Workflow
 
 #### 1. Record a Dataset
-
-
-
 Record a dataset with either VR:
 ```bash
 robotserver --record
@@ -212,9 +209,30 @@ python scripts/convert_images_to_video.py /path/to/dataset
 
 Upload the dataset to HuggingFace Hub:
 ```bash
-python scripts/upload_to_huggingface.py /path/to/dataset ETHRC/my-dataset-name
+python scripts/upload_to_huggingface.py /path/to/dataset_video ETHRC/my-dataset-name
 ```
 
 #### 5. Inspect Data
 
 Inspect your dataset at [LeRobot Dataset Visualizer](https://huggingface.co/spaces/lerobot/visualize_dataset) by entering your repository ID (e.g., `ETHRC/my-dataset-name`).
+
+### Running a Policy
+
+> **Note**: This has so far only been tested with ACT policies trained using LeRobot.
+
+Follow these steps to run a trained policy:
+
+1. **Train a policy** in LeRobot
+
+2. **Copy the checkpoint** into `policy_checkpoint/` directory
+
+3. **Configure the policy path** in `src/piper_teleop/config.py`:
+   - Set the path to the policy checkpoint (line 243)
+   - Set the name of the LeRobot dataset (line 246)
+
+4. **Run the policy**:
+   ```bash
+   robotserver --policy
+   ```
+
+> **Future Note**: In the future, we will likely refactor the robot server to not contain any policy logic and will instead import the robot server as needed in the corresponding policy repos (e.g., in OpenPI or LeRobot).
