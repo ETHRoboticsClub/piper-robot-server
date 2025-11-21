@@ -21,13 +21,13 @@ conda create -n piper python=3.10
 conda activate piper
 
 # Install teleop sdk
-git clone git@github.com:TactileRoboticsAI/tactile-teleop-python-sdk.git
+git clone https://github.com/TactileRoboticsAI/tactile-teleop-python-sdk.git
 cd tactile-teleop-python-sdk
 pip install -e .
 
 # Install piper server
 cd ..
-git clone git@github.com:ETHRoboticsClub/piper-robot-server.git
+git clone https://github.com/ETHRoboticsClub/piper-robot-server.git
 cd piper-robot-server
 pip install -e .
 conda install pinocchio==3.2.0 casadi==3.6.7 -c conda-forge
