@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import dotenv
 import numpy as np
@@ -12,6 +13,7 @@ from tactile_teleop_sdk import TactileAPI
 from piper_teleop.config import TelegripConfig
 from piper_teleop.robot_server.camera import SharedCameraData
 from piper_teleop.robot_server.keyboard_controller import KeyboardController
+from piper_teleop.robot_server.lerobot_policy import LerobotPolicy
 
 from .core.geometry import xyzrpy2transform
 from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
@@ -38,17 +40,23 @@ class ControlLoop:
     def __init__(
         self,
         config: TelegripConfig,
-        shared_data: SharedCameraData,
+        shared_data: SharedCameraData,  #
     ):
         self.config = config
         self.robot_interface = RobotInterface(config)
         self.robot_enabled = config.enable_robot
         self.use_keyboard = config.enable_keyboard
         self.use_leader = config.use_leader
+        self.use_policy = config.use_policy
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
         self.visualize = config.enable_visualization
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
+
+        if self.use_policy:
+            policy_path = config.policy_path
+            repo_id = config.policy_repo_id
+            self.policy = LerobotPolicy(policy_path, repo_id)
 
         self.shared_data = shared_data
         if self.config.record:
@@ -66,7 +74,7 @@ class ControlLoop:
                 display_data=config.display_data,
                 convert_images_to_video=config.convert_images_to_video,
                 image_writer_processes=config.image_writer_processes,
-                image_writer_threads=config.image_writer_threads
+                image_writer_threads=config.image_writer_threads,
             )
             self.recorder.start_recording()
         if self.use_leader:
@@ -99,17 +107,15 @@ class ControlLoop:
         return arm_state
 
     def update_robot_from_leader(self, obs_dict_leader: dict):
-        dict_left = obs_dict_leader['left']
-        dict_right = obs_dict_leader['right']
+        dict_left = obs_dict_leader["left"]
+        dict_right = obs_dict_leader["right"]
         q_1 = [dict_left[k] for k in sorted(dict_left)]
         q_2 = [dict_right[k] for k in sorted(dict_right)]
         joints_wo_gripper = np.array(q_2[:-1] + q_1[:-1])
         joint_gripper_s = [q_1[-1], q_2[-1]]
         if self.visualize:
             self.robot_interface.ik_solver.vis.display(joints_wo_gripper)
-        self.robot_interface.update_arm_angles(
-            np.concatenate([joints_wo_gripper, joint_gripper_s])
-        )
+        self.robot_interface.update_arm_angles(np.concatenate([joints_wo_gripper, joint_gripper_s]))
         if self.robot_enabled:
             self.robot_interface.send_command()
 
@@ -195,7 +201,7 @@ class ControlLoop:
             left_arm = self.update_arm_state(left_arm_goal, left_arm)
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
 
-            if self.config.record:
+            if self.config.record or self.use_policy:
                 obs_dict = self.robot_interface.get_observation()
                 cams = self.shared_data.get_camera_dict()
 
@@ -204,6 +210,15 @@ class ControlLoop:
             if self.use_leader:
                 obs_dict_leader = self.robot_leader.get_observations()
                 self.update_robot_from_leader(obs_dict_leader)
+            elif self.use_policy:
+                dict_left, dict_right = self.policy.predict(obs_dict["left"], obs_dict["right"], cams)
+                if self.visualize:
+                    q_1 = [dict_left[k] for k in sorted(dict_left)[:6]]
+                    q_2 = [dict_right[k] for k in sorted(dict_right)[:6]]
+                    self.robot_interface.ik_solver.vis.display(np.array(q_1 + q_2))
+                if self.robot_enabled:
+                    self.robot_interface.left_robot.send_action(dict_left)
+                    self.robot_interface.right_robot.send_action(dict_right)
             else:
                 self.update_robot(left_arm, right_arm)
             robot_time = time.perf_counter() - robot_start
@@ -211,29 +226,29 @@ class ControlLoop:
             if self.config.record:
                 action_dict = arm_angles_to_action_dict(self.robot_interface.arm_angles)
                 self.recorder.add_observation(
-                    left_joints=obs_dict['left'],
-                    right_joints=obs_dict['right'],
-                    left_joints_target=action_dict['left'],
-                    right_joints_target=action_dict['right'],
+                    left_joints=obs_dict["left"],
+                    right_joints=obs_dict["right"],
+                    left_joints_target=action_dict["left"],
+                    right_joints_target=action_dict["right"],
                     cams=cams,
                 )
                 self.recorder.handle_keyboard_event()
                 if self.config.display_data:
-                    self.recorder.show_data(left_joints=obs_dict['left'],
-                                               right_joints=obs_dict['right'],
-                                               left_joints_target=action_dict['left'],
-                                               right_joints_target=action_dict['right'],
-                                               cams=cams)
-
+                    self.recorder.show_data(
+                        left_joints=obs_dict["left"],
+                        right_joints=obs_dict["right"],
+                        left_joints_target=action_dict["left"],
+                        right_joints_target=action_dict["right"],
+                        cams=cams,
+                    )
 
             sleep_start = time.perf_counter()
             await asyncio.sleep(0.001)
             sleep_time = time.perf_counter() - sleep_start
 
-            if self.config.record:
-                dt_s = time.perf_counter() - iteration_start
-                print(f"\rFPS: {1/dt_s}", end='', flush=True)
-                busy_wait(1 / self.config.fps - dt_s)
+            dt_s = time.perf_counter() - iteration_start
+            print(f"\rFPS: {1/dt_s}", end="", flush=True)
+            busy_wait(1 / self.config.fps - dt_s)
 
             total_time = time.perf_counter() - iteration_start
             overhead_time = total_time - commands_time - robot_time - sleep_time

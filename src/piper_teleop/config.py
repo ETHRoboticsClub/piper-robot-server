@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         "right_arm": {"name": "Right Arm", "enabled": True},
         "vr_to_robot_scale": 1.0,
         "send_interval": 0.05,
-        "ground_height": -0.04,
+        "ground_height": -0.05,
     },
     "control": {
         "keyboard": {"enabled": False, "pos_step": 0.01, "angle_step": 5.0, "gripper_step": 10.0},
@@ -43,16 +43,7 @@ DEFAULT_CONFIG = {
         "movement_penalty_weight": 0.01,
     },
     "cameras": {
-        "wrist1": {
-            "type": "monocular",
-            "mode": "recording",
-            "fps": "30",
-            "frame_width": "640",
-            "frame_height": "480",
-            "capture_api": cv2.CAP_V4L2,
-            "cam_index": "6",
-        },
-        "wrist2": {
+        "wrist1": {  # Right wrist camera
             "type": "monocular",
             "mode": "recording",
             "fps": "30",
@@ -61,7 +52,16 @@ DEFAULT_CONFIG = {
             "capture_api": cv2.CAP_V4L2,
             "cam_index": "4",
         },
-        "stereo": {
+        "wrist2": {  # Left wrist camera
+            "type": "monocular",
+            "mode": "recording",
+            "fps": "30",
+            "frame_width": "640",
+            "frame_height": "480",
+            "capture_api": cv2.CAP_V4L2,
+            "cam_index": "4",
+        },
+        "stereo": {  # Stereo camera
             "type": "stereo",
             "mode": "hybrid",
             "fps": "60",
@@ -239,6 +239,11 @@ class TelegripConfig:
     enable_vr: bool = True
     enable_keyboard: bool = False
     use_leader: bool = False
+    use_policy: bool = False
+    policy_path: str = (
+        "/home/alex/ethrc/piper-robot-server/policy_checkpoint/checkpoint_new_data/checkpoints/last/pretrained_model"
+    )
+    policy_repo_id: str = "ETHRC/pick_and_place_v2"
     enable_visualization: bool = True
     autoconnect: bool = False
     log_level: str = "warning"
