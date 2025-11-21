@@ -91,6 +91,12 @@ def main():
     config.use_policy = args.policy
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
+    if config.use_policy:
+        assert not args.keyboard, "Keyboard control cannot be used when policy control is enabled"
+        assert not args.record, "Recording cannot be used when policy control is enabled"
+        assert not args.resume, "Resume recording cannot be used when policy control is enabled"
+        assert not args.leader, "Leader control cannot be used when policy control is enabled"
+
     if config.record:
         num_recording_cams = 0
         for cam_config in config.camera_configs:

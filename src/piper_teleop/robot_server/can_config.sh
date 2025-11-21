@@ -20,16 +20,21 @@
 
 # 4. Script Configuration Instructions
 #   Key configuration items in the script include expected CAN module count, default CAN interface names, and bitrate settings:
-#   1. Expected CAN module count:
-#     EXPECTED_CAN_COUNT=1
+#   1. Leader arms configuration (for follower/leader setups):
+#     ENABLE_LEADER_ARMS="${ENABLE_LEADER_ARMS:-false}"
+#     Set to "true" for 4 CAN ports (leader + follower arms), "false" for 2 CAN ports (follower only).
+#     Can be set via environment variable: ENABLE_LEADER_ARMS=true sudo ./can_config.sh
+#     Or edit the script directly to change the default value.
+#   2. Expected CAN module count:
+#     EXPECTED_CAN_COUNT is automatically set based on ENABLE_LEADER_ARMS (2 or 4).
 #     This value determines the number of CAN modules that should be detected in the system.
-#   2. Default CAN interface name for single CAN module:
+#   3. Default CAN interface name for single CAN module:
 #     DEFAULT_CAN_NAME="${1:-can0}"
 #     You can specify the default CAN interface name via command line parameters. If no parameter is provided, defaults to can0.
-#   3. Default bitrate for single CAN module:
+#   4. Default bitrate for single CAN module:
 #     DEFAULT_BITRATE="${2:-500000}"
 #     You can specify the bitrate for single CAN module via command line parameters. If no parameter is provided, defaults to 500000.
-#   4. Configuration for multiple CAN modules:
+#   5. Configuration for multiple CAN modules:
 #     declare -A USB_PORTS
 #     USB_PORTS["1-2:1.0"]="can_device_1:500000"
 #     USB_PORTS["1-3:1.0"]="can_device_2:250000"
@@ -38,7 +43,10 @@
 # 5. Usage Steps
 #  1. Edit the script:
 #   1. Modify predefined values:
-#      - Predefined CAN module count: EXPECTED_CAN_COUNT=2, can be modified to match the number of CAN modules inserted on the industrial PC
+#      - Leader arms configuration: Set ENABLE_LEADER_ARMS to "true" for 4 CAN ports (leader + follower) 
+#        or "false" for 2 CAN ports (follower only). This automatically sets EXPECTED_CAN_COUNT.
+#        Example: ENABLE_LEADER_ARMS=true (for leader + follower setup)
+#        Example: ENABLE_LEADER_ARMS=false (for follower only setup)
 #      - If there's only one CAN module, after setting the above parameters, you can skip this section and continue
 #      - (Multiple CAN modules) Predefined USB ports and target interface names:
 #          First insert a CAN module into the expected USB port. Note that during initial configuration, insert one CAN module at a time on the industrial PC
@@ -69,8 +77,10 @@
 #           This assigns the CAN device at USB address 1-3:1.0 the name my_can_interface with bitrate 1000000
 #       2. Multiple CAN modules
 #         For multiple CAN modules, specify the interface name and bitrate for each CAN module by setting the USB_PORTS array in the script.
-#         No additional parameters needed, run the script directly:
-#         sudo ./can_config.sh
+#         To switch between follower-only (2 CAN ports) and leader+follower (4 CAN ports) modes:
+#         - Follower only (2 CAN ports): sudo ./can_config.sh
+#         - Leader + follower (4 CAN ports): ENABLE_LEADER_ARMS=true sudo ./can_config.sh
+#         Or edit the ENABLE_LEADER_ARMS variable in the script to change the default behavior.
 
 # Important Notes
 
@@ -91,8 +101,16 @@
 #         If you want to modify the correspondence between USB ports and interface names, adjust the USB_PORTS array according to actual conditions.
 #-------------------------------------------------------------------------------------------------#
 
-# Predefined number of CAN modules
-EXPECTED_CAN_COUNT=2
+# Configuration: Enable/disable leader arms
+# Set to "true" for 4 CAN ports (leader + follower), "false" for 2 CAN ports (follower only)
+ENABLE_LEADER_ARMS="${ENABLE_LEADER_ARMS:-false}"
+
+# Predefined number of CAN modules (automatically set based on leader arms configuration)
+if [ "$ENABLE_LEADER_ARMS" = "true" ]; then
+    EXPECTED_CAN_COUNT=4
+else
+    EXPECTED_CAN_COUNT=2
+fi
 
 if [ "$EXPECTED_CAN_COUNT" -eq 1 ]; then
     # Default CAN name, can be set by user via command line parameters
@@ -108,11 +126,15 @@ fi
 # Predefined USB ports, target interface names and their bitrates (used for multiple CAN modules)
 if [ "$EXPECTED_CAN_COUNT" -ne 1 ]; then
     declare -A USB_PORTS 
+    # Follower arms (always present)
     USB_PORTS["3-2.1:1.0"]="left_piper:1000000"
     USB_PORTS["3-2.3:1.0"]="right_piper:1000000"
-    # Uncomment for leader setup
-    # USB_PORTS["3-4.4:1.0"]="leader_left:1000000"
-    # USB_PORTS["3-4.1:1.0"]="leader_right:1000000"
+    
+    # Leader arms (only added if ENABLE_LEADER_ARMS is true)
+    if [ "$ENABLE_LEADER_ARMS" = "true" ]; then
+        USB_PORTS["3-4.4:1.0"]="leader_left:1000000"
+        USB_PORTS["3-4.1:1.0"]="leader_right:1000000"
+    fi
 fi
 
 # Get the current number of CAN modules in the system

@@ -123,16 +123,12 @@ def main():
 
     if not available_cameras:
         print("No working cameras found!")
-        print(
-            "Make sure your cameras are connected and not being used by other applications."
-        )
+        print("Make sure your cameras are connected and not being used by other applications.")
         return
 
     # Ask user if they want to see camera previews
     if len(available_cameras) > 1:
-        response = input(
-            f"Would you like to see previews of the {len(available_cameras)} cameras? (y/n): "
-        ).lower()
+        response = input(f"Would you like to see previews of the {len(available_cameras)} cameras? (y/n): ").lower()
         if response in ["y", "yes"]:
             preview_cameras(available_cameras)
     else:
