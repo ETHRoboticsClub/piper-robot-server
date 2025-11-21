@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
             "frame_width": "640",
             "frame_height": "480",
             "capture_api": cv2.CAP_V4L2,
-            "cam_index": "6",
+            "cam_index": "4",
         },
         "wrist2": {  # Left wrist camera
             "type": "monocular",
