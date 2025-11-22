@@ -104,7 +104,8 @@ def _make_mesh_paths_absolute(urdf_path: str) -> str:
 
 
 class Arm_IK:
-    def __init__(self, urdf_path: str, ground_height: float = 0.0):
+    def __init__(self, urdf_path: str, ground_height: float = 0.0, robot_type: str = "piper"):
+        self.robot_type = robot_type
         np.set_printoptions(precision=5, suppress=True, linewidth=200)
 
         # Create temporary URDF with absolute mesh paths
@@ -128,7 +129,10 @@ class Arm_IK:
         for link in self.robot.model.frames:
             print("Link name:", link.name)
 
-        self.mixed_jointsToLockIDs = ["joint7", "joint8", "arm2_joint7", "arm2_joint8"]
+        if self.robot_type == "yam":
+            self.mixed_jointsToLockIDs = []
+        else:
+            self.mixed_jointsToLockIDs = ["joint7", "joint8", "arm2_joint7", "arm2_joint8"]
 
         self.reduced_robot = self.robot.buildReducedRobot(
             list_of_joints_to_lock=self.mixed_jointsToLockIDs,
@@ -141,9 +145,14 @@ class Arm_IK:
         self._add_ground_plane()
         self._init_collision_pairs()
 
-        self.first_matrix = create_transformation_matrix(0, 0, 0, 0, -1.57, 0)
-        # Transform from joint6 to end-effector gripper coordinates
-        self.second_matrix = create_transformation_matrix(0.13, 0.0, 0.0, 0, 0, 0)
+        if self.robot_type == "yam":
+            self.first_matrix = np.eye(4)
+            self.second_matrix = np.eye(4)
+        else:
+            self.first_matrix = create_transformation_matrix(0, 0, 0, 0, -1.57, 0)
+            # Transform from joint6 to end-effector gripper coordinates
+            self.second_matrix = create_transformation_matrix(0.13, 0.0, 0.0, 0, 0, 0)
+            
         self.last_matrix = np.dot(self.first_matrix, self.second_matrix)
         q = quaternion_from_matrix(self.last_matrix)
         self.reduced_robot.model.addFrame(
@@ -283,6 +292,10 @@ class Arm_IK:
         arm1_indices = [0] + list(range(11, 20))
         arm2_indices = list(range(1, 11))
 
+
+        if self.robot_type == "yam":
+            return
+
         for i in range(0, 3):
             for j in range(4, 9):
                 geom1_idx = arm1_indices[i]
@@ -332,6 +345,9 @@ class Arm_IK:
         param_tf1 = self.solver["param_tf1"]
         param_tf2 = self.solver["param_tf2"]
 
+        print("Target pose 1:", target_pose_1)
+        print("Target pose 2:", target_pose_2)
+
         gripper = np.array([gripper / 2.0, -gripper / 2.0])
         if motorstate is not None:
             self.init_data = motorstate
@@ -358,7 +374,7 @@ class Arm_IK:
             self.history_data = sol_q
 
             if visualize:
-                # print("sol_q:", sol_q)
+                #print("sol_q:", sol_q)
                 self.vis.display(sol_q)
 
             is_collision = self.check_collision(sol_q, gripper_1=gripper, gripper_2=gripper)
@@ -370,8 +386,16 @@ class Arm_IK:
 
     def check_collision(self, q, gripper_1=np.array([0, 0]), gripper_2=np.array([0, 0])):
         """Check for collisions including self-collision and ground plane collision."""
+
+        q_for_collision = None
+
+        if self.robot_type == "yam":
+            q_for_collision =  np.concatenate([q[0:6], q[6:12]], axis=0)
+        else:
+            q_for_collision = np.concatenate([q[0:6], gripper_1, q[6:12], gripper_2], axis=0)
+
         pin.forwardKinematics(
-            self.robot.model, self.robot.data, np.concatenate([q[0:6], gripper_1, q[6:12], gripper_2], axis=0)
+            self.robot.model, self.robot.data, q_for_collision 
         )
         pin.updateGeometryPlacements(self.robot.model, self.robot.data, self.geom_model, self.geometry_data)
         collision = pin.computeCollisions(self.geom_model, self.geometry_data, False)

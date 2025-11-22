@@ -18,6 +18,7 @@ from piper_teleop.config import NUM_JOINTS, TelegripConfig
 from .geometry import transform2pose, xyzrpy2transform
 from .kinematics import Arm_IK
 from .piper import Piper, PiperConfig
+from .yam import Yam, YamConfig  # Import Yam
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +115,15 @@ class RobotInterface:
         self.initial_left_arm = xyzrpy2transform(0.19, 0.0, 0.2, 0, 1.57, 0)
         self.initial_right_arm = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
 
-    def setup_robot_configs(self) -> Tuple[PiperConfig, PiperConfig]:
+    def setup_robot_configs(self) -> Tuple[Any, Any]:
         """Create robot configurations for both arms."""
 
-        left_config = PiperConfig(port="left_piper", id="left_follower")
-        right_config = PiperConfig(port="right_piper", id="right_follower")
+        if self.config.robot_type == "yam":
+            left_config = YamConfig(port="can0", id="left_yam")
+            right_config = YamConfig(port="can1", id="right_yam")
+        else:
+            left_config = PiperConfig(port="left_piper", id="left_follower")
+            right_config = PiperConfig(port="right_piper", id="right_follower")
 
         return left_config, right_config
 
@@ -139,7 +144,10 @@ class RobotInterface:
             # Connect left arm - always suppress low-level CAN debug output
             try:
                 with suppress_stdout_stderr():
-                    self.left_robot = Piper(left_config)
+                    if self.config.robot_type == "yam":
+                        self.left_robot = Yam(left_config)
+                    else:
+                        self.left_robot = Piper(left_config)
                     self.left_robot.connect()
                 self.left_arm_connected = True
                 logger.info("✅ Left arm connected successfully")
@@ -150,7 +158,10 @@ class RobotInterface:
             # Connect right arm - always suppress low-level CAN debug output
             try:
                 with suppress_stdout_stderr():
-                    self.right_robot = Piper(right_config)
+                    if self.config.robot_type == "yam":
+                        self.right_robot = Yam(right_config)
+                    else:
+                        self.right_robot = Piper(right_config)
                     self.right_robot.connect()
                 self.right_arm_connected = True
                 logger.info("✅ Right arm connected successfully")
@@ -175,7 +186,7 @@ class RobotInterface:
         """Setup kinematics solvers using PyBullet components for both arms."""
         # Setup solvers for both arms
         ground_height = self.config.ground_height
-        self.ik_solver = Arm_IK(self.config.urdf_path, ground_height)
+        self.ik_solver = Arm_IK(self.config.urdf_path, ground_height, self.config.robot_type)
         logger.info("Kinematics solvers initialized for both arms with ground plane at height %.3f", ground_height)
 
     def get_end_effector_transform(self, arm: str) -> np.ndarray:
@@ -213,6 +224,7 @@ class RobotInterface:
             position_2,
         )
         sol_q, is_collision = self.ik_solver.ik_fun(target_1.homogeneous, target_2.homogeneous, visualize=visualize)
+        #print("Solq:", sol_q)
         return sol_q, is_collision
 
     def update_arm_angles(self, joint_angles: np.ndarray):

@@ -129,6 +129,7 @@ class ControlLoop:
             left_arm.target_transform, right_arm.target_transform, visualize=self.visualize
         )
 
+
         current_gripper_1 = 0.0 if left_arm.gripper_closed else 0.07
         current_gripper_2 = 0.0 if right_arm.gripper_closed else 0.07
 

@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
         "vr": {"enabled": True},
         "pybullet": {"enabled": True},
     },
-    "paths": {"urdf_path": "URDF/Piper/dual_piper.urdf"},
+    "paths": {"urdf_path": "URDF/yam/dual_yam.urdf"},
     "gripper": {"open_angle": 0.0, "closed_angle": 45.0},
     "ik": {
         "use_reference_poses": False,

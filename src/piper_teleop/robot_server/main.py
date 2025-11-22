@@ -70,6 +70,13 @@ def main():
     parser.add_argument("--leader", action="store_true", help="Enable Leader-Follower setup")
     parser.add_argument("--policy", action="store_true", help="Enable policy control")
     parser.add_argument(
+        "--robot-type", 
+        type=str, 
+        default="piper", 
+        choices=["piper", "yam"], 
+        help="Select robot type (default: piper)"
+    )
+    parser.add_argument(
         "--log-level",
         default="info",
         choices=["debug", "info", "warning", "error", "critical"],
@@ -89,6 +96,7 @@ def main():
     config.enable_keyboard = args.keyboard
     config.use_leader = args.leader
     config.use_policy = args.policy
+    config.robot_type = args.robot_type
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
     if config.use_policy:
