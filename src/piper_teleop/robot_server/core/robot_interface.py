@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def arm_angles_to_action_dict(arm_angles):
+    # arm_angles layout: 0-5 right joints, 6-11 left joints, 12 left gripper, 13 right gripper
     left_action_dict = {
         "joint_0.pos": float(arm_angles[6]),
         "joint_1.pos": float(arm_angles[7]),
@@ -93,9 +94,9 @@ class RobotInterface:
 
         # Joint state
         self.arm_angles = np.zeros(NUM_JOINTS * 2)
-        # arm angles
-        # 0-5: left arm joints
-        # 6-11: right arm joints
+        # arm angles (matches IK solver output ordering)
+        # 0-5: right arm joints
+        # 6-11: left arm joints
         # 12: left gripper
         # 13: right gripper
 
@@ -170,7 +171,7 @@ class RobotInterface:
                 self.right_arm_connected = False
 
             # Mark as connected if at least one arm is connected
-            self.is_connected = self.left_arm_connected and self.right_arm_connected
+            self.is_connected = self.left_arm_connected or self.right_arm_connected
 
             if not self.is_connected:
                 logger.error("❌ Failed to connect any robot arms")
@@ -233,7 +234,12 @@ class RobotInterface:
 
     def send_command(self) -> bool:
         """Send current joint angles to robot using dictionary format."""
-        if not self.is_connected or not self.is_enabled:
+        if not self.is_enabled:
+            logger.debug("Skipping send_command because robot interface is disabled.")
+            return False
+
+        if not (self.left_arm_connected or self.right_arm_connected):
+            logger.debug("Skipping send_command because no arms are marked connected.")
             return False
 
         current_time = time.time()
@@ -241,15 +247,15 @@ class RobotInterface:
             return True  # Don't send too frequently
 
         try:
-            # Send commands with dictionary format - no joint direction mapping
             success = True
+            action_dict = arm_angles_to_action_dict(self.arm_angles)
 
             # Send left arm command - suppress low-level CAN debug output
             if self.left_robot and self.left_arm_connected:
                 try:
-                    action_dict = arm_angles_to_action_dict(self.arm_angles)
                     with suppress_stdout_stderr():
                         self.left_robot.send_action(action_dict["left"])
+                    logger.debug("Sent left arm action: %s", action_dict["left"])
                 except Exception as e:
                     logger.error(f"Error sending left arm command: {e}")
                     self.left_arm_errors += 1
@@ -261,9 +267,9 @@ class RobotInterface:
             # Send right arm command - suppress low-level CAN debug output
             if self.right_robot and self.right_arm_connected:
                 try:
-                    action_dict = arm_angles_to_action_dict(self.arm_angles)
-                    #with suppress_stdout_stderr():
-                        #self.right_robot.send_action(action_dict["right"])
+                    with suppress_stdout_stderr():
+                        self.right_robot.send_action(action_dict["right"])
+                    logger.debug("Sent right arm action: %s", action_dict["right"])
                 except Exception as e:
                     logger.error(f"Error sending right arm command: {e}")
                     self.right_arm_errors += 1

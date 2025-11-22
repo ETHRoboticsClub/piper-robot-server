@@ -17,7 +17,7 @@ if str(I2RT_PATH) not in sys.path:
 
 DEFAULT_NUM_DOFS = 7
 DEFAULT_ARM_DOFS = 6
-DEFAULT_GRIPPER = "linear_3507"
+DEFAULT_GRIPPER = "crank_4310"
 
 HAS_I2RT = False
 HAS_YAM_KINEMATICS = False
@@ -227,7 +227,7 @@ class Yam:
             ordered_positions.append(float(value))
 
         try:
-            #self.robot.command_joint_pos(np.array(ordered_positions, dtype=float))
+            self.robot.command_joint_pos(np.array(ordered_positions, dtype=float))
             print("YAM command_joint_pos:", self.robot.get_joint_pos())  # Placeholder for hardware command
         except Exception as exc:  # pragma: no cover - hardware specific
             logger.warning("Failed to send YAM action: %s", exc)
