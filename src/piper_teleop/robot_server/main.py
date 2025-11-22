@@ -68,6 +68,7 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume recording")
     parser.add_argument("--repo-id", type=str, default="default-piper", help="repo_id for dataset storage")
     parser.add_argument("--leader", action="store_true", help="Enable Leader-Follower setup")
+    parser.add_argument("--leader-yam", action="store_true", help="Enable Yam Leader-Follower setup, with 3D printed GELO arm. Using trlc sdk.")
     parser.add_argument("--policy", action="store_true", help="Enable policy control")
     parser.add_argument(
         "--robot-type", 
@@ -95,6 +96,7 @@ def main():
     config.repo_id = args.repo_id
     config.enable_keyboard = args.keyboard
     config.use_leader = args.leader
+    config.use_leader_yam = args.leader_yam
     config.use_policy = args.policy
     config.robot_type = args.robot_type
     config.root = config.root / f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'

@@ -20,6 +20,8 @@ from .core.robot_interface import RobotInterface, arm_angles_to_action_dict
 from .recorder import Recorder
 from .robot_leader import PiperLeader
 
+from trlc_dk1.leader import DK1Leader
+
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,7 @@ class ControlLoop:
         self.robot_enabled = config.enable_robot
         self.use_keyboard = config.enable_keyboard
         self.use_leader = config.use_leader
+        self.use_leader_yam = config.use_leader_yam
         self.use_policy = config.use_policy
         if self.use_keyboard:
             self.keyboard_controller = KeyboardController()
@@ -79,6 +82,9 @@ class ControlLoop:
             self.recorder.start_recording()
         if self.use_leader:
             self.robot_leader = PiperLeader()
+
+        if self.use_leader_yam:
+            self.robot_leader = DK1Leader()
 
     def update_arm_state(self, arm_goal, arm_state: ArmState) -> ArmState:
         if arm_goal.reset_to_init:
@@ -182,6 +188,8 @@ class ControlLoop:
             self.robot_interface.return_to_initial_position()
         if self.use_leader:
             self.robot_leader.connect()
+        if self.use_leader_yam:
+            self.robot_leader.connect()
 
         left_arm.target_transform = left_arm.initial_transform
         right_arm.target_transform = right_arm.initial_transform
@@ -211,6 +219,11 @@ class ControlLoop:
             if self.use_leader:
                 obs_dict_leader = self.robot_leader.get_observations()
                 self.update_robot_from_leader(obs_dict_leader)
+
+            if self.use_leader_yam:
+                obs_dict_leader = self.robot_leader.get_action()
+                self.update_robot_from_leader(obs_dict_leader)
+
             elif self.use_policy:
                 dict_left, dict_right = self.policy.predict(obs_dict["left"], obs_dict["right"], cams)
                 if self.visualize:
@@ -272,4 +285,6 @@ class ControlLoop:
         if self.robot_enabled:
             self.robot_interface.disconnect()
         if self.use_leader:
+            self.robot_leader.disconnect()
+        if self.use_leader_yam:
             self.robot_leader.disconnect()

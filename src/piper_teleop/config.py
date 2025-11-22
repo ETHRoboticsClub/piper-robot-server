@@ -239,6 +239,7 @@ class TelegripConfig:
     enable_vr: bool = True
     enable_keyboard: bool = False
     use_leader: bool = False
+    use_leader_yam: bool = False
     use_policy: bool = False
     policy_path: str = (
         "/home/alex/ethrc/piper-robot-server/policy_checkpoint/checkpoint_new_data/checkpoints/last/pretrained_model"
