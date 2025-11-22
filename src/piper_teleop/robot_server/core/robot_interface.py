@@ -143,12 +143,12 @@ class RobotInterface:
 
             # Connect left arm - always suppress low-level CAN debug output
             try:
-                with suppress_stdout_stderr():
-                    if self.config.robot_type == "yam":
-                        self.left_robot = Yam(left_config)
-                    else:
-                        self.left_robot = Piper(left_config)
-                    self.left_robot.connect()
+               
+                if self.config.robot_type == "yam":
+                    self.left_robot = Yam(left_config)
+                else:
+                    self.left_robot = Piper(left_config)
+                self.left_robot.connect()
                 self.left_arm_connected = True
                 logger.info("✅ Left arm connected successfully")
             except Exception as e:
@@ -262,8 +262,8 @@ class RobotInterface:
             if self.right_robot and self.right_arm_connected:
                 try:
                     action_dict = arm_angles_to_action_dict(self.arm_angles)
-                    with suppress_stdout_stderr():
-                        self.right_robot.send_action(action_dict["right"])
+                    #with suppress_stdout_stderr():
+                        #self.right_robot.send_action(action_dict["right"])
                 except Exception as e:
                     logger.error(f"Error sending right arm command: {e}")
                     self.right_arm_errors += 1

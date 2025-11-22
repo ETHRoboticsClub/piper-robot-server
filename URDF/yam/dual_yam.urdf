@@ -216,7 +216,7 @@
     <axis xyz="0 0 1" />
     <limit effort="10" velocity="10" lower="-2.61799" upper="3.13" />
   </joint>
-<!-- Second Arm --><joint name="base_to_arm2_base_joint" type="fixed"><origin xyz="0 0.5 0" rpy="0 0 0" /><parent link="base_link" /><child link="arm2_base_link" /></joint><link name="arm2_base_link">
+<!-- Second Arm --><joint name="base_to_arm2_base_joint" type="fixed"><origin xyz="0 -0.57 0" rpy="0 0 0" /><parent link="base_link" /><child link="arm2_base_link" /></joint><link name="arm2_base_link">
     <inertial>
       <origin xyz="-7.22812e-05 2.52572e-05 0.0159932" rpy="0 0 0" />
       <mass value="0.822546" />

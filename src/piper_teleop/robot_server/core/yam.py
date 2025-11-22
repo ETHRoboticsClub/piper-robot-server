@@ -17,7 +17,7 @@ if str(I2RT_PATH) not in sys.path:
 
 DEFAULT_NUM_DOFS = 7
 DEFAULT_ARM_DOFS = 6
-DEFAULT_GRIPPER = "crank_4310"
+DEFAULT_GRIPPER = "linear_3507"
 
 HAS_I2RT = False
 HAS_YAM_KINEMATICS = False
@@ -117,6 +117,7 @@ class Yam:
     # Lifecycle management
     # ------------------------------------------------------------------
     def connect(self, calibrate: bool = True) -> None:
+        print("YAM connect called")  # Debug print
         if self.is_connected:
             logger.info("YAM robot %s already connected.", self.config.id)
             return
@@ -136,7 +137,7 @@ class Yam:
             self.robot = get_yam_robot(
                 channel=self.config.port,
                 gripper_type=gripper_type,
-                zero_gravity_mode=self.config.zero_gravity_mode,
+               # zero_gravity_mode=self.config.zero_gravity_mode,
             )
         except Exception as exc:  # pragma: no cover - hardware specific
             self.robot = None
@@ -226,7 +227,8 @@ class Yam:
             ordered_positions.append(float(value))
 
         try:
-            self.robot.command_joint_pos(np.array(ordered_positions, dtype=float))
+            #self.robot.command_joint_pos(np.array(ordered_positions, dtype=float))
+            print("YAM command_joint_pos:", self.robot.get_joint_pos())  # Placeholder for hardware command
         except Exception as exc:  # pragma: no cover - hardware specific
             logger.warning("Failed to send YAM action: %s", exc)
         return action
@@ -235,15 +237,10 @@ class Yam:
     # Cartesian pose helpers
     # ------------------------------------------------------------------
     def get_end_effector_transform(self) -> np.ndarray:
-        if not self.is_connected or self.robot is None or self._kinematics is None:
-            return xyzrpy2transform(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-
-        try:
-            joint_positions = self.robot.get_joint_pos()
-            joint_positions = np.array(joint_positions, dtype=float).flatten()
-            arm_positions = joint_positions[: self._arm_dofs]
-            transform = self._kinematics.fk(arm_positions)
-            return np.asarray(transform, dtype=float)
-        except Exception as exc:  # pragma: no cover - requires mujoco/mink
-            logger.warning("Failed to compute YAM end effector transform: %s", exc)
-            return xyzrpy2transform(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        raw_pose = self.sdk.get_end_effector_pose()
+        raw_transform = xyzrpy2transform(
+            raw_pose["x"], raw_pose["y"], raw_pose["z"], raw_pose["roll"], raw_pose["pitch"], raw_pose["yaw"]
+        )
+        link6_to_gripper_transform = xyzrpy2transform(0.0, 0.0, 0.13, 0.0, -1.57, 0.0)
+        gripper_transform = raw_transform @ link6_to_gripper_transform
+        return gripper_transform

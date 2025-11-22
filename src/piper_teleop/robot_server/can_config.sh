@@ -127,8 +127,8 @@ fi
 if [ "$EXPECTED_CAN_COUNT" -ne 1 ]; then
     declare -A USB_PORTS 
     # Follower arms (always present)
-    USB_PORTS["3-2.1:1.0"]="left_piper:1000000"
-    USB_PORTS["3-2.3:1.0"]="right_piper:1000000"
+    USB_PORTS["3-6.1:1.0"]="left_piper:1000000"
+    USB_PORTS["3-6.4:1.0"]="right_piper:1000000"
     
     # Leader arms (only added if ENABLE_LEADER_ARMS is true)
     if [ "$ENABLE_LEADER_ARMS" = "true" ]; then

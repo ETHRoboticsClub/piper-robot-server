@@ -345,8 +345,8 @@ class Arm_IK:
         param_tf1 = self.solver["param_tf1"]
         param_tf2 = self.solver["param_tf2"]
 
-        print("Target pose 1:", target_pose_1)
-        print("Target pose 2:", target_pose_2)
+        #print("Target pose 1:", target_pose_1)
+        #print("Target pose 2:", target_pose_2)
 
         gripper = np.array([gripper / 2.0, -gripper / 2.0])
         if motorstate is not None:
