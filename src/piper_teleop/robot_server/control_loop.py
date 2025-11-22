@@ -164,35 +164,7 @@ class ControlLoop:
             f"Overhead: {overhead_time*1000:.1f}ms, Total: {total_time*1000:.1f}ms"
         )
 
-    async def run(self):
-        """Control loop for the teleoperation system."""
-        left_arm = ArmState(arm_name="left")
-        right_arm = ArmState(arm_name="right")
-
-        right_arm.initial_transform = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
-        right_arm.origin_transform = right_arm.initial_transform
-
-        self.robot_interface.setup_kinematics()
-        await self.api.connect_vr_controller()
-        if self.robot_enabled:
-            try:
-                self.robot_interface.connect()
-            except Exception as e:
-                logger.error(f"Error connecting to robot: {e}")
-                return
-            finally:
-                self.robot_enabled = (
-                    self.robot_interface.left_arm_connected and self.robot_interface.right_arm_connected
-                )
-        if self.robot_enabled:
-            self.robot_interface.return_to_initial_position()
-        if self.use_leader:
-            self.robot_leader.connect()
-        if self.use_leader_yam:
-            self.robot_leader.connect()
-
-        left_arm.target_transform = left_arm.initial_transform
-        right_arm.target_transform = right_arm.initial_transform
+    async def ef_goal_loop(self):
 
         while True:
             iteration_start = time.perf_counter()
@@ -203,12 +175,14 @@ class ControlLoop:
             if self.use_keyboard:
                 left_arm_goal = self.keyboard_controller.get_goal("left", left_arm.target_transform)
                 right_arm_goal = self.keyboard_controller.get_goal("right", right_arm.target_transform)
+   
             else:
                 left_arm_goal = await self.api.get_controller_goal("left")
                 right_arm_goal = await self.api.get_controller_goal("right")
 
             left_arm = self.update_arm_state(left_arm_goal, left_arm)
             right_arm = self.update_arm_state(right_arm_goal, right_arm)
+
 
             if self.config.record or self.use_policy:
                 obs_dict = self.robot_interface.get_observation()
@@ -276,6 +250,46 @@ class ControlLoop:
                 f"Overhead: {overhead_time*1000:.1f}ms"
                 "\n================================================================================="
             )
+
+    async def qpos_goal_loop(self):
+        pass
+
+
+    
+    async def run(self):
+        """Control loop for the teleoperation system."""
+        left_arm = ArmState(arm_name="left")
+        right_arm = ArmState(arm_name="right")
+
+        right_arm.initial_transform = xyzrpy2transform(0.19, -0.57, 0.2, 0, 1.57, 0)
+        right_arm.origin_transform = right_arm.initial_transform
+
+        self.robot_interface.setup_kinematics()
+
+
+        if self.robot_enabled:
+            try:
+                self.robot_interface.connect()
+            except Exception as e:
+                logger.error(f"Error connecting to robot: {e}")
+                return
+            finally:
+                self.robot_enabled = (
+                    self.robot_interface.left_arm_connected and self.robot_interface.right_arm_connected
+                )
+
+            self.robot_interface.return_to_initial_position()
+
+        left_arm.target_transform = left_arm.initial_transform
+        right_arm.target_transform = right_arm.initial_transform
+
+        if self.use_leader_yam:
+            self.robot_leader.connect()
+            self.qpos_goal_loop()
+        else:
+            await self.api.connect_vr_controller()
+            self.ef_goal_loop()
+
 
     async def stop(self):
         """Stop the control loop."""
