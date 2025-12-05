@@ -47,6 +47,7 @@ class ControlLoop:
             self.keyboard_controller = KeyboardController()
         self.visualize = config.enable_visualization
         self.api = TactileAPI(api_key=os.getenv("TACTILE_API_KEY"))
+        
 
         self.shared_data = shared_data
         if self.config.record:
@@ -138,7 +139,7 @@ class ControlLoop:
         right_arm.origin_transform = right_arm.initial_transform
 
         self.robot_interface.setup_kinematics()
-        await self.api.connect_vr_controller()
+        await self.api.connect_controller()
         if self.robot_enabled:
             try:
                 self.robot_interface.connect()
